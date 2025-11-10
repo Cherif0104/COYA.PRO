@@ -487,7 +487,7 @@ const App: React.FC = () => {
             }));
           };
 
-          const fetchWithMetrics = async <T>(label: string, type: string, fetcher: () => Promise<T>) => {
+          const fetchWithMetrics = async <T,>(label: string, type: string, fetcher: () => Promise<T>) => {
             const start = performance.now();
             try {
               const data = await fetcher();
