@@ -67,8 +67,6 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
   const [organizationName, setOrganizationName] = useState('SENEGEL');
 
   // Rôle unique réservé (super_administrator uniquement)
-  const RESERVED_ROLES: Role[] = ['super_administrator'];
-
   // Liste complète de tous les rôles disponibles organisés par catégorie
   const ALL_ROLES: Record<string, Role[]> = {
     'Gestion': ['administrator', 'manager', 'supervisor', 'intern'],
@@ -76,7 +74,8 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
     'Jeunesse & Académique': ['student', 'alumni'],
     'Entrepreneuriat & Partenariats': ['entrepreneur', 'employer', 'implementer', 'funder'],
     'Créatif & Médias': ['publisher', 'editor', 'producer', 'artist'],
-    'Facilitateurs partenaires': ['partner_facilitator']
+    'Facilitateurs partenaires': ['partner_facilitator'],
+    'Super Administration': ['super_administrator']
   };
 
   // Charger la disponibilité des rôles au montage
@@ -86,16 +85,9 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
         setLoadingRoles(true);
         const availability: Record<string, { available: boolean; reason?: string }> = {};
 
-        // Tous les rôles sont disponibles sauf super_administrator
+        // Tous les rôles sont disponibles (validation en aval pour les rôles sensibles)
         Object.values(ALL_ROLES).flat().forEach(role => {
-          if (RESERVED_ROLES.includes(role)) {
-            availability[role] = { 
-              available: false, 
-              reason: 'Ce rôle est réservé et ne peut être créé que par un Super Administrateur existant.' 
-            };
-          } else {
-            availability[role] = { available: true };
-          }
+          availability[role] = { available: true };
         });
 
         // Ajouter aussi les rôles publics pour compatibilité
@@ -161,12 +153,6 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
 
     if (password.length < 8) {
       setError('Le mot de passe doit contenir au moins 8 caractères');
-      return;
-    }
-
-    // Bloquer uniquement super_administrator (toujours réservé)
-    if (RESERVED_ROLES.includes(role)) {
-      setError(`Le rôle "${role}" est réservé et ne peut être créé que par un Super Administrateur existant.`);
       return;
     }
 
@@ -436,24 +422,21 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     <p><strong>Entrepreneuriat & partenariats :</strong> entrepreneur, employer, implementer, funder</p>
                     <p><strong>Créatif & médias :</strong> publisher, editor, producer, artist</p>
                     <p><strong>Facilitateurs partenaires :</strong> partner_facilitator</p>
+                    <p><strong>Super administration :</strong> super_administrator</p>
                   </div>
                   <p className="text-xs text-emerald-700 mt-2">
                     <i className="fas fa-info-circle mr-1"></i>
-                    <strong>Note :</strong> Le rôle <code className="bg-emerald-100 px-1 rounded">super_administrator</code> est réservé et ne peut être créé que par un Super Administrateur existant.
+                    <strong>Note :</strong> Les rôles de gestion avancés (administrator, manager, supervisor, trainer, coach,
+                    facilitator, mentor, partner_facilitator et super_administrator) nécessitent une validation d'un Super Administrateur.
                   </p>
                 </div>
-                {role && !RESERVED_ROLES.includes(role) && (
+                {role && (
                   <p className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
                     <i className="fas fa-user-check mr-2"></i>
-                    <strong>Inscription autorisée</strong><br/>
-                    Vous pouvez créer un compte avec le rôle <strong>{t(role)}</strong>. Votre accès sera personnalisé selon les permissions de ce rôle.
-                  </p>
-                )}
-                {role && RESERVED_ROLES.includes(role) && (
-                  <p className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                    <i className="fas fa-lock mr-2"></i>
-                    <strong>Rôle réservé</strong><br/>
-                    Ce rôle ne peut être créé que par un Super Administrateur existant.
+                    <strong>{ROLES_REQUIRING_APPROVAL.includes(role) ? 'Validation requise' : 'Inscription autorisée'}</strong><br/>
+                    {ROLES_REQUIRING_APPROVAL.includes(role)
+                      ? `Votre demande pour le rôle ${t(role)} sera soumise à un Super Administrateur avant activation.`
+                      : `Vous pouvez créer un compte avec le rôle ${t(role)}. Vos accès seront configurés immédiatement en fonction de ses permissions.`}
                   </p>
                 )}
               </div>

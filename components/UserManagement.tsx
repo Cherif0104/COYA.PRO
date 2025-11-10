@@ -6,7 +6,6 @@ import { User, Role, SENEGEL_RESERVED_ROLES } from '../types';
 import OrganizationService from '../services/organizationService';
 import DataAdapter from '../services/dataAdapter';
 import UserModulePermissions from './UserModulePermissions';
-import CreateSuperAdmin from './CreateSuperAdmin';
 import UserProfileEdit from './UserProfileEdit';
 import ConfirmationModal from './common/ConfirmationModal';
 import { RealtimeService } from '../services/realtimeService';
@@ -189,7 +188,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, inactive
-    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions' | 'super_admin'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions'>('users');
     const [canAssignReservedRoles, setCanAssignReservedRoles] = useState(false);
     const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
     const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
@@ -934,10 +933,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
 
                 {activeTab === 'permissions' && (
                     <UserModulePermissions users={users} canEdit={canWriteModule} />
-                )}
-
-                {activeTab === 'super_admin' && (
-                    <CreateSuperAdmin />
                 )}
             </div>
 

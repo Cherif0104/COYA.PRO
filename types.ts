@@ -65,6 +65,7 @@ export const SENEGEL_RESERVED_ROLES: Role[] = [
 
 // Rôles nécessitant une validation manuelle par un Super Administrateur
 export const ROLES_REQUIRING_APPROVAL: Role[] = [
+  'super_administrator',
   'administrator',
   'manager',
   'supervisor',
