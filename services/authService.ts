@@ -119,15 +119,7 @@ export class AuthService {
   // Vérifier si un rôle management existe déjà
   static async checkRoleAvailability(role: string): Promise<{ available: boolean; error?: string }> {
     try {
-      // Bloquer complètement super_administrator
-      if (role === 'super_administrator') {
-        return { 
-          available: false, 
-          error: 'Le rôle super_administrator ne peut pas être créé via l\'interface publique' 
-        };
-      }
-
-      // Tous les autres rôles sont autorisés sans restriction (y compris administrator, manager, supervisor, intern)
+      // Tous les rôles sont autorisés. La validation éventuelle est gérée par le workflow d'approbation.
       return { available: true };
     } catch (error) {
       console.error('Erreur vérification disponibilité rôle:', error);

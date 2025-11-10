@@ -460,45 +460,60 @@ const App: React.FC = () => {
           setLoadingProgress({ current: 0, total: 15, loaded: [] });
           
           // Fonction helper pour mettre à jour la progression
-          const updateProgress = (type: string, success: boolean) => {
+          const updateProgress = (label: string, success: boolean, duration?: number) => {
+            if (duration !== undefined) {
+              const rounded = Math.round(duration);
+              const message = `${label} ${success ? 'chargé' : 'en échec'} en ${rounded}ms`;
+              if (success) {
+                if (duration > 2500) {
+                  console.warn(`⚠️ [PERF] ${message}`);
+                } else {
+                  console.log(`⏱️ [PERF] ${message}`);
+                }
+              } else {
+                console.error(`❌ [PERF] ${message}`);
+              }
+              try {
+                logger.logPerformance(label, duration);
+              } catch (perfError) {
+                console.warn('⚠️ Impossible de logger la performance:', perfError);
+              }
+            }
+
             setLoadingProgress(prev => ({
               current: prev.current + 1,
               total: prev.total,
-              loaded: [...prev.loaded, type]
+              loaded: [...prev.loaded, label]
             }));
+          };
+
+          const fetchWithMetrics = async <T>(label: string, type: string, fetcher: () => Promise<T>) => {
+            const start = performance.now();
+            try {
+              const data = await fetcher();
+              const duration = performance.now() - start;
+              updateProgress(label, true, duration);
+              return { type, data };
+            } catch (error) {
+              const duration = performance.now() - start;
+              updateProgress(label, false, duration);
+              throw error;
+            }
           };
           
           // PHASE 1 : Charger les données ESSENTIELLES pour le dashboard (priorité haute)
           // Ces données sont nécessaires pour afficher le dashboard rapidement
           console.log('⚡ Phase 1 : Chargement des données essentielles...');
           const essentialResults = await Promise.allSettled([
-            DataAdapter.getUsers()
-              .then(data => { updateProgress('Utilisateurs', true); return { type: 'users', data }; })
-              .catch(err => { updateProgress('Utilisateurs', false); throw err; }),
-            DataAdapter.getProjects()
-              .then(data => { updateProgress('Projets', true); return { type: 'projects', data }; })
-              .catch(err => { updateProgress('Projets', false); throw err; }),
-            DataAdapter.getTimeLogs()
-              .then(data => { updateProgress('Time Logs', true); return { type: 'timeLogs', data }; })
-              .catch(err => { updateProgress('Time Logs', false); throw err; }),
-            DataAdapter.getLeaveRequests()
-              .then(data => { updateProgress('Demandes de congé', true); return { type: 'leaveRequests', data }; })
-              .catch(err => { updateProgress('Demandes de congé', false); throw err; }),
-            DataAdapter.getInvoices()
-              .then(data => { updateProgress('Factures', true); return { type: 'invoices', data }; })
-              .catch(err => { updateProgress('Factures', false); throw err; }),
-            DataAdapter.getExpenses()
-              .then(data => { updateProgress('Dépenses', true); return { type: 'expenses', data }; })
-              .catch(err => { updateProgress('Dépenses', false); throw err; }),
-            DataAdapter.getCourses()
-              .then(data => { updateProgress('Cours', true); return { type: 'courses', data }; })
-              .catch(err => { updateProgress('Cours', false); throw err; }),
-            DataAdapter.getJobs()
-              .then(data => { updateProgress('Emplois', true); return { type: 'jobs', data }; })
-              .catch(err => { updateProgress('Emplois', false); throw err; })
+            fetchWithMetrics('Utilisateurs', 'users', () => DataAdapter.getUsers()),
+            fetchWithMetrics('Projets', 'projects', () => DataAdapter.getProjects()),
+            fetchWithMetrics('Time Logs', 'timeLogs', () => DataAdapter.getTimeLogs()),
+            fetchWithMetrics('Demandes de congé', 'leaveRequests', () => DataAdapter.getLeaveRequests()),
+            fetchWithMetrics('Factures', 'invoices', () => DataAdapter.getInvoices()),
+            fetchWithMetrics('Dépenses', 'expenses', () => DataAdapter.getExpenses())
           ]);
           
-          const essentialTypes = ['users', 'projects', 'timeLogs', 'leaveRequests', 'invoices', 'expenses', 'courses', 'jobs'];
+          const essentialTypes = ['users', 'projects', 'timeLogs', 'leaveRequests', 'invoices', 'expenses'];
           const essentialDataMap: Record<string, any> = {};
           const essentialErrors: Array<{ type: string; error: any }> = [];
 
@@ -545,12 +560,6 @@ const App: React.FC = () => {
           const expensesData = Array.isArray(essentialDataMap['expenses']) ? essentialDataMap['expenses'] : [];
           setExpenses(expensesData);
 
-          const coursesData = Array.isArray(essentialDataMap['courses']) ? essentialDataMap['courses'] : [];
-          setCourses(coursesData);
-
-          const jobsData = Array.isArray(essentialDataMap['jobs']) ? essentialDataMap['jobs'] : [];
-          setJobs(jobsData);
-          
           // Autoriser l'affichage du dashboard dès que les données essentielles sont chargées
           const essentialDuration = Date.now() - startTime;
           const essentialSuccessCount = essentialResults.filter(r => r.status === 'fulfilled').length;
@@ -566,27 +575,15 @@ const App: React.FC = () => {
           const capturedEssentialDuration = essentialDuration;
           console.log('🔄 Phase 2 : Chargement des données secondaires en arrière-plan...');
           Promise.allSettled([
-            DataAdapter.getObjectives()
-              .then(data => { updateProgress('Objectifs', true); return { type: 'objectives', data }; })
-              .catch(err => { updateProgress('Objectifs', false); throw err; }),
-            DataAdapter.getMeetings()
-              .then(data => { updateProgress('Meetings', true); return { type: 'meetings', data }; })
-              .catch(err => { updateProgress('Meetings', false); throw err; }),
-            DataAdapter.getRecurringInvoices()
-              .then(data => { updateProgress('Factures récurrentes', true); return { type: 'recurringInvoices', data }; })
-              .catch(err => { updateProgress('Factures récurrentes', false); throw err; }),
-            DataAdapter.getRecurringExpenses()
-              .then(data => { updateProgress('Dépenses récurrentes', true); return { type: 'recurringExpenses', data }; })
-              .catch(err => { updateProgress('Dépenses récurrentes', false); throw err; }),
-            DataAdapter.getBudgets()
-              .then(data => { updateProgress('Budgets', true); return { type: 'budgets', data }; })
-              .catch(err => { updateProgress('Budgets', false); throw err; }),
-            DataAdapter.getDocuments()
-              .then(data => { updateProgress('Documents', true); return { type: 'documents', data }; })
-              .catch(err => { updateProgress('Documents', false); throw err; }),
-            DataAdapter.getContacts()
-              .then(data => { updateProgress('Contacts', true); return { type: 'contacts', data }; })
-              .catch(err => { updateProgress('Contacts', false); throw err; })
+            fetchWithMetrics('Objectifs', 'objectives', () => DataAdapter.getObjectives()),
+            fetchWithMetrics('Meetings', 'meetings', () => DataAdapter.getMeetings()),
+            fetchWithMetrics('Factures récurrentes', 'recurringInvoices', () => DataAdapter.getRecurringInvoices()),
+            fetchWithMetrics('Dépenses récurrentes', 'recurringExpenses', () => DataAdapter.getRecurringExpenses()),
+            fetchWithMetrics('Budgets', 'budgets', () => DataAdapter.getBudgets()),
+            fetchWithMetrics('Documents', 'documents', () => DataAdapter.getDocuments()),
+            fetchWithMetrics('Contacts', 'contacts', () => DataAdapter.getContacts()),
+            fetchWithMetrics('Cours', 'courses', () => DataAdapter.getCourses()),
+            fetchWithMetrics('Emplois', 'jobs', () => DataAdapter.getJobs())
           ]).then(secondaryResults => {
             // Traiter les résultats secondaires
             secondaryResults.forEach((result) => {
@@ -600,10 +597,12 @@ const App: React.FC = () => {
                   case 'budgets': setBudgets(Array.isArray(data) ? data : []); break;
                   case 'documents': setDocuments(Array.isArray(data) ? data : []); break;
                   case 'contacts': setContacts(Array.isArray(data) ? data : []); break;
+                  case 'courses': setCourses(Array.isArray(data) ? data : []); break;
+                  case 'jobs': setJobs(Array.isArray(data) ? data : []); break;
                 }
               } else {
                 // En cas d'erreur, initialiser avec tableau vide
-                const types = ['objectives', 'meetings', 'recurringInvoices', 'recurringExpenses', 'budgets', 'documents', 'contacts'];
+                const types = ['objectives', 'meetings', 'recurringInvoices', 'recurringExpenses', 'budgets', 'documents', 'contacts', 'courses', 'jobs'];
                 const index = secondaryResults.indexOf(result);
                 const type = types[index];
                 switch (type) {
@@ -614,6 +613,8 @@ const App: React.FC = () => {
                   case 'budgets': setBudgets([]); break;
                   case 'documents': setDocuments([]); break;
                   case 'contacts': setContacts([]); break;
+                  case 'courses': setCourses([]); break;
+                  case 'jobs': setJobs([]); break;
                 }
               }
             });
