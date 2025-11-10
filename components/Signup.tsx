@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
 import NexusFlowIcon from './icons/NexusFlowIcon';
-import { Role, PUBLIC_ROLES } from '../types';
+import { Role, PUBLIC_ROLES, ROLES_REQUIRING_APPROVAL } from '../types';
 import AuthAIAssistant from './AuthAIAssistant';
 import { AuthService } from '../services/authService';
 import { logger } from '../services/loggerService';
@@ -412,6 +412,15 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     );
                   })}
                 </select>
+                {ROLES_REQUIRING_APPROVAL.includes(role) && (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex gap-2">
+                    <i className="fas fa-shield-alt mt-0.5"></i>
+                    <span>
+                      Ce rôle nécessite une validation par un Super Administrateur. Votre compte restera en attente
+                      jusqu’à l’approbation. Vous serez notifié(e) lorsqu’il sera activé.
+                    </span>
+                  </div>
+                )}
                 <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <p className="text-sm font-semibold text-emerald-800 mb-2">
                     <i className="fas fa-check-circle mr-2"></i>

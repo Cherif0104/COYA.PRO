@@ -15,6 +15,8 @@ export type Role =
 
 export type ModuleName = 'dashboard' | 'projects' | 'goals_okrs' | 'time_tracking' | 'leave_management' | 'finance' | 'knowledge_base' | 'courses' | 'jobs' | 'ai_coach' | 'gen_ai_lab' | 'crm_sales' | 'analytics' | 'talent_analytics' | 'user_management' | 'course_management' | 'job_management' | 'leave_management_admin' | 'organization_management' | 'settings';
 
+export type ProfileStatus = 'pending' | 'active' | 'rejected';
+
 // Organisation pour architecture multi-tenant
 export interface Organization {
   id: string;
@@ -61,6 +63,18 @@ export const SENEGEL_RESERVED_ROLES: Role[] = [
   'trainer', 'facilitator', 'coach', 'mentor'
 ];
 
+// Rôles nécessitant une validation manuelle par un Super Administrateur
+export const ROLES_REQUIRING_APPROVAL: Role[] = [
+  'administrator',
+  'manager',
+  'supervisor',
+  'trainer',
+  'coach',
+  'facilitator',
+  'mentor',
+  'partner_facilitator'
+];
+
 export interface ModulePermission {
   id?: string;
   userId: string;
@@ -83,8 +97,33 @@ export interface User {
   role: Role;
   skills: string[];
   phone?: string;
+  phoneNumber?: string;
   location?: string;
+  bio?: string;
+  website?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  lastLogin?: string;
+  createdAt?: string;
+  updatedAt?: string;
   isActive?: boolean; // Statut d'activation de l'utilisateur (true par défaut)
+  status?: ProfileStatus;
+  pendingRole?: Role | null;
+  reviewComment?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+}
+
+export type RoleApprovalDecision = 'approved' | 'rejected';
+
+export interface RoleApprovalLog {
+  id: string;
+  profileId: string;
+  requestedRole: Role | string;
+  decision: RoleApprovalDecision;
+  comment?: string | null;
+  decidedAt: string;
+  decidedBy: string;
 }
 
 export interface FileAttachment {

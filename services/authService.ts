@@ -1,5 +1,5 @@
 import { supabase } from './supabaseService';
-import { User, Role } from '../types';
+import { User, Role, ProfileStatus, ROLES_REQUIRING_APPROVAL } from '../types';
 
 const DEFAULT_ORGANIZATION_ID = '550e8400-e29b-41d4-a716-446655440000';
 const DEFAULT_ROLE: Role = 'student';
@@ -80,6 +80,12 @@ export interface AuthUser {
   role: string;
   avatar_url?: string;
   organization_id?: string;
+  status?: ProfileStatus;
+  pending_role?: string | null;
+  review_comment?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  requested_role?: string | null;
 }
 
 export interface SignUpData {
@@ -135,6 +141,11 @@ export class AuthService {
       // Vérifier la disponibilité du rôle avant l'inscription
       const uiRole = (data.role as Role) || DEFAULT_ROLE;
       const storageRole = this.normalizeRoleForStorage(uiRole);
+      const approvalRequired = ROLES_REQUIRING_APPROVAL.includes(uiRole);
+      const targetStatus: ProfileStatus = approvalRequired ? 'pending' : 'active';
+      const pendingRole = approvalRequired ? storageRole : null;
+      const storedBaseRole = approvalRequired ? this.normalizeRoleForStorage(DEFAULT_ROLE) : storageRole;
+      const metadataRole = this.mapStoredRoleToUi(storedBaseRole);
       const roleCheck = await this.checkRoleAvailability(uiRole);
       
       if (!roleCheck.available) {
@@ -153,7 +164,9 @@ export class AuthService {
           data: {
             full_name: data.full_name,
             phone_number: data.phone_number,
-            role: this.mapStoredRoleToUi(storageRole),
+            role: metadataRole,
+            requested_role: approvalRequired ? uiRole : undefined,
+            status: targetStatus,
             organization_id: organizationId
           }
         },
@@ -179,8 +192,10 @@ export class AuthService {
             email: data.email,
             full_name: data.full_name,
             phone_number: data.phone_number,
-            role: storageRole,
-            organization_id: organizationId
+            role: storedBaseRole,
+            organization_id: organizationId,
+            status: targetStatus,
+            pending_role: pendingRole
           });
 
         if (profileError) {
@@ -241,7 +256,8 @@ export class AuthService {
               role: storageRole,
               phone_number: authData.user.user_metadata?.phone_number || null,
               organization_id: authData.user.user_metadata?.organization_id || DEFAULT_ORGANIZATION_ID,
-              is_active: true
+              is_active: true,
+              status: 'active'
             })
             .select()
             .single();
@@ -265,7 +281,12 @@ export class AuthService {
               full_name: newProfile.full_name,
               role: this.mapStoredRoleToUi(newProfile.role),
               avatar_url: newProfile.avatar_url || '',
-              organization_id: newProfile.organization_id || DEFAULT_ORGANIZATION_ID
+              organization_id: newProfile.organization_id || DEFAULT_ORGANIZATION_ID,
+              status: (newProfile.status as ProfileStatus) || 'active',
+              pending_role: newProfile.pending_role || null,
+              review_comment: newProfile.review_comment || null,
+              reviewed_at: newProfile.reviewed_at || null,
+              reviewed_by: newProfile.reviewed_by || null
             }, 
             error: null 
           };
@@ -306,7 +327,12 @@ export class AuthService {
           full_name: effectiveProfile.full_name,
           role: this.mapStoredRoleToUi(effectiveProfile.role),
           avatar_url: effectiveProfile.avatar_url || '',
-          organization_id: effectiveProfile.organization_id || DEFAULT_ORGANIZATION_ID
+          organization_id: effectiveProfile.organization_id || DEFAULT_ORGANIZATION_ID,
+          status: (effectiveProfile.status as ProfileStatus) || 'active',
+          pending_role: effectiveProfile.pending_role || null,
+          review_comment: effectiveProfile.review_comment || null,
+          reviewed_at: effectiveProfile.reviewed_at || null,
+          reviewed_by: effectiveProfile.reviewed_by || null
         }, 
         error: null 
       };
@@ -356,8 +382,13 @@ export class AuthService {
           id: user.id,
           email: profile.email,
           full_name: profile.full_name,
-          role: profile.role,
-          avatar_url: profile.avatar_url
+          role: this.mapStoredRoleToUi(profile.role),
+          avatar_url: profile.avatar_url,
+          status: (profile.status as ProfileStatus) || 'active',
+          pending_role: profile.pending_role || null,
+          review_comment: profile.review_comment || null,
+          reviewed_at: profile.reviewed_at || null,
+          reviewed_by: profile.reviewed_by || null
         },
         error: null
       };

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
 import { User, Role, SENEGEL_RESERVED_ROLES } from '../types';
 import OrganizationService from '../services/organizationService';
+import DataAdapter from '../services/dataAdapter';
 import UserModulePermissions from './UserModulePermissions';
 import CreateSuperAdmin from './CreateSuperAdmin';
 import UserProfileEdit from './UserProfileEdit';
@@ -188,8 +189,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, inactive
-    const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'super_admin'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions' | 'super_admin'>('users');
     const [canAssignReservedRoles, setCanAssignReservedRoles] = useState(false);
+    const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+    const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
     const canReadModule = canAccessModule('user_management');
     const canWriteModule = hasPermission('user_management', 'write');
@@ -420,6 +423,31 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         });
     }, [users, searchQuery, roleFilter, statusFilter]);
 
+    const pendingUsers = useMemo(() => users.filter(user => user.status === 'pending'), [users]);
+    const pendingApprovalsCount = pendingUsers.length;
+
+    const formatRoleLabel = (roleValue?: Role | null) => {
+        if (!roleValue) return '—';
+        const translated = t(roleValue);
+        if (translated && translated !== roleValue) {
+            return translated;
+        }
+        return roleValue.replace(/_/g, ' ');
+    };
+
+    const handleNoteChange = (userId: string, value: string) => {
+        setDecisionNotes(prev => ({
+            ...prev,
+            [userId]: value
+        }));
+    };
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        if (typeof window !== 'undefined' && (window as any).Toast && typeof (window as any).Toast[type] === 'function') {
+            (window as any).Toast[type](message);
+        }
+    };
+
     // Métriques
     const totalUsers = users.length;
     const activeUsers = users.filter(u => u.isActive !== false).length;
@@ -433,6 +461,71 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     }
 
     const hasAccess = currentUser.role === 'administrator' || currentUser.role === 'super_administrator' || currentUser.role === 'manager';
+    const approverProfileId = currentUser.profileId ? String(currentUser.profileId) : (currentUser.id ? String(currentUser.id) : '');
+
+    const handleApproveRequest = async (pendingUser: User) => {
+        if (currentUser.role !== 'super_administrator') return;
+        const profileId = pendingUser.profileId ? String(pendingUser.profileId) : (pendingUser.id ? String(pendingUser.id) : '');
+        if (!profileId) {
+            alert('Profil utilisateur introuvable. Impossible de traiter la demande.');
+            return;
+        }
+        if (!approverProfileId) {
+            alert('Impossible de déterminer le validateur. Veuillez réessayer.');
+            return;
+        }
+        const key = String(pendingUser.id);
+        const note = (decisionNotes[key] || '').trim();
+        setProcessingRequestId(`approve-${key}`);
+        try {
+            const updatedUser = await DataAdapter.approvePendingProfile(profileId, approverProfileId, note);
+            if (updatedUser) {
+                onUpdateUser(updatedUser);
+                setDecisionNotes(prev => ({ ...prev, [key]: '' }));
+                showToast(`Demande approuvée pour ${pendingUser.name || pendingUser.email || 'l’utilisateur'}`, 'success');
+            }
+        } catch (error) {
+            console.error('❌ Erreur approbation utilisateur:', error);
+            alert('Erreur lors de l’approbation. Veuillez réessayer.');
+        } finally {
+            setProcessingRequestId(null);
+        }
+    };
+
+    const handleRejectRequest = async (pendingUser: User) => {
+        if (currentUser.role !== 'super_administrator') return;
+        const profileId = pendingUser.profileId ? String(pendingUser.profileId) : (pendingUser.id ? String(pendingUser.id) : '');
+        if (!profileId) {
+            alert('Profil utilisateur introuvable. Impossible de traiter la demande.');
+            return;
+        }
+        if (!approverProfileId) {
+            alert('Impossible de déterminer le validateur. Veuillez réessayer.');
+            return;
+        }
+        const key = String(pendingUser.id);
+        const note = (decisionNotes[key] || '').trim();
+        if (!note) {
+            const confirmed = window.confirm('Aucun commentaire n’a été saisi. Voulez-vous rejeter sans commentaire ?');
+            if (!confirmed) {
+                return;
+            }
+        }
+        setProcessingRequestId(`reject-${key}`);
+        try {
+            const updatedUser = await DataAdapter.rejectPendingProfile(profileId, approverProfileId, note);
+            if (updatedUser) {
+                onUpdateUser(updatedUser);
+                setDecisionNotes(prev => ({ ...prev, [key]: '' }));
+                showToast(`Demande rejetée pour ${pendingUser.name || pendingUser.email || 'l’utilisateur'}`, 'success');
+            }
+        } catch (error) {
+            console.error('❌ Erreur rejet utilisateur:', error);
+            alert('Erreur lors du rejet de la demande. Veuillez réessayer.');
+        } finally {
+            setProcessingRequestId(null);
+        }
+    };
 
     if (!hasAccess) {
         return (
@@ -478,6 +571,19 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                             <i className="fas fa-users mr-2"></i>
                             Utilisateurs
                         </button>
+                        {currentUser?.role === 'super_administrator' && (
+                            <button
+                                onClick={() => setActiveTab('approvals')}
+                                className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                    activeTab === 'approvals'
+                                        ? 'bg-emerald-600 text-white shadow-md'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="fas fa-user-clock mr-2"></i>
+                                Demandes d'accès
+                            </button>
+                        )}
                         <button
                             onClick={() => setActiveTab('permissions')}
                             className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
@@ -506,7 +612,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 </div>
 
                 {/* Métriques */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-lg p-6 border border-blue-200 hover:shadow-xl transition-shadow">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-700">Total Utilisateurs</span>
@@ -535,6 +641,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                         </div>
                         <p className="text-3xl font-bold text-gray-900">{staffUsers}</p>
                     </div>
+                    {currentUser.role === 'super_administrator' && (
+                        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl shadow-lg p-6 border border-yellow-200 hover:shadow-xl transition-shadow md:col-span-2 lg:col-span-1">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-700">Demandes en attente</span>
+                                <i className="fas fa-inbox text-2xl text-yellow-600"></i>
+                            </div>
+                            <p className="text-3xl font-bold text-gray-900">{pendingApprovalsCount}</p>
+                            <p className="text-xs text-yellow-700 mt-2">Rôles nécessitant une validation Super Admin.</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -691,6 +807,129 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 </div>
                         )}
                     </>
+                )}
+                {activeTab === 'approvals' && currentUser.role === 'super_administrator' && (
+                    <div className="space-y-6">
+                        <div className="bg-white border border-emerald-200 rounded-lg shadow-sm p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                <i className="fas fa-user-clock text-emerald-600"></i>
+                                Workflow d'approbation
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-2">
+                                Les comptes ci-dessous ont demandé un rôle avancé. Validez ou rejetez chaque demande pour activer l’accès correspondant.
+                            </p>
+                        </div>
+
+                        {pendingUsers.length === 0 ? (
+                            <div className="bg-white rounded-lg shadow-lg p-12 text-center border border-dashed border-emerald-200">
+                                <i className="fas fa-check-circle text-6xl text-emerald-400 mb-4"></i>
+                                <h3 className="text-xl font-semibold text-gray-800 mb-2">Aucune demande en attente</h3>
+                                <p className="text-gray-500">
+                                    Toutes les demandes ont été traitées. Les nouvelles demandes apparaîtront ici automatiquement.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {pendingUsers.map((pendingUser) => {
+                                    const key = String(pendingUser.id);
+                                    const noteValue = decisionNotes[key] || '';
+                                    const approveLoading = processingRequestId === `approve-${key}`;
+                                    const rejectLoading = processingRequestId === `reject-${key}`;
+                                    const requestedRoleLabel = formatRoleLabel(pendingUser.pendingRole || pendingUser.role);
+                                    const currentRoleLabel = formatRoleLabel(pendingUser.role);
+                                    const pendingSince = pendingUser.createdAt
+                                        ? new Date(pendingUser.createdAt).toLocaleString('fr-FR')
+                                        : '—';
+
+                                    return (
+                                        <div key={pendingUser.id} className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                                            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                                <div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 text-white flex items-center justify-center text-lg font-semibold">
+                                                            {(pendingUser.name || pendingUser.email || 'U')
+                                                                .split(' ')
+                                                                .filter(Boolean)
+                                                                .map((n) => n[0])
+                                                                .join('')
+                                                                .slice(0, 2)
+                                                                .toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-lg font-semibold text-gray-900">
+                                                                {pendingUser.name || pendingUser.email}
+                                                            </h4>
+                                                            <p className="text-sm text-gray-500">{pendingUser.email}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-semibold">
+                                                        <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                                                            Rôle actuel : {currentRoleLabel}
+                                                        </span>
+                                                        <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                                                            Rôle demandé : {requestedRoleLabel}
+                                                        </span>
+                                                        <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                                            Statut : En attente
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-sm text-gray-500">
+                                                    <p>
+                                                        <i className="far fa-clock mr-1"></i>
+                                                        Demande créée le : <strong>{pendingSince}</strong>
+                                                    </p>
+                                                    {pendingUser.reviewComment && (
+                                                        <p className="mt-2">
+                                                            <i className="fas fa-comment-dots mr-1 text-emerald-500"></i>
+                                                            Dernier commentaire : {pendingUser.reviewComment}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-6">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Commentaire interne (visible par l'équipe)
+                                                </label>
+                                                <textarea
+                                                    value={noteValue}
+                                                    onChange={(e) => handleNoteChange(key, e.target.value)}
+                                                    rows={3}
+                                                    disabled={approveLoading || rejectLoading}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                                                    placeholder="Notes pour tracer la décision (optionnel)"
+                                                />
+                                            </div>
+
+                                            <div className="mt-4 flex flex-wrap justify-end gap-3">
+                                                <button
+                                                    onClick={() => handleRejectRequest(pendingUser)}
+                                                    disabled={approveLoading || rejectLoading}
+                                                    className="inline-flex items-center px-4 py-2 rounded-lg bg-red-100 text-red-700 font-semibold hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {rejectLoading && (
+                                                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 mr-2"></span>
+                                                    )}
+                                                    Refuser
+                                                </button>
+                                                <button
+                                                    onClick={() => handleApproveRequest(pendingUser)}
+                                                    disabled={approveLoading || rejectLoading}
+                                                    className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {approveLoading && (
+                                                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                                                    )}
+                                                    Approuver
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {activeTab === 'permissions' && (

@@ -33,6 +33,22 @@ export class DataService {
     }
   }
 
+  static async getPendingProfiles() {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error('Erreur récupération profils en attente:', error);
+      return { data: null, error };
+    }
+  }
+
   static async searchInstructors(searchTerm: string, roles?: string[]) {
     const sanitized = searchTerm.trim().replace(/[%]/g, '').replace(/['"]/g, '');
     if (!sanitized) {
@@ -122,6 +138,112 @@ export class DataService {
       return { data, error: null };
     } catch (error) {
       console.error('❌ Erreur update user role:', error);
+      return { data: null, error };
+    }
+  }
+
+  static async approveProfileRole(params: { profileId: string; approverId: string; comment?: string }) {
+    const { profileId, approverId, comment } = params;
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', profileId)
+        .single();
+
+      if (profileError) throw profileError;
+      if (!profile) throw new Error('Profil introuvable');
+
+      const approvedRole: string = (profile.pending_role as string) || profile.role || 'student';
+      const reviewComment = comment?.trim() ? comment.trim() : null;
+      const requestedRole = profile.pending_role || approvedRole;
+
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          role: approvedRole,
+          status: 'active',
+          pending_role: null,
+          review_comment: reviewComment,
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: approverId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profileId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase
+        .from('role_approval_logs')
+        .insert({
+          profile_id: profileId,
+          requested_role: requestedRole,
+          decision: 'approved',
+          comment: reviewComment,
+          decided_by: approverId
+        });
+
+      if (logError) {
+        console.warn('⚠️ Erreur enregistrement log approbation (non bloquant):', logError);
+      }
+
+      return { data: updatedProfile, error: null };
+    } catch (error) {
+      console.error('❌ Erreur approbation rôle profil:', error);
+      return { data: null, error };
+    }
+  }
+
+  static async rejectProfileRole(params: { profileId: string; approverId: string; comment?: string }) {
+    const { profileId, approverId, comment } = params;
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', profileId)
+        .single();
+
+      if (profileError) throw profileError;
+      if (!profile) throw new Error('Profil introuvable');
+
+      const reviewComment = comment?.trim() ? comment.trim() : null;
+      const requestedRole = profile.pending_role || profile.role || 'student';
+
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          status: 'rejected',
+          pending_role: null,
+          review_comment: reviewComment,
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: approverId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profileId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase
+        .from('role_approval_logs')
+        .insert({
+          profile_id: profileId,
+          requested_role: requestedRole,
+          decision: 'rejected',
+          comment: reviewComment,
+          decided_by: approverId
+        });
+
+      if (logError) {
+        console.warn('⚠️ Erreur enregistrement log rejet (non bloquant):', logError);
+      }
+
+      return { data: updatedProfile, error: null };
+    } catch (error) {
+      console.error('❌ Erreur rejet rôle profil:', error);
       return { data: null, error };
     }
   }

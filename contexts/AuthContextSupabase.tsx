@@ -9,6 +9,8 @@ const sanitizeFullName = (fullName?: string | null, email?: string | null) => {
 
 const buildUserFromProfile = (profile: any): User => {
   const uiRole = AuthService.mapStoredRoleToUi(profile?.role);
+  const status = (profile?.status as ProfileStatus) || 'active';
+  const pendingRole = profile?.pending_role ? AuthService.mapStoredRoleToUi(profile.pending_role) : null;
   return {
     id: profile?.user_id || profile?.id,
     profileId: profile?.id,
@@ -28,7 +30,12 @@ const buildUserFromProfile = (profile: any): User => {
     isActive: profile?.is_active ?? true,
     lastLogin: profile?.last_login || new Date().toISOString(),
     createdAt: profile?.created_at || new Date().toISOString(),
-    updatedAt: profile?.updated_at || new Date().toISOString()
+    updatedAt: profile?.updated_at || new Date().toISOString(),
+    status,
+    pendingRole,
+    reviewComment: profile?.review_comment || null,
+    reviewedAt: profile?.reviewed_at || null,
+    reviewedBy: profile?.reviewed_by || null
   };
 };
 
@@ -60,7 +67,9 @@ const ensureProfile = async (authUser: any) => {
       phone_number: authUser?.user_metadata?.phone_number || null,
       organization_id: organizationId,
       is_active: true,
-      last_login: new Date().toISOString()
+      last_login: new Date().toISOString(),
+      status: 'active',
+      pending_role: null
     })
     .select()
     .single();
@@ -69,7 +78,7 @@ const ensureProfile = async (authUser: any) => {
 
   return insertedProfile;
 };
-import { User } from '../types';
+import { User, ProfileStatus, Role, ROLES_REQUIRING_APPROVAL } from '../types';
 import { authGuard } from '../middleware/authGuard';
 import { supabase } from '../services/supabaseService';
 
@@ -127,7 +136,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             full_name: profile.full_name,
             role: AuthService.mapStoredRoleToUi(profile.role),
             avatar_url: profile.avatar_url || '',
-            phone_number: profile.phone_number || ''
+            phone_number: profile.phone_number || '',
+            status: (profile.status as ProfileStatus) || 'active',
+            pending_role: profile.pending_role || null,
+            review_comment: profile.review_comment || null,
+            reviewed_at: profile.reviewed_at || null,
+            reviewed_by: profile.reviewed_by || null
           };
           
           // Mettre à jour l'état de manière synchrone
@@ -188,7 +202,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           full_name: userData.fullName,
           role: userData.role,
           avatar_url: userData.avatar,
-          phone_number: userData.phone || ''
+          phone_number: userData.phone || '',
+          status: userData.status,
+          pending_role: userData.pendingRole ? AuthService.normalizeRoleForStorage(userData.pendingRole) : null,
+          review_comment: userData.reviewComment || null,
+          reviewed_at: userData.reviewedAt || null,
+          reviewed_by: userData.reviewedBy || null
         });
         
         // Démarrer la surveillance d'inactivité
@@ -223,13 +242,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (authUser) {
+        const requestedRole = (role as Role) || 'student';
+        const approvalRequired = ROLES_REQUIRING_APPROVAL.includes(requestedRole);
+        const status: ProfileStatus = approvalRequired ? 'pending' : 'active';
+        const pendingRole = approvalRequired ? requestedRole : null;
+        const effectiveRole: Role = approvalRequired
+          ? 'student'
+          : ((authUser.role as Role) || requestedRole);
+
         // Convertir AuthUser en User pour la compatibilité
         const userData: User = {
           id: authUser.id,
           email: authUser.email,
-          fullName: authUser.full_name,
-          role: authUser.role as any,
+          name: fullName,
+          fullName: authUser.full_name || fullName,
+          role: effectiveRole,
           avatar: authUser.avatar_url || '',
+          phone: phoneNumber || '',
           phoneNumber: phoneNumber || '',
           skills: [],
           bio: '',
@@ -240,11 +269,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           isActive: true,
           lastLogin: new Date().toISOString(),
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          status,
+          pendingRole,
+          reviewComment: null,
+          reviewedAt: null,
+          reviewedBy: null
         };
         
         setUser(userData);
-        setProfile(authUser);
+        setProfile({
+          id: authUser.id,
+          email: authUser.email || email,
+          full_name: authUser.full_name || fullName,
+          role: effectiveRole,
+          avatar_url: authUser.avatar_url || '',
+          phone_number: phoneNumber || '',
+          organization_id: authUser.organization_id,
+          status,
+          pending_role: pendingRole ? AuthService.normalizeRoleForStorage(pendingRole) : null,
+          review_comment: null,
+          reviewed_at: null,
+          reviewed_by: null
+        });
         
         // Démarrer la surveillance d'inactivité
         authGuard.startInactivityMonitoring();

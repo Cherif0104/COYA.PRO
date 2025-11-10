@@ -43,11 +43,34 @@ import { useModulePermissions } from './hooks/useModulePermissions';
 
 
 const App: React.FC = () => {
-  const { user, signIn, loading: authLoading } = useAuth();
+  const { user, signIn, signOut, loading: authLoading } = useAuth();
   const { t } = useLocalization();
   const permissionsContext = useModulePermissions();
   const { canAccessModule, loading: permissionsLoading } = permissionsContext;
   const [authView, setAuthView] = useState<'login' | 'signup'>('login');
+  const formatRoleLabel = useCallback((roleValue?: Role | null) => {
+    if (!roleValue) return undefined;
+    const translation = t(roleValue);
+    if (translation && translation.trim() && translation !== roleValue) {
+      return translation;
+    }
+    return roleValue.replace(/_/g, ' ');
+  }, [t]);
+  const handlePendingLogout = useCallback(async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('❌ Erreur déconnexion (pending) :', error);
+    } finally {
+      setAuthView('login');
+      setCurrentView('login');
+      try {
+        localStorage.setItem('lastView', 'login');
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [signOut]);
   
   // Récupérer la vue précédente depuis localStorage (pour éviter le flash au refresh)
   const savedView = typeof window !== 'undefined' ? localStorage.getItem('lastView') : null;
@@ -822,6 +845,70 @@ const App: React.FC = () => {
       logger.logNavigation('login', 'dashboard', 'Login success callback');
       handleSetView('dashboard');
     }} />;
+  }
+
+  const userStatus = user?.status || 'active';
+  const requestedRole = (user?.pendingRole || user?.role || null) as Role | null;
+  const isSuperAdminRequested = requestedRole === 'super_administrator';
+  const needsApproval = userStatus === 'pending' && !isSuperAdminRequested;
+  const requestedRoleLabel = formatRoleLabel(requestedRole);
+
+  if (needsApproval) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white shadow-2xl rounded-2xl p-10 text-center space-y-6 border border-emerald-100">
+          <div className="mx-auto w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl">
+            <i className="fas fa-hourglass-half"></i>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Compte en attente de validation</h1>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Merci d’avoir rejoint COYA. Votre demande d’accès
+            {requestedRoleLabel ? <> au rôle <strong>{requestedRoleLabel}</strong></> : null} est en cours
+            d’examen par un Super Administrateur. Vous serez notifié(e) dès que votre compte sera activé.
+          </p>
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-left text-sm text-emerald-800 space-y-2">
+            <div className="flex items-start gap-3">
+              <i className="fas fa-user-shield mt-1"></i>
+              <div>
+                <p className="font-semibold">Étapes suivantes</p>
+                <p>Vous pouvez fermer cette page et revenir plus tard. Si votre demande est urgente, contactez un Super Administrateur.</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handlePendingLogout}
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-md bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition"
+          >
+            Retourner à la page de connexion
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (userStatus === 'rejected' && !isSuperAdminRequested) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white shadow-2xl rounded-2xl p-10 text-center space-y-6 border border-red-100">
+          <div className="mx-auto w-20 h-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-3xl">
+            <i className="fas fa-user-lock"></i>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Accès non autorisé</h1>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Votre demande d’accès
+            {requestedRoleLabel ? <> au rôle <strong>{requestedRoleLabel}</strong></> : null} n’a pas pu être approuvée.
+            {user.reviewComment ? <> Motif communiqué : <strong>{user.reviewComment}</strong>.</> : null}
+            Veuillez contacter un Super Administrateur pour plus d’informations.
+          </p>
+          <button
+            onClick={handlePendingLogout}
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-md bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition"
+          >
+            Retour à l’écran de connexion
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // --- CRUD & State Handlers ---

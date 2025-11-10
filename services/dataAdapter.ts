@@ -1,10 +1,46 @@
 import { DataService } from './dataService';
+import { AuthService } from './authService';
+import { AuthService } from './authService';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
 import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
   private static useSupabase = true; // Activé pour la persistance
+
+  private static mapProfileToUser(profile: any): User {
+    if (!profile) {
+      throw new Error('Profil Supabase invalide');
+    }
+
+    const id = profile.user_id || profile.id;
+    return {
+      id,
+      profileId: profile.id,
+      name: profile.full_name,
+      fullName: profile.full_name,
+      email: profile.email,
+      role: AuthService.mapStoredRoleToUi(profile.role),
+      avatar: profile.avatar_url || '',
+      phone: profile.phone_number || '',
+      phoneNumber: profile.phone_number || '',
+      skills: profile.skills || [],
+      bio: profile.bio || '',
+      location: profile.location || '',
+      website: profile.website || '',
+      linkedinUrl: profile.linkedin_url || '',
+      githubUrl: profile.github_url || '',
+      isActive: profile.is_active ?? true,
+      lastLogin: profile.last_login || new Date().toISOString(),
+      createdAt: profile.created_at || new Date().toISOString(),
+      updatedAt: profile.updated_at || new Date().toISOString(),
+      status: (profile.status as any) || 'active',
+      pendingRole: profile.pending_role ? AuthService.mapStoredRoleToUi(profile.pending_role) : null,
+      reviewComment: profile.review_comment || null,
+      reviewedAt: profile.reviewed_at || null,
+      reviewedBy: profile.reviewed_by || null
+    };
+  }
 
   // Helper pour mapper les statuts de contact
   private static mapContactStatus(status: string | undefined): 'Lead' | 'Contacted' | 'Prospect' | 'Customer' {
@@ -1808,27 +1844,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
         if (error) throw error;
         
         // Convertir les profils Supabase en User
-        return (data || []).map((profile: any) => ({
-          id: profile.user_id || profile.id, // UUID Supabase Auth (celui utilisé partout dans l'app)
-          profileId: profile.id, // UUID du profil Supabase (profiles.id) - utilisé pour les FK dans la DB
-          name: profile.full_name,
-          fullName: profile.full_name,
-          email: profile.email,
-          role: profile.role as any,
-          avatar: profile.avatar_url || '',
-          phone: profile.phone_number || '',
-          phoneNumber: profile.phone_number || '',
-          skills: profile.skills || [],
-          bio: profile.bio || '',
-          location: profile.location || '',
-          website: profile.website || '',
-          linkedinUrl: profile.linkedin_url || '',
-          githubUrl: profile.github_url || '',
-          isActive: profile.is_active ?? true,
-          lastLogin: profile.last_login || new Date().toISOString(),
-          createdAt: profile.created_at || new Date().toISOString(),
-          updatedAt: profile.updated_at || new Date().toISOString()
-        }));
+        return (data || []).map((profile: any) => this.mapProfileToUser(profile));
       } catch (error) {
         console.error('Erreur récupération utilisateurs:', error);
         return [];
@@ -1877,6 +1893,44 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       }
     }
     return false;
+  }
+
+  static async getPendingProfiles(): Promise<User[]> {
+    if (!this.useSupabase) return [];
+    try {
+      const { data, error } = await DataService.getPendingProfiles();
+      if (error) throw error;
+      return (data || []).map((profile: any) => this.mapProfileToUser(profile));
+    } catch (error) {
+      console.error('❌ Erreur récupération profils en attente:', error);
+      return [];
+    }
+  }
+
+  static async approvePendingProfile(profileId: string, approverId: string, comment?: string): Promise<User | null> {
+    if (!this.useSupabase) return null;
+    try {
+      const { data, error } = await DataService.approveProfileRole({ profileId, approverId, comment });
+      if (error) throw error;
+      if (!data) return null;
+      return this.mapProfileToUser(data);
+    } catch (error) {
+      console.error('❌ Erreur approbation profil:', error);
+      throw error;
+    }
+  }
+
+  static async rejectPendingProfile(profileId: string, approverId: string, comment?: string): Promise<User | null> {
+    if (!this.useSupabase) return null;
+    try {
+      const { data, error } = await DataService.rejectProfileRole({ profileId, approverId, comment });
+      if (error) throw error;
+      if (!data) return null;
+      return this.mapProfileToUser(data);
+    } catch (error) {
+      console.error('❌ Erreur rejet profil:', error);
+      throw error;
+    }
   }
 
   // ===== MEETINGS =====

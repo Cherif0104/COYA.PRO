@@ -208,31 +208,31 @@ Retourne uniquement un JSON valide avec cette structure exacte:
     
     // Générer des OKRs plus adaptés
     let objectives: any[] = [];
-    
-    if (isMarketing) {
-      objectives = [
-        {
+  
+  if (isMarketing) {
+    objectives = [
+      {
           title: `Lancer avec succès ${projectTitle || 'le projet'} et obtenir une adoption rapide`,
-          keyResults: [
+        keyResults: [
             { title: "Atteindre 10 000 inscriptions d'utilisateurs au cours du premier mois", target: 10000, unit: "utilisateurs" },
             { title: "Sécuriser 50 partenaires pour intégrer la solution", target: 50, unit: "partenaires" },
             { title: "Atteindre un score de satisfaction de 8,5/10", target: 8.5, unit: "/10" }
-          ]
-        },
-        {
-          title: "Maximiser l'impact de la campagne et générer un ROI positif",
-          keyResults: [
+        ]
+      },
+      {
+        title: "Maximiser l'impact de la campagne et générer un ROI positif",
+        keyResults: [
             { title: "Générer 100 000 impressions sur les réseaux sociaux", target: 100000, unit: "impressions" },
             { title: "Atteindre un taux de clic de 3% sur les publicités", target: 3, unit: "%" },
             { title: "Convertir 500 prospects qualifiés en clients", target: 500, unit: "clients" }
-          ]
-        }
-      ];
-    } else if (isTech) {
-      objectives = [
-        {
+        ]
+      }
+    ];
+  } else if (isTech) {
+    objectives = [
+      {
           title: `Développer et déployer ${projectTitle || 'la solution'} avec excellence technique`,
-          keyResults: [
+        keyResults: [
             { title: "Réduire le temps de chargement de 50%", target: 50, unit: "%" },
             { title: "Atteindre 99,9% de disponibilité de la plateforme", target: 99.9, unit: "%" },
             { title: "Implémenter 100% des fonctionnalités demandées", target: 100, unit: "%" },
@@ -249,10 +249,10 @@ Retourne uniquement un JSON valide avec cette structure exacte:
         }
       ];
     } else if (isBusiness || isProduct) {
-      objectives = [
-        {
+    objectives = [
+      {
           title: `Développer ${projectTitle || 'les objectifs business'} et augmenter les revenus`,
-          keyResults: [
+        keyResults: [
             { title: "Signer 20 nouveaux partenariats stratégiques", target: 20, unit: "partenariats" },
             { title: "Augmenter les revenus de 30%", target: 30, unit: "%" },
             { title: "Atteindre un taux de satisfaction partenaire de 9/10", target: 9, unit: "/10" }
@@ -267,15 +267,15 @@ Retourne uniquement un JSON valide avec cette structure exacte:
             { title: "Recruter 10 talents qualifiés", target: 10, unit: "talents" },
             { title: "Atteindre un taux de rétention de 95%", target: 95, unit: "%" },
             { title: "Former 100% de l'équipe aux nouvelles compétences", target: 100, unit: "%" }
-          ]
-        }
-      ];
-    } else {
+        ]
+      }
+    ];
+  } else {
       // OKRs adaptés au projet générique mais personnalisés
-      objectives = [
-        {
+    objectives = [
+      {
           title: `Réussir ${projectTitle || 'le projet'} dans les délais et le budget`,
-          keyResults: [
+        keyResults: [
             { title: "Respecter 100% des échéances du projet", target: 100, unit: "%" },
             { title: "Maintenir le budget dans les limites prévues", target: 100, unit: "%" },
             { title: "Atteindre un score de satisfaction de 8/10", target: 8, unit: "/10" }
@@ -287,17 +287,17 @@ Retourne uniquement un JSON valide avec cette structure exacte:
             { title: "Compléter 100% des livrables prévus", target: 100, unit: "%" },
             { title: "Obtenir une validation client de 9/10", target: 9, unit: "/10" },
             { title: "Réduire les retours/corrections de 80%", target: 80, unit: "%" }
-          ]
-        }
-      ];
-    }
-    
+        ]
+      }
+    ];
+  }
+  
     // Retourner 2-3 objectifs
-    const shuffled = objectives.sort(() => 0.5 - Math.random());
+  const shuffled = objectives.sort(() => 0.5 - Math.random());
     const selectedObjectives = shuffled.slice(0, Math.min(3, objectives.length));
-    
+  
     console.log('✅ Génération IA OKRs - OKRs générés (fallback):', selectedObjectives.length);
-    return selectedObjectives;
+  return selectedObjectives;
   } catch (error) {
     console.error('❌ Erreur génération OKRs:', error);
     // Retourner des OKRs génériques en dernier recours
@@ -353,7 +353,7 @@ Réponds exclusivement en JSON de la forme:
       'Réponds uniquement par le titre, sans guillemets.');
     const contentMd = await callAI('Réécris et structure ce texte en Markdown clair:\n' + text,
       'Structure en sections, listes, et éventuellement tableaux.');
-    return {
+  return {
       title: (titleOnly || 'Document').replace(/\n/g, ' ').slice(0, 80).trim(),
       content: contentMd || text.trim()
     };
