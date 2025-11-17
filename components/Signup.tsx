@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
 import NexusFlowIcon from './icons/NexusFlowIcon';
-import { Role, PUBLIC_ROLES, ROLES_REQUIRING_APPROVAL } from '../types';
+import { Role, PUBLIC_ROLES, ROLES_REQUIRING_APPROVAL, Translation } from '../types';
 import AuthAIAssistant from './AuthAIAssistant';
 import { AuthService } from '../services/authService';
 import { logger } from '../services/loggerService';
@@ -44,6 +44,34 @@ interface SignupProps {
   onSwitchToLogin: () => void;
   onSignupSuccess?: () => void;
 }
+
+const HERO_HIGHLIGHTS: Array<{ icon: string; titleKey: keyof Translation; descriptionKey: keyof Translation }> = [
+  {
+    icon: 'fas fa-building',
+    titleKey: 'signup_highlight_multi_org_title',
+    descriptionKey: 'signup_highlight_multi_org_description',
+  },
+  {
+    icon: 'fas fa-users',
+    titleKey: 'signup_highlight_unified_title',
+    descriptionKey: 'signup_highlight_unified_description',
+  },
+  {
+    icon: 'fas fa-shield-alt',
+    titleKey: 'signup_highlight_security_title',
+    descriptionKey: 'signup_highlight_security_description',
+  },
+];
+
+const ROLE_CATEGORY_LABELS: Record<string, { icon: string; labelKey: keyof Translation }> = {
+  'Gestion': { icon: '🏢', labelKey: 'signup_role_group_management' },
+  'Pédagogique & Facilitation': { icon: '👨‍🏫', labelKey: 'signup_role_group_pedagogy' },
+  'Jeunesse & Académique': { icon: '👨‍🎓', labelKey: 'signup_role_group_youth' },
+  'Entrepreneuriat & Partenariats': { icon: '🤝', labelKey: 'signup_role_group_entrepreneurship' },
+  'Créatif & Médias': { icon: '🎨', labelKey: 'signup_role_group_creative' },
+  'Facilitateurs partenaires': { icon: '🤝', labelKey: 'signup_role_group_partners' },
+  'Super Administration': { icon: '⭐', labelKey: 'signup_role_group_super_admin' },
+};
 
 const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => {
   const { t } = useLocalization();
@@ -117,30 +145,31 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
   };
 
   const formatSignupError = (err: any): string => {
+    const defaultMessage = t('signup_error_generic');
     if (!err) {
-      return 'Erreur lors de l’inscription. Veuillez réessayer.';
+      return defaultMessage;
     }
 
     const rawMessage =
       typeof err === 'string'
         ? err
-        : err?.message || err?.error_description || 'Erreur lors de l’inscription.';
+        : err?.message || err?.error_description || defaultMessage;
 
-    const normalized = rawMessage.toLowerCase();
+    const normalized = (rawMessage || '').toLowerCase();
 
     if (normalized.includes('already registered') || normalized.includes('duplicate')) {
-      return 'Cette adresse email est déjà utilisée. Connectez-vous ou utilisez un autre email.';
+      return t('signup_error_email_exists');
     }
 
     if (normalized.includes('invalid email')) {
-      return 'Adresse email invalide. Vérifiez le format ou utilisez un autre domaine.';
+      return t('signup_error_invalid_email');
     }
 
     if (normalized.includes('password should be at least')) {
-      return 'Mot de passe trop court. Utilisez au moins 8 caractères avec chiffres et lettres.';
+      return t('signup_error_password_short');
     }
 
-    return rawMessage;
+    return rawMessage || defaultMessage;
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -152,13 +181,13 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
     }
 
     if (password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères');
+      setError(t('signup_password_min_length'));
       return;
     }
 
     // Vérifier que le rôle est disponible
     if (!isRoleAvailable(role)) {
-      setError(getRoleReason(role) || `Le rôle "${role}" n'est pas disponible. Un compte avec ce rôle existe déjà.`);
+      setError(getRoleReason(role) || t('signup_role_unavailable').replace('{role}', t(role)));
       return;
     }
 
@@ -187,11 +216,11 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
         friendly.toLowerCase().includes('duplicate') ||
         friendly.toLowerCase().includes('already')
       ) {
-        setEmailError('Cet email est déjà utilisé. Utilisez un autre email ou connectez-vous.');
+        setEmailError(t('signup_email_in_use_detailed'));
         setError('');
-      } else if (friendly.toLowerCase().includes('email invalide')) {
+      } else if (friendly.toLowerCase().includes('email invalide') || friendly.toLowerCase().includes('invalid email')) {
         setEmailError('');
-        setError('Email invalide. Veuillez utiliser un email valide (ex: votrenom@gmail.com).');
+        setError(t('signup_invalid_email_hint'));
       } else {
         setEmailError('');
         setError(friendly);
@@ -238,24 +267,16 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
           <div className="md:w-1/2 bg-gradient-to-br from-emerald-600 to-blue-600 text-white p-12 flex flex-col justify-center items-center text-center">
             <NexusFlowIcon className="w-28 h-28"/>
             <h1 className="text-3xl font-bold mt-4">COYA</h1>
-            <p className="mt-2 text-emerald-100 text-sm font-medium">Creating Opportunities for Youth in Africa</p>
-            <p className="mt-1 text-emerald-50 text-lg">Plateforme intelligente multi‑organisations</p>
+            <p className="mt-2 text-emerald-100 text-sm font-medium">{t('signup_hero_tagline')}</p>
+            <p className="mt-1 text-emerald-50 text-lg">{t('signup_hero_subtagline')}</p>
             <div className="mt-8 space-y-4 text-sm text-emerald-50">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-building text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Multi-Organisations</h3>
-                <p className="text-xs">Chaque organisation possède son espace dédié et sécurisé</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-users text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Écosystème Unifié</h3>
-                <p className="text-xs">Une plateforme, plusieurs organisations, des milliers d'utilisateurs</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-shield-alt text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Sécurité & Isolation</h3>
-                <p className="text-xs">Vos données restent isolées au sein de votre organisation</p>
-              </div>
+              {HERO_HIGHLIGHTS.map((highlight) => (
+                <div key={highlight.titleKey as string} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                  <i className={`${highlight.icon} text-2xl mb-2`}></i>
+                  <h3 className="font-semibold mb-2">{t(highlight.titleKey)}</h3>
+                  <p className="text-xs">{t(highlight.descriptionKey)}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -265,16 +286,16 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
             <form className="mt-8 space-y-6" onSubmit={handleSignup}>
               {/* Organisation (nom) */}
               <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Organisation</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('signup_organization_label')}</label>
                 <input
                   type="text"
                   value={organizationName}
                   onChange={(e) => setOrganizationName(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="Ex: SENEGEL ou Partenaire ABC"
+                  placeholder={t('signup_organization_placeholder')}
                 />
                 <p className="mt-2 text-xs text-gray-500">
-                  SENEGEL par défaut. Si l'organisation partenaire n'existe pas encore, elle sera créée automatiquement.
+                  {t('signup_organization_hint')}
                 </p>
               </div>
               {/* Bannière informative */}
@@ -284,18 +305,17 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     <i className={`fas fa-info-circle ${organizationName.trim().toLowerCase() === 'senegel' ? 'text-emerald-600' : 'text-blue-600'} text-xl mt-1`}></i>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-1">🏢 Création de compte</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1">🏢 {t('signup_banner_title')}</h3>
                     <p className="text-xs text-gray-700 mb-2">
-                      Vous créez un compte dans <strong>{organizationName || 'SENEGEL'}</strong>. 
-                      Choisissez votre rôle parmi <strong>tous les rôles disponibles</strong> selon vos besoins et votre niveau de responsabilité.
+                      {t('signup_banner_description_prefix')} <strong>{organizationName || 'SENEGEL'}</strong>. {t('signup_banner_description_suffix')}
                     </p>
                     <p className="text-xs text-gray-600 mb-2">
                       <i className="fas fa-check-circle mr-1 text-emerald-600"></i>
-                      <strong>Tous les rôles disponibles</strong> : Vous pouvez choisir parmi tous les rôles du MVP (administrator, manager, supervisor, trainer, student, entrepreneur, etc.).
+                      <strong>{t('signup_banner_all_roles_label')}</strong> {t('signup_banner_all_roles_description')}
                     </p>
                     <p className="text-xs text-gray-600">
                       <i className="fas fa-lock mr-1"></i>
-                      <strong>Note</strong> : Le rôle <code className="bg-gray-100 px-1 rounded">super_administrator</code> est réservé et ne peut être créé que par un Super Administrateur existant.
+                      <strong>{t('signup_banner_note_label')}</strong> {t('signup_banner_note_description')}
                     </p>
                   </div>
                 </div>
@@ -319,7 +339,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="Votre nom complet"
+                  placeholder={t('signup_full_name_placeholder')}
                 />
               </div>
 
@@ -341,10 +361,10 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="votre@email.com"
+                  placeholder={t('signup_email_placeholder')}
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  ⚠️ Certains domaines peuvent être bloqués. Utilisez un email valide (Gmail, Outlook, etc.)
+                  {t('signup_email_domain_warning')}
                 </p>
               </div>
 
@@ -359,7 +379,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="+221 XX XXX XX XX"
+                  placeholder={t('signup_phone_placeholder')}
                 />
               </div>
 
@@ -376,17 +396,10 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                 >
                   {/* Afficher tous les rôles organisés par catégorie */}
                   {Object.entries(ALL_ROLES).map(([category, roles]) => {
-                    const categoryLabels: Record<string, string> = {
-                      'Gestion': '🏢 Gestion',
-                      'Pédagogique & Facilitation': '👨‍🏫 Pédagogique & Facilitation',
-                      'Jeunesse & Académique': '👨‍🎓 Jeunesse & Académique',
-                      'Entrepreneuriat & Partenariats': '🤝 Entrepreneuriat & Partenariats',
-                      'Créatif & Médias': '🎨 Créatif & Médias',
-                      'Facilitateurs partenaires': '🤝 Facilitateurs partenaires'
-                    };
-                    
+                    const config = ROLE_CATEGORY_LABELS[category];
+                    const label = config ? `${config.icon} ${t(config.labelKey)}` : category;
                     return (
-                      <optgroup key={category} label={categoryLabels[category] || category}>
+                      <optgroup key={category} label={label}>
                         {roles.map(roleValue => (
                           isRoleAvailable(roleValue) && (
                             <option key={roleValue} value={roleValue}>
@@ -401,42 +414,38 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                 {ROLES_REQUIRING_APPROVAL.includes(role) && (
                   <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex gap-2">
                     <i className="fas fa-shield-alt mt-0.5"></i>
-                    <span>
-                      Ce rôle nécessite une validation par un Super Administrateur. Votre compte restera en attente
-                      jusqu’à l’approbation. Vous serez notifié(e) lorsqu’il sera activé.
-                    </span>
+                    <span>{t('signup_role_requires_validation_message')}</span>
                   </div>
                 )}
                 <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
                   <p className="text-sm font-semibold text-emerald-800 mb-2">
                     <i className="fas fa-check-circle mr-2"></i>
-                    Tous les rôles disponibles
+                    {t('signup_all_roles_card_title')}
                   </p>
                   <p className="text-xs text-emerald-700 mb-2">
-                    Vous pouvez créer un compte avec n'importe quel rôle selon vos besoins et votre niveau de responsabilité. Chaque rôle dispose de ses propres permissions et accès aux modules.
+                    {t('signup_all_roles_card_description')}
                   </p>
                   <div className="text-xs text-emerald-600 space-y-1">
-                    <p><strong>Rôles de gestion :</strong> administrator, manager, supervisor, intern</p>
-                    <p><strong>Rôles pédagogiques & facilitation :</strong> trainer, coach, facilitator, mentor</p>
-                    <p><strong>Jeunesse & académique :</strong> student, alumni</p>
-                    <p><strong>Entrepreneuriat & partenariats :</strong> entrepreneur, employer, implementer, funder</p>
-                    <p><strong>Créatif & médias :</strong> publisher, editor, producer, artist</p>
-                    <p><strong>Facilitateurs partenaires :</strong> partner_facilitator</p>
-                    <p><strong>Super administration :</strong> super_administrator</p>
+                    <p><strong>{t('signup_roles_management_label')}</strong> administrator, manager, supervisor, intern</p>
+                    <p><strong>{t('signup_roles_pedagogy_label')}</strong> trainer, coach, facilitator, mentor</p>
+                    <p><strong>{t('signup_roles_youth_label')}</strong> student, alumni</p>
+                    <p><strong>{t('signup_roles_entrepreneurship_label')}</strong> entrepreneur, employer, implementer, funder</p>
+                    <p><strong>{t('signup_roles_creative_label')}</strong> publisher, editor, producer, artist</p>
+                    <p><strong>{t('signup_roles_partner_label')}</strong> partner_facilitator</p>
+                    <p><strong>{t('signup_roles_super_admin_label')}</strong> super_administrator</p>
                   </div>
                   <p className="text-xs text-emerald-700 mt-2">
                     <i className="fas fa-info-circle mr-1"></i>
-                    <strong>Note :</strong> Les rôles de gestion avancés (administrator, manager, supervisor, trainer, coach,
-                    facilitator, mentor, partner_facilitator et super_administrator) nécessitent une validation d'un Super Administrateur.
+                    {t('signup_roles_note_text')}
                   </p>
                 </div>
                 {role && (
                   <p className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
                     <i className="fas fa-user-check mr-2"></i>
-                    <strong>{ROLES_REQUIRING_APPROVAL.includes(role) ? 'Validation requise' : 'Inscription autorisée'}</strong><br/>
+                    <strong>{ROLES_REQUIRING_APPROVAL.includes(role) ? t('signup_role_status_validation') : t('signup_role_status_allowed')}</strong><br/>
                     {ROLES_REQUIRING_APPROVAL.includes(role)
-                      ? `Votre demande pour le rôle ${t(role)} sera soumise à un Super Administrateur avant activation.`
-                      : `Vous pouvez créer un compte avec le rôle ${t(role)}. Vos accès seront configurés immédiatement en fonction de ses permissions.`}
+                      ? t('signup_role_status_validation_message').replace('{role}', t(role))
+                      : t('signup_role_status_allowed_message').replace('{role}', t(role))}
                   </p>
                 )}
               </div>
@@ -461,7 +470,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t('signup_hide_password') : t('signup_show_password')}
                   >
                     <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
@@ -489,7 +498,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     type="button"
                     onClick={() => setShowConfirmPassword((prev) => !prev)}
                     className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
-                    aria-label={showConfirmPassword ? 'Masquer la confirmation de mot de passe' : 'Afficher la confirmation de mot de passe'}
+                    aria-label={showConfirmPassword ? t('signup_hide_confirm_password') : t('signup_show_confirm_password')}
                   >
                     <i className={`fas ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
@@ -502,7 +511,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                   disabled={loading}
                   className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Inscription...' : t('signup_button')}
+                  {loading ? t('signup_loading') : t('signup_button')}
                 </button>
               </div>
 

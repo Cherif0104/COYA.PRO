@@ -3,12 +3,36 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
 import NexusFlowIcon from './icons/NexusFlowIcon';
 import AuthAIAssistant from './AuthAIAssistant';
+import { Translation } from '../types';
 // import SenegelUsersList from './SenegelUsersList'; // supprimé
 
 interface LoginProps {
   onSwitchToSignup: () => void;
   onLoginSuccess?: () => void;
 }
+
+const HERO_HIGHLIGHTS: Array<{ icon: string; titleKey: keyof Translation; descriptionKey: keyof Translation }> = [
+  {
+    icon: 'fas fa-building',
+    titleKey: 'signup_highlight_multi_org_title',
+    descriptionKey: 'signup_highlight_multi_org_description',
+  },
+  {
+    icon: 'fas fa-users',
+    titleKey: 'signup_highlight_unified_title',
+    descriptionKey: 'signup_highlight_unified_description',
+  },
+  {
+    icon: 'fas fa-shield-alt',
+    titleKey: 'signup_highlight_security_title',
+    descriptionKey: 'signup_highlight_security_description',
+  },
+  {
+    icon: 'fas fa-info-circle',
+    titleKey: 'login_highlight_roles_title',
+    descriptionKey: 'login_highlight_roles_description',
+  },
+];
 
 const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
   const [email, setEmail] = useState('');
@@ -51,38 +75,39 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
   }, []);
 
   const formatLoginError = (err: any): string => {
+    const defaultMessage = t('login_error_generic');
     if (!err) {
-      return 'Une erreur est survenue. Veuillez réessayer.';
+      return defaultMessage;
     }
 
     const rawMessage =
       typeof err === 'string'
         ? err
-        : err?.message || err?.error_description || 'Erreur de connexion.';
+        : err?.message || err?.error_description || defaultMessage;
 
-    const normalized = rawMessage.toLowerCase();
+    const normalized = (rawMessage || '').toLowerCase();
 
     if (
       normalized.includes('invalid login') ||
       normalized.includes('invalid credential') ||
       normalized.includes('invalid email or password')
     ) {
-      return 'Identifiants invalides ou compte introuvable. Vérifiez votre email/mot de passe ou créez un nouveau compte.';
+      return t('login_error_invalid_credentials');
     }
 
     if (normalized.includes('aucun utilisateur') || normalized.includes('user not found')) {
-      return 'Ce compte n’existe pas ou a été supprimé. Vérifiez l’adresse email ou créez un compte.';
+      return t('login_error_account_not_found');
     }
 
     if (normalized.includes('password')) {
-      return 'Mot de passe incorrect. Réessayez ou cliquez sur “Mot de passe oublié ?”.';
+      return t('login_error_wrong_password');
     }
 
     if (normalized.includes('email not confirmed')) {
-      return 'Votre email doit être confirmé avant la connexion. Vérifiez votre boîte mail.';
+      return t('login_error_email_not_confirmed');
     }
 
-    return rawMessage;
+    return rawMessage || defaultMessage;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -102,7 +127,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
         // Messages d'erreur plus clairs
         if (friendly.toLowerCase().includes('déjà utilisé') || friendly.toLowerCase().includes('already registered')) {
           // Si le backend renvoie ce message (rare en login), montrer l'alerte email
-          setEmailError('Cet email est déjà utilisé. Utilisez un autre email ou connectez-vous.');
+          setEmailError(t('login_email_in_use_error'));
         } else {
           setEmailError('');
           setError(friendly);
@@ -144,7 +169,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
       }
     } catch (error) {
       console.error('💥 Erreur lors de la connexion:', error);
-      setError('Erreur inattendue lors de la connexion');
+      setError(t('login_unexpected_error'));
     }
     
     setLoading(false);
@@ -164,9 +189,9 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
       const redirectTo = window.location.origin; // retour app
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail || email, { redirectTo });
       if (error) throw error;
-      setResetMsg('Un lien de réinitialisation a été envoyé à votre e-mail.');
+      setResetMsg(t('login_reset_success'));
     } catch (err: any) {
-      setResetMsg(err?.message || "Erreur lors de l'envoi du lien.");
+      setResetMsg(err?.message || t('login_reset_error'));
     } finally {
       setResetLoading(false);
     }
@@ -180,29 +205,16 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
           <div className="md:w-1/2 bg-gradient-to-br from-emerald-600 to-blue-600 text-white p-12 flex flex-col justify-center items-center text-center">
             <NexusFlowIcon className="w-28 h-28"/>
             <h1 className="text-3xl font-bold mt-4">COYA</h1>
-            <p className="mt-2 text-emerald-100 text-sm font-medium">Creating Opportunities for Youth in Africa</p>
-            <p className="mt-1 text-emerald-50 text-lg">Plateforme intelligente multi‑organisations</p>
+            <p className="mt-2 text-emerald-100 text-sm font-medium">{t('signup_hero_tagline')}</p>
+            <p className="mt-1 text-emerald-50 text-lg">{t('signup_hero_subtagline')}</p>
             <div className="mt-8 space-y-4 text-sm text-emerald-50">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-building text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Multi-Organisations</h3>
-                <p className="text-xs">Chaque organisation possède son espace dédié et sécurisé</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-users text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Écosystème Unifié</h3>
-                <p className="text-xs">Une plateforme, plusieurs organisations, des milliers d'utilisateurs</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-shield-alt text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Sécurité & Isolation</h3>
-                <p className="text-xs">Vos données restent isolées au sein de votre organisation</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <i className="fas fa-info-circle text-2xl mb-2"></i>
-                <h3 className="font-semibold mb-2">Rôles & Accès</h3>
-                <p className="text-xs">Des rôles avancés peuvent nécessiter une invitation</p>
-              </div>
+              {HERO_HIGHLIGHTS.map((highlight) => (
+                <div key={highlight.titleKey as string} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                  <i className={`${highlight.icon} text-2xl mb-2`}></i>
+                  <h3 className="font-semibold mb-2">{t(highlight.titleKey)}</h3>
+                  <p className="text-xs">{t(highlight.descriptionKey)}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -218,9 +230,9 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
 
               {/* Organisation (sélecteur) */}
               <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Organisation</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('signup_organization_label')}</label>
                 {orgsLoading ? (
-                  <div className="text-sm text-gray-500">Chargement des organisations…</div>
+                  <div className="text-sm text-gray-500">{t('login_organization_loading')}</div>
                 ) : (
                   <select
                     value={organizationName}
@@ -237,16 +249,16 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                   </select>
                 )}
                 <p className="mt-2 text-xs text-gray-500">
-                  Choisissez votre organisation. Si elle n'existe pas, elle sera créée automatiquement après connexion (si autorisations).
+                  {t('login_organization_hint')}
                 </p>
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-xs font-semibold text-blue-800 mb-1">
                     <i className="fas fa-info-circle mr-1"></i>
-                    Information
+                    {t('login_organization_info_title')}
                   </p>
                   <p className="text-xs text-blue-700">
-                    <strong>COYA</strong> : Marque plateforme. <strong>SENEGEL</strong> reste l'organisation de référence pour les tests publics.<br/>
-                    <strong>Organisations partenaires</strong> : Accès sur invitation, création par Super Admins.
+                    <strong>COYA</strong> : {t('login_organization_info_line1')}<br/>
+                    <strong>{t('login_partner_org_label')}</strong> : {t('login_organization_info_line2')}
                   </p>
                 </div>
               </div>
@@ -269,7 +281,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="votre@email.com"
+                  placeholder={t('signup_email_placeholder')}
                 />
               </div>
 
@@ -293,7 +305,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t('signup_hide_password') : t('signup_show_password')}
                   >
                     <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
@@ -313,7 +325,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                   onClick={() => openAssistant(t('auth_ai_prompt_password'))}
                   className="text-gray-500 hover:text-gray-700"
                 >
-                  Besoin d'aide ?
+                  {t('need_help')}
                 </button>
               </div>
 
@@ -323,7 +335,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                   disabled={loading}
                   className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Connexion...' : t('login')}
+                  {loading ? t('login_loading') : t('login')}
                 </button>
               </div>
 
@@ -369,23 +381,39 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <form onSubmit={handleSendReset}>
-              <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-900">Réinitialiser le mot de passe</h2></div>
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-bold text-gray-900">{t('login_reset_title')}</h2>
+              </div>
               <div className="p-6 space-y-3">
-                {resetMsg && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-3">{resetMsg}</div>}
-                <label className="block text-sm font-medium text-gray-700">E-mail</label>
+                {resetMsg && (
+                  <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-3">
+                    {resetMsg}
+                  </div>
+                )}
+                <label className="block text-sm font-medium text-gray-700">{t('email')}</label>
                 <input
                   type="email"
                   value={resetEmail || email}
-                  onChange={(e)=>setResetEmail(e.target.value)}
+                  onChange={(e) => setResetEmail(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-                  placeholder="votre@email.com"
+                  placeholder={t('signup_email_placeholder')}
                   required
                 />
               </div>
               <div className="p-4 bg-gray-50 border-t flex justify-end gap-2">
-                <button type="button" onClick={()=>setResetOpen(false)} className="px-4 py-2 bg-gray-200 rounded-lg font-semibold">Annuler</button>
-                <button type="submit" disabled={resetLoading} className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50">
-                  {resetLoading ? 'Envoi...' : 'Envoyer le lien'}
+                <button
+                  type="button"
+                  onClick={() => setResetOpen(false)}
+                  className="px-4 py-2 bg-gray-200 rounded-lg font-semibold"
+                >
+                  {t('login_reset_cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {resetLoading ? t('login_reset_sending') : t('login_reset_send')}
                 </button>
               </div>
             </form>
@@ -397,3 +425,5 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
 };
 
 export default Login;
+
+

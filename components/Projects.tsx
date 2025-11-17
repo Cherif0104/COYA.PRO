@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, User, TimeLog, MANAGEMENT_ROLES } from '../types';
+import { Project, User, TimeLog, MANAGEMENT_ROLES, Language, Translation, Role } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import TeamSelector from './common/TeamSelector';
@@ -14,6 +14,14 @@ const statusStyles = {
     'In Progress': 'bg-blue-200 text-blue-800',
     'Completed': 'bg-emerald-200 text-emerald-800',
 };
+
+const PROJECT_MANAGEMENT_ROLES: Role[] = [
+    'super_administrator',
+    'manager',
+    'supervisor',
+    'trainer', // mapped to "professeur" role in the requirements
+    'administrator', // keep admins aligned with legacy access
+];
 
 const ProjectFormModal: React.FC<{
     project: Omit<Project, 'id' | 'tasks' | 'risks'> | Project | null;
@@ -102,7 +110,8 @@ const ProjectDetailModal: React.FC<{
     onAddTimeLog: (log: Omit<TimeLog, 'id' | 'userId'>) => void;
     timeLogs: TimeLog[];
 }> = ({ project, onClose, onUpdateProject, onDeleteProject, onAddTimeLog, timeLogs }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
     const [currentProject, setCurrentProject] = useState(project);
     const [activeTab, setActiveTab] = useState<'tasks' | 'risks' | 'report'>('tasks');
@@ -138,7 +147,15 @@ const ProjectDetailModal: React.FC<{
 
     const totalTimeSpent = projectTimeLogs.reduce((total, log) => total + log.duration, 0);
 
-    const canManage = currentUser?.role === 'manager' || currentUser?.role === 'administrator' || currentUser?.role === 'super_administrator';
+    const canManageCurrentProject = useMemo(() => {
+        if (!currentUser) return false;
+        const isCreator =
+            currentProject?.createdById &&
+            currentUser.id &&
+            currentProject.createdById.toString() === currentUser.id.toString();
+        const hasRole = PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+        return Boolean(isCreator || hasRole);
+    }, [currentUser, currentProject]);
 
     const handleAddTask = () => {
         if (!newTaskText.trim()) return;
@@ -220,38 +237,68 @@ const ProjectDetailModal: React.FC<{
             const aiRisks = [
                 {
                     id: `ai-risk-${Date.now()}-1`,
-                    description: 'Retard dans la livraison des contenus créatifs due aux changements de dernière minute',
+                    description: localize(
+                        'Delays in creative asset delivery due to last-minute changes',
+                        'Retard dans la livraison des contenus créatifs dû aux changements de dernière minute'
+                    ),
                     likelihood: 'High' as const,
                     impact: 'Medium' as const,
-                    mitigationStrategy: 'Établir des deadlines fermes et un processus d\'approbation accéléré pour les révisions mineures'
+                    mitigationStrategy: localize(
+                        'Set firm deadlines and use an accelerated approval workflow for minor revisions',
+                        'Établir des deadlines fermes et un processus d\'approbation accéléré pour les révisions mineures'
+                    )
                 },
                 {
                     id: `ai-risk-${Date.now()}-2`,
-                    description: 'Dépassement du budget publicitaire dû à l\'augmentation des coûts des plateformes',
+                    description: localize(
+                        'Advertising budget overrun caused by rising media costs',
+                        'Dépassement du budget publicitaire dû à l\'augmentation des coûts des plateformes'
+                    ),
                     likelihood: 'Medium' as const,
                     impact: 'High' as const,
-                    mitigationStrategy: 'Surveiller quotidiennement les dépenses et ajuster les enchères en temps réel'
+                    mitigationStrategy: localize(
+                        'Monitor spend daily and adjust bids in real time',
+                        'Surveiller quotidiennement les dépenses et ajuster les enchères en temps réel'
+                    )
                 },
                 {
                     id: `ai-risk-${Date.now()}-3`,
-                    description: 'Faible engagement sur les réseaux sociaux due à la saturation du marché',
+                    description: localize(
+                        'Low engagement on social media because of market saturation',
+                        'Faible engagement sur les réseaux sociaux dû à la saturation du marché'
+                    ),
                     likelihood: 'Medium' as const,
                     impact: 'Medium' as const,
-                    mitigationStrategy: 'Diversifier les canaux de communication et tester de nouveaux formats créatifs'
+                    mitigationStrategy: localize(
+                        'Diversify communication channels and test new creative formats',
+                        'Diversifier les canaux de communication et tester de nouveaux formats créatifs'
+                    )
                 },
                 {
                     id: `ai-risk-${Date.now()}-4`,
-                    description: 'Problèmes techniques lors du webinar de lancement',
+                    description: localize(
+                        'Technical issues during the launch webinar',
+                        'Problèmes techniques lors du webinar de lancement'
+                    ),
                     likelihood: 'Low' as const,
                     impact: 'High' as const,
-                    mitigationStrategy: 'Effectuer des tests techniques complets et avoir un plan de secours avec une plateforme alternative'
+                    mitigationStrategy: localize(
+                        'Run full technical rehearsals and prepare a backup platform',
+                        'Effectuer des tests techniques complets et prévoir une plateforme de secours'
+                    )
                 },
                 {
                     id: `ai-risk-${Date.now()}-5`,
-                    description: 'Conflit de calendrier avec les membres de l\'équipe sur des tâches critiques',
+                    description: localize(
+                        'Scheduling conflicts on critical tasks',
+                        'Conflit de calendrier avec les membres de l\'équipe sur des tâches critiques'
+                    ),
                     likelihood: 'Medium' as const,
                     impact: 'Medium' as const,
-                    mitigationStrategy: 'Établir des priorités claires et avoir des ressources de secours identifiées'
+                    mitigationStrategy: localize(
+                        'Set clear priorities and identify backup resources',
+                        'Établir des priorités claires et avoir des ressources de secours identifiées'
+                    )
                 }
             ];
 
@@ -311,7 +358,8 @@ const ProjectDetailModal: React.FC<{
             };
 
             // Stocker le résumé dans l'état pour l'afficher dans l'interface
-            const summaryText = `📊 RÉSUMÉ DES TÂCHES - ${summary.projectTitle}
+            const summaryText = language === Language.FR
+                ? `📊 RÉSUMÉ DES TÂCHES - ${summary.projectTitle}
 
 ✅ Tâches terminées: ${summary.completedTasks}/${summary.totalTasks} (${summary.progressPercentage}%)
 🔄 Tâches en cours: ${summary.inProgressTasks}
@@ -321,7 +369,18 @@ const ProjectDetailModal: React.FC<{
 ⏱️ Heures estimées: ${summary.totalEstimatedHours}h
 ⏱️ Heures enregistrées: ${summary.totalLoggedHours}h
 
-📅 Résumé généré le: ${summary.generatedAt}`;
+📅 Résumé généré le: ${summary.generatedAt}`
+                : `📊 TASK SUMMARY - ${summary.projectTitle}
+
+✅ Completed: ${summary.completedTasks}/${summary.totalTasks} (${summary.progressPercentage}%)
+🔄 In progress: ${summary.inProgressTasks}
+📋 To do: ${summary.todoTasks}
+⚠️ Overdue: ${summary.overdueTasks}
+
+⏱️ Estimated hours: ${summary.totalEstimatedHours}h
+⏱️ Logged hours: ${summary.totalLoggedHours}h
+
+📅 Summary generated on: ${summary.generatedAt}`;
 
             setTaskSummary(summaryText);
             setIsLoading(false);
@@ -354,7 +413,8 @@ const ProjectDetailModal: React.FC<{
             };
 
             // Stocker le rapport dans l'état pour l'afficher dans l'interface
-            const reportText = `📋 RAPPORT D'ÉTAT - ${report.projectTitle}
+            const reportText = language === Language.FR
+                ? `📋 RAPPORT D'ÉTAT - ${report.projectTitle}
 
 📊 ÉTAT DU PROJET
 • Statut: ${report.status}
@@ -370,7 +430,24 @@ const ProjectDetailModal: React.FC<{
 • Total des risques: ${report.totalRisks}
 • Risques élevés: ${report.highRiskItems}
 
-📅 Rapport généré le: ${report.generatedAt}`;
+📅 Rapport généré le: ${report.generatedAt}`
+                : `📋 STATUS REPORT - ${report.projectTitle}
+
+📊 PROJECT OVERVIEW
+• Status: ${report.status}
+• Due date: ${report.dueDate ? new Date(report.dueDate).toLocaleDateString('en-US') : 'Not defined'}
+• Team size: ${report.teamSize} members
+
+📈 PROGRESS
+• Progress: ${report.progressPercentage}%
+• Completed tasks: ${report.completedTasks}/${report.totalTasks}
+• High-priority tasks: ${report.highPriorityTasks}
+
+⚠️ RISKS
+• Total risks: ${report.totalRisks}
+• High risks: ${report.highRiskItems}
+
+📅 Report generated on: ${report.generatedAt}`;
 
             setGeneratedReport(reportText);
             setIsLoading(false);
@@ -590,7 +667,9 @@ const ProjectDetailModal: React.FC<{
                             
                             <div>
                                 <h3 className="font-semibold text-gray-700 mb-2">{t('due_date')}</h3>
-                                <p className="text-gray-600">{currentProject.dueDate ? new Date(currentProject.dueDate).toLocaleDateString() : 'N/A'}</p>
+                                <p className="text-gray-600">
+                                    {currentProject.dueDate ? new Date(currentProject.dueDate).toLocaleDateString(language === Language.FR ? 'fr-FR' : 'en-US') : 'N/A'}
+                                </p>
                             </div>
                             
                             <div>
@@ -603,7 +682,7 @@ const ProjectDetailModal: React.FC<{
                                             </div>
                                             <div>
                                                 <p className="text-sm font-medium">{member.fullName || member.email}</p>
-                                                <p className="text-xs text-gray-500">{member.role}</p>
+                                                <p className="text-xs text-gray-500">{t(member.role as keyof Translation)}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -611,12 +690,16 @@ const ProjectDetailModal: React.FC<{
                             </div>
                             
                             <div>
-                                <h3 className="font-semibold text-gray-700 mb-2">Time Tracking</h3>
-                                <p className="text-gray-600">{totalTimeSpent}h enregistré</p>
+                                <h3 className="font-semibold text-gray-700 mb-2">{localize('Time tracking', 'Time Tracking')}</h3>
+                                <p className="text-gray-600">
+                                    {totalTimeSpent}h {localize('logged', 'enregistré')}
+                                </p>
                             </div>
                             
                             <div>
-                                <h3 className="font-semibold text-gray-700 mb-2">Charge de travail de l'équipe</h3>
+                                <h3 className="font-semibold text-gray-700 mb-2">
+                                    {localize('Team workload', "Charge de travail de l'équipe")}
+                                </h3>
                                 <div className="space-y-2">
                                     {currentProject.team.length > 0 ? (
                                         currentProject.team.map(member => (
@@ -635,31 +718,33 @@ const ProjectDetailModal: React.FC<{
                                             </div>
                                         ))
                                     ) : (
-                                        <p className="text-sm text-gray-400">Aucune charge de travail assignée</p>
+                                        <p className="text-sm text-gray-400">
+                                            {localize('No workload assigned', 'Aucune charge de travail assignée')}
+                                        </p>
                                     )}
                                 </div>
                             </div>
                         </div>
                         
-                        {canManage && (
+                        {canManageCurrentProject && (
                             <div className="mt-6 space-y-2">
                                 {activeTab === 'tasks' && (
                                     <>
                                 <button 
                                     onClick={handleGenerateTasksWithAI}
                                     disabled={isLoading}
-                                            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-green-300 flex items-center justify-center text-sm"
+                                        className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-green-300 flex items-center justify-center text-sm"
                                 >
                                     <i className="fas fa-magic mr-2"></i>
-                                    {isLoading ? 'Génération...' : 'Générer des tâches avec l\'IA'}
+                                    {isLoading ? localize('Generating...', 'Génération...') : localize('Generate tasks with AI', 'Générer des tâches avec l\'IA')}
                                 </button>
                                 <button onClick={() => setLogTimeModalOpen(true)} className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg font-semibold hover:bg-gray-300 flex items-center justify-center text-sm">
                                     <i className="fas fa-clock mr-2"></i>
-                                            Heure du journal
+                                        {localize('Log time', 'Heure du journal')}
                                 </button>
                                 <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
                                     <i className="fas fa-trash mr-2"></i>
-                                            Supprimer le projet
+                                        {localize('Delete project', 'Supprimer le projet')}
                                 </button>
                                     </>
                                 )}
@@ -672,7 +757,7 @@ const ProjectDetailModal: React.FC<{
                                             className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-green-300 flex items-center justify-center text-sm"
                                         >
                                             <i className="fas fa-bolt mr-2"></i>
-                                            {isLoading ? 'Analyse en cours...' : 'Identifier les risques avec l\'IA'}
+                                            {isLoading ? localize('Analyzing...', 'Analyse en cours...') : localize('Identify risks with AI', 'Identifier les risques avec l\'IA')}
                                         </button>
                                         <button onClick={() => setLogTimeModalOpen(true)} className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg font-semibold hover:bg-gray-300 flex items-center justify-center text-sm">
                                             <i className="fas fa-clock mr-2"></i>
@@ -693,7 +778,7 @@ const ProjectDetailModal: React.FC<{
                                             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-300 flex items-center justify-center text-sm"
                                         >
                                             <i className="fas fa-file-alt mr-2"></i>
-                                            {isLoading ? 'Génération...' : 'Générer un rapport d\'état'}
+                                            {isLoading ? localize('Generating...', 'Génération...') : localize('Generate status report', 'Générer un rapport d\'état')}
                                         </button>
                                         <button 
                                             onClick={handleSummarizeTasks}
@@ -701,15 +786,15 @@ const ProjectDetailModal: React.FC<{
                                             className="w-full bg-gray-800 text-white py-2 px-4 rounded-lg font-semibold hover:bg-gray-900 disabled:bg-gray-400 flex items-center justify-center text-sm"
                                         >
                                             <i className="fas fa-list mr-2"></i>
-                                            {isLoading ? 'Analyse...' : 'Résumer les tâches'}
+                                            {isLoading ? localize('Analyzing...', 'Analyse...') : localize('Summarize tasks', 'Résumer les tâches')}
                                         </button>
                                         <button onClick={() => setLogTimeModalOpen(true)} className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg font-semibold hover:bg-gray-300 flex items-center justify-center text-sm">
                                             <i className="fas fa-clock mr-2"></i>
-                                            Heure du journal
+                                            {localize('Log time', 'Heure du journal')}
                                         </button>
                                         <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
                                             <i className="fas fa-trash mr-2"></i>
-                                            Supprimer le projet
+                                            {localize('Delete project', 'Supprimer le projet')}
                                         </button>
                                     </>
                                 )}
@@ -736,7 +821,7 @@ const ProjectDetailModal: React.FC<{
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                         }`}
                                     >
-                                        Tâches ({(currentProject.tasks || []).length})
+                                        {localize('Tasks', 'Tâches')} ({(currentProject.tasks || []).length})
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('risks')}
@@ -746,7 +831,7 @@ const ProjectDetailModal: React.FC<{
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                         }`}
                                     >
-                                        Gestion des risques
+                                        {localize('Risk management', 'Gestion des risques')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('report')}
@@ -756,7 +841,7 @@ const ProjectDetailModal: React.FC<{
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                         }`}
                                     >
-                                        Générer un rapport d'état
+                                        {localize('Generate status report', 'Générer un rapport d\'état')}
                                     </button>
                                 </nav>
                             </div>
@@ -774,25 +859,25 @@ const ProjectDetailModal: React.FC<{
                                                             <input type="checkbox" className="rounded" />
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Nom de la tâche
+                                                            {localize('Task name', 'Nom de la tâche')}
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Statut
+                                                            {localize('Status', 'Statut')}
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Date d'échéance
+                                                            {localize('Due date', 'Date d\'échéance')}
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                             Est. (h)
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Enregistré (h)
+                                                            {localize('Logged (h)', 'Enregistré (h)')}
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Priorité
+                                                            {localize('Priority', 'Priorité')}
                                                         </th>
                                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Assigné à
+                                                            {localize('Assigned to', 'Assigné à')}
                                                         </th>
                                                     </tr>
                                                 </thead>
@@ -819,7 +904,7 @@ const ProjectDetailModal: React.FC<{
                                                         value={task.text}
                                                         onChange={(e) => handleUpdateTask(task.id, { text: e.target.value })}
                                                         className="w-full min-w-64 text-sm border border-gray-300 rounded px-3 py-2"
-                                                        placeholder="Nom de la tâche"
+                                                        placeholder={localize('Task name', 'Nom de la tâche')}
                                                     />
                                                 </div>
                                                             </td>
@@ -830,14 +915,14 @@ const ProjectDetailModal: React.FC<{
                                                                             onChange={(e) => handleUpdateTask(task.id, { status: e.target.value as 'To Do' | 'In Progress' | 'Completed' })}
                                                                             className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                         >
-                                                                            <option value="To Do">À faire</option>
-                                                                            <option value="In Progress">En cours</option>
-                                                                            <option value="Completed">Terminé</option>
+                                                                            <option value="To Do">{localize('To do', 'À faire')}</option>
+                                                                            <option value="In Progress">{localize('In progress', 'En cours')}</option>
+                                                                            <option value="Completed">{localize('Completed', 'Terminé')}</option>
                                                                         </select>
                                                                         {isOverdue && (
                                                                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                                                                 <i className="fas fa-exclamation-circle mr-1"></i>
-                                                                                En retard
+                                                                                {localize('Overdue', 'En retard')}
                                                                 </span>
                                                                         )}
                                                                     </div>
@@ -875,9 +960,9 @@ const ProjectDetailModal: React.FC<{
                                                                         onChange={(e) => handleUpdateTask(task.id, { priority: e.target.value as 'Low' | 'Medium' | 'High' })}
                                                                         className="text-xs border border-gray-300 rounded px-2 py-1"
                                                     >
-                                                        <option value="Low">Faible</option>
-                                                        <option value="Medium">Moyen</option>
-                                                        <option value="High">Haut</option>
+                                                        <option value="Low">{localize('Low', 'Faible')}</option>
+                                                        <option value="Medium">{localize('Medium', 'Moyen')}</option>
+                                                        <option value="High">{localize('High', 'Élevé')}</option>
                                                                     </select>
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -891,7 +976,7 @@ const ProjectDetailModal: React.FC<{
                                                                             }}
                                                                             className="text-xs border border-gray-300 rounded px-2 py-1 min-w-24"
                                                                         >
-                                                                            <option value="">Non attribué</option>
+                                                                            <option value="">{localize('Unassigned', 'Non attribué')}</option>
                                                                             {currentProject.team.map(member => (
                                                                                 <option key={member.id} value={member.id}>
                                                                                     {member.fullName || member.email}
@@ -920,7 +1005,7 @@ const ProjectDetailModal: React.FC<{
                                                                         setPendingTasks(updatedTasks);
                                                                     }}
                                                                     className="w-full min-w-64 text-sm border border-gray-300 rounded px-3 py-2 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                                    placeholder="Nom de la tâche"
+                                                                    placeholder={localize('Task name', 'Nom de la tâche')}
                                                                 />
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap">
@@ -934,9 +1019,9 @@ const ProjectDetailModal: React.FC<{
                                                                     }}
                                                                     className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                 >
-                                                                    <option value="To Do">À faire</option>
-                                                                    <option value="In Progress">En cours</option>
-                                                                    <option value="Completed">Terminé</option>
+                                                                    <option value="To Do">{localize('To do', 'À faire')}</option>
+                                                                    <option value="In Progress">{localize('In progress', 'En cours')}</option>
+                                                                    <option value="Completed">{localize('Completed', 'Terminé')}</option>
                                                                 </select>
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap">
@@ -951,7 +1036,7 @@ const ProjectDetailModal: React.FC<{
                                                                     }}
                                                                     className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                 />
-                                                                {isOverdue && <span className="ml-2 text-xs text-red-600">En retard</span>}
+                                                                {isOverdue && <span className="ml-2 text-xs text-red-600">{localize('Overdue', 'En retard')}</span>}
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap">
                                                                 <input
@@ -992,9 +1077,9 @@ const ProjectDetailModal: React.FC<{
                                                                     }}
                                                                     className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                 >
-                                                                    <option value="Low">Faible</option>
-                                                                    <option value="Medium">Moyen</option>
-                                                                    <option value="High">Haut</option>
+                                                                    <option value="Low">{localize('Low', 'Faible')}</option>
+                                                                    <option value="Medium">{localize('Medium', 'Moyen')}</option>
+                                                                    <option value="High">{localize('High', 'Élevé')}</option>
                                                                 </select>
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1011,7 +1096,7 @@ const ProjectDetailModal: React.FC<{
                                                                         }}
                                                                         className="text-xs border border-gray-300 rounded px-2 py-1 min-w-24"
                                                 >
-                                                    <option value="">Non attribué</option>
+                                                    <option value="">{localize('Unassigned', 'Non attribué')}</option>
                                                     {currentProject.team.map(member => (
                                                         <option key={member.id} value={member.id}>
                                                             {member.fullName || member.email}
@@ -1033,22 +1118,25 @@ const ProjectDetailModal: React.FC<{
                                                         <div className="flex items-center">
                                                             <i className="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
                                                             <span className="text-sm text-yellow-800">
-                                                                {pendingTasks.length} tâche(s) générée(s) par l'IA en attente de sauvegarde
+                                                                {localize(
+                                                                    `${pendingTasks.length} AI-generated task(s) pending save`,
+                                                                    `${pendingTasks.length} tâche(s) générée(s) par l'IA en attente de sauvegarde`
+                                                                )}
                                                             </span>
                                                         </div>
                                                         <div className="flex space-x-2">
-                                            <button
+                                                            <button
                                                                 onClick={handleCancelPendingTasks}
                                                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
                                                             >
-                                                                Annuler
+                                                                {localize('Cancel', 'Annuler')}
                                                             </button>
                                                             <button
                                                                 onClick={handleSavePendingTasks}
                                                                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700"
                                                             >
-                                                                Sauvegarder
-                                            </button>
+                                                                {localize('Save', 'Sauvegarder')}
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1145,7 +1233,7 @@ const ProjectDetailModal: React.FC<{
                                                                         </div>
                                                             </td>
                                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                                {canManage && (
+                                                                {canManageCurrentProject && (
                                                                     <button
                                                                             onClick={() => handleDeleteRisk(risk.id)}
                                                                         className="text-red-600 hover:text-red-800"
@@ -1241,7 +1329,7 @@ const ProjectDetailModal: React.FC<{
                                                                         setPendingRisks(updatedRisks);
                                                                     }}
                                                                         className="text-red-600 hover:text-red-800"
-                                                                    title="Supprimer ce risque temporaire"
+                                                                    title={localize('Remove this temporary risk', 'Supprimer ce risque temporaire')}
                                                                     >
                                                                     <i className="fas fa-times"></i>
                                                                     </button>
@@ -1254,8 +1342,10 @@ const ProjectDetailModal: React.FC<{
                                                         <tr>
                                                             <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                                                                 <i className="fas fa-exclamation-triangle text-4xl text-gray-300 mb-4"></i>
-                                                                <p>Aucun risque identifié pour ce projet</p>
-                                                                <p className="text-sm mt-2">Cliquez sur "Identifier les risques avec l'IA" pour analyser le projet</p>
+                                                                <p>{localize('No risks identified for this project', 'Aucun risque identifié pour ce projet')}</p>
+                                                            <p className="text-sm mt-2">
+                                                                {localize('Click "Identify risks with AI" to analyze the project', 'Cliquez sur "Identifier les risques avec l\'IA" pour analyser le projet')}
+                                                            </p>
                                                             </td>
                                                         </tr>
                                                     )}
@@ -1269,7 +1359,10 @@ const ProjectDetailModal: React.FC<{
                                                         <div className="flex items-center">
                                                             <i className="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
                                                             <span className="text-sm text-yellow-800">
-                                                                {pendingRisks.length} risque(s) généré(s) par l'IA en attente de sauvegarde
+                                                                {localize(
+                                                                    `${pendingRisks.length} AI-generated risk(s) pending save`,
+                                                                    `${pendingRisks.length} risque(s) généré(s) par l'IA en attente de sauvegarde`
+                                                                )}
                                                             </span>
                                                         </div>
                                                         <div className="flex space-x-2">
@@ -1277,13 +1370,13 @@ const ProjectDetailModal: React.FC<{
                                                                 onClick={handleCancelPendingRisks}
                                                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
                                                             >
-                                                                Annuler
+                                                                {localize('Cancel', 'Annuler')}
                                                             </button>
                                                             <button
                                                                 onClick={handleSavePendingRisks}
                                                                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700"
                                                             >
-                                                                Sauvegarder
+                                                                {localize('Save', 'Sauvegarder')}
                                                             </button>
                                         </div>
                                     </div>
@@ -1299,7 +1392,9 @@ const ProjectDetailModal: React.FC<{
                                     {!generatedReport && !taskSummary && savedReports.length === 0 && savedTaskSummaries.length === 0 && (
                                 <div className="text-center py-8 text-gray-500">
                                             <i className="fas fa-file-alt text-6xl text-gray-300 mb-4"></i>
-                                            <p className="text-lg">Générer un rapport d'état ou un résumé des tâches.</p>
+                                            <p className="text-lg">
+                                                {localize('Generate a status report or a task summary.', 'Générer un rapport d\'état ou un résumé des tâches.')}
+                                            </p>
                                 </div>
                             )}
                                     
@@ -1309,27 +1404,27 @@ const ProjectDetailModal: React.FC<{
                                             <div className="flex items-center justify-between mb-4">
                                                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                                                     <i className="fas fa-file-alt text-blue-600 mr-2"></i>
-                                                    Rapport d'état généré
+                                                    {localize('Status report generated', 'Rapport d\'état généré')}
                                                 </h3>
                                                 <div className="flex space-x-2">
                                                     <button
                                                         onClick={() => handleSaveReport()}
                                                         className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                                                        title="Sauvegarder le rapport"
+                                                        title={localize('Save report', 'Sauvegarder le rapport')}
                                                     >
-                                                        <i className="fas fa-save mr-1"></i>Sauvegarder
+                                                        <i className="fas fa-save mr-1"></i>{localize('Save', 'Sauvegarder')}
                                                     </button>
                                                     <button
                                                         onClick={() => handleExportToPDF(generatedReport, 'rapport_etat')}
                                                         className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                                                        title="Exporter en PDF"
+                                                        title={localize('Export as PDF', 'Exporter en PDF')}
                                                     >
                                                         <i className="fas fa-file-pdf mr-1"></i>PDF
                                                     </button>
                                                     <button
                                                         onClick={() => setGeneratedReport('')}
                                                         className="text-gray-400 hover:text-gray-600"
-                                                        title="Effacer le rapport"
+                                                        title={localize('Clear report', 'Effacer le rapport')}
                                                     >
                                                         <i className="fas fa-times"></i>
                                                     </button>
@@ -1349,27 +1444,27 @@ const ProjectDetailModal: React.FC<{
                                             <div className="flex items-center justify-between mb-4">
                                                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                                                     <i className="fas fa-list text-green-600 mr-2"></i>
-                                                    Résumé des tâches généré
+                                                    {localize('Task summary generated', 'Résumé des tâches généré')}
                                                 </h3>
                                                 <div className="flex space-x-2">
                                                     <button
                                                         onClick={() => handleSaveTaskSummary()}
                                                         className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                                                        title="Sauvegarder le résumé"
+                                                        title={localize('Save summary', 'Sauvegarder le résumé')}
                                                     >
-                                                        <i className="fas fa-save mr-1"></i>Sauvegarder
+                                                        <i className="fas fa-save mr-1"></i>{localize('Save', 'Sauvegarder')}
                                                     </button>
                                                     <button
                                                         onClick={() => handleExportToPDF(taskSummary, 'resume_taches')}
                                                         className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                                                        title="Exporter en PDF"
+                                                        title={localize('Export as PDF', 'Exporter en PDF')}
                                                     >
                                                         <i className="fas fa-file-pdf mr-1"></i>PDF
                                                     </button>
                                                     <button
                                                         onClick={() => setTaskSummary('')}
                                                         className="text-gray-400 hover:text-gray-600"
-                                                        title="Effacer le résumé"
+                                                        title={localize('Clear summary', 'Effacer le résumé')}
                                                     >
                                                         <i className="fas fa-times"></i>
                                                     </button>
@@ -1388,7 +1483,7 @@ const ProjectDetailModal: React.FC<{
                                         <div className="space-y-3">
                                             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                                                 <i className="fas fa-archive text-blue-600 mr-2"></i>
-                                                Rapports sauvegardés ({savedReports.length})
+                                                {localize('Saved reports', 'Rapports sauvegardés')} ({savedReports.length})
                                             </h3>
                                             {savedReports.map(report => (
                                                 <div key={report.id} className="bg-white border border-gray-200 rounded-lg p-4">
@@ -1398,20 +1493,22 @@ const ProjectDetailModal: React.FC<{
                                                             <button
                                                                 onClick={() => handleExportToPDF(report.content, report.title)}
                                                                 className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                                                                title="Exporter en PDF"
+                                                                title={localize('Export as PDF', 'Exporter en PDF')}
                                                             >
                                                                 <i className="fas fa-file-pdf mr-1"></i>PDF
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteReport(report.id)}
                                                                 className="text-red-600 hover:text-red-800"
-                                                                title="Supprimer le rapport"
+                                                                title={localize('Delete report', 'Supprimer le rapport')}
                                                             >
                                                                 <i className="fas fa-trash"></i>
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <p className="text-xs text-gray-500 mb-2">Créé le: {report.createdAt}</p>
+                                                    <p className="text-xs text-gray-500 mb-2">
+                                                        {localize('Created on', 'Créé le')}: {report.createdAt}
+                                                    </p>
                                                     <div className="bg-gray-50 p-3 rounded text-sm">
                                                         <pre className="whitespace-pre-wrap text-gray-700 font-mono text-xs">
                                                             {report.content.substring(0, 200)}...
@@ -1427,7 +1524,7 @@ const ProjectDetailModal: React.FC<{
                                         <div className="space-y-3">
                                             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                                                 <i className="fas fa-archive text-green-600 mr-2"></i>
-                                                Résumés sauvegardés ({savedTaskSummaries.length})
+                                                {localize('Saved summaries', 'Résumés sauvegardés')} ({savedTaskSummaries.length})
                                             </h3>
                                             {savedTaskSummaries.map(summary => (
                                                 <div key={summary.id} className="bg-white border border-gray-200 rounded-lg p-4">
@@ -1437,20 +1534,22 @@ const ProjectDetailModal: React.FC<{
                                                             <button
                                                                 onClick={() => handleExportToPDF(summary.content, summary.title)}
                                                                 className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                                                                title="Exporter en PDF"
+                                                                title={localize('Export as PDF', 'Exporter en PDF')}
                                                             >
                                                                 <i className="fas fa-file-pdf mr-1"></i>PDF
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteTaskSummary(summary.id)}
                                                                 className="text-red-600 hover:text-red-800"
-                                                                title="Supprimer le résumé"
+                                                                title={localize('Delete summary', 'Supprimer le résumé')}
                                                             >
                                                                 <i className="fas fa-trash"></i>
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <p className="text-xs text-gray-500 mb-2">Créé le: {summary.createdAt}</p>
+                                                    <p className="text-xs text-gray-500 mb-2">
+                                                        {localize('Created on', 'Créé le')}: {summary.createdAt}
+                                                    </p>
                                                     <div className="bg-gray-50 p-3 rounded text-sm">
                                                         <pre className="whitespace-pre-wrap text-gray-700 font-mono text-xs">
                                                             {summary.content.substring(0, 200)}...
@@ -1504,7 +1603,8 @@ interface ProjectsProps {
 }
 
 const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdateProject, onAddProject, onDeleteProject, onAddTimeLog, isLoading = false, loadingOperation = null, isDataLoaded = true, autoOpenProjectId = null, onNotificationHandled }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -1544,13 +1644,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
 
     const validateProject = (projectData: Project | Omit<Project, 'id' | 'tasks' | 'risks'>): string | null => {
         if (!projectData.title?.trim()) {
-            return 'Le titre du projet est requis';
+            return t('project_title_required');
         }
         if (!projectData.description?.trim()) {
-            return 'La description du projet est requise';
+            return t('project_description_required');
         }
         if (projectData.dueDate && new Date(projectData.dueDate) < new Date()) {
-            return 'La date d\'échéance ne peut pas être dans le passé';
+            return t('project_due_date_invalid');
         }
         return null;
     };
@@ -1570,7 +1670,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
             const projectId = editingProject?.id || (projectData as Project).id;
             if (!projectId) {
                 console.error('❌ Erreur: ID du projet manquant pour la mise à jour');
-                alert('Erreur: Impossible de mettre à jour le projet. ID manquant.');
+                alert(t('project_missing_id_error'));
                 return;
             }
             
@@ -1588,7 +1688,12 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         } else {
             // Mode création
             console.log('➕ Création nouveau projet');
-            await onAddProject(projectData as Omit<Project, 'id' | 'tasks' | 'risks'>);
+            const projectToCreate = {
+                ...(projectData as Omit<Project, 'id' | 'tasks' | 'risks'>),
+                createdById: currentUser?.id ? currentUser.id.toString() : undefined,
+                createdByName: currentUser?.fullName || currentUser?.email,
+            };
+            await onAddProject(projectToCreate);
         }
         
         setIsProjectCreatePageOpen(false);
@@ -1597,14 +1702,31 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
 
     const handleDeleteProject = () => {
         if (projectToDelete) {
+            if (!canManageProject(projectToDelete)) {
+                alert(t('project_permission_error'));
+                setProjectToDelete(null);
+                return;
+            }
             onDeleteProject(projectToDelete.id);
             setProjectToDelete(null);
         }
     };
 
     const handleOpenForm = (project: Project | null = null) => {
+        if (project && !canManageProject(project)) {
+            alert(t('project_permission_error'));
+            return;
+        }
         setEditingProject(project);
         setIsProjectCreatePageOpen(true);
+    };
+
+    const handleRequestDeleteProject = (project: Project) => {
+        if (!canManageProject(project)) {
+            alert(t('project_permission_error'));
+            return;
+        }
+        setProjectToDelete(project);
     };
 
     const filteredProjects = useMemo(() => {
@@ -1649,10 +1771,26 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         return filtered;
     }, [projects, searchQuery, statusFilter, sortBy, sortOrder]);
 
-    // Tous les utilisateurs peuvent créer des projets (isolation gérée par RLS)
-    const canManage = useMemo(() => {
-        return true;  // Isolation des données gérée par Row-Level Security
-    }, []);
+    // Rôles autorisés à créer un projet
+    const canCreateProject = useMemo(() => {
+        if (!currentUser) return false;
+        return PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+    }, [currentUser]);
+
+    const canManageProject = useCallback(
+        (project: Project | null) => {
+            if (!currentUser) return false;
+            if (project?.createdById && currentUser.id) {
+                const isCreator =
+                    project.createdById.toString() === currentUser.id.toString();
+                if (isCreator) {
+                    return true;
+                }
+            }
+            return PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+        },
+        [currentUser]
+    );
 
     // Vérifier si l'utilisateur appartient à l'équipe de gestion
     const isSenegalTeam = useMemo(() => {
@@ -1720,7 +1858,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             </span>
                         </div>
                     )}
-                {canManage && (
+                {canCreateProject && (
                     <button
                         onClick={() => handleOpenForm()}
                         disabled={isLoading}
@@ -1769,7 +1907,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-purple-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Tâches totales</p>
+                                <p className="text-sm font-medium text-gray-600 mb-1">{localize('Total tasks', 'Tâches totales')}</p>
                                     <p className="text-3xl font-bold text-gray-900">{totalTasks}</p>
                                 </div>
                                 <div className="bg-purple-100 rounded-full p-4">
@@ -1782,7 +1920,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-orange-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Membres d'équipe</p>
+                                <p className="text-sm font-medium text-gray-600 mb-1">{localize('Team members', 'Membres d\'équipe')}</p>
                                     <p className="text-3xl font-bold text-gray-900">{totalTeamMembers}</p>
                                 </div>
                                 <div className="bg-orange-100 rounded-full p-4">
@@ -1808,7 +1946,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Rechercher un projet par nom, description ou membre d'équipe..."
+                                    placeholder={localize("Search a project by name, description or team member...", "Rechercher un projet par nom, description ou membre d'équipe...")}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
@@ -1833,11 +1971,11 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                             >
-                                <option value="all">Tous les statuts</option>
-                                <option value="Not Started">Non démarré</option>
-                                <option value="In Progress">En cours</option>
-                                <option value="Completed">Terminé</option>
-                                <option value="On Hold">En attente</option>
+                                <option value="all">{localize('All statuses', 'Tous les statuts')}</option>
+                                <option value="Not Started">{localize('Not started', 'Non démarré')}</option>
+                                <option value="In Progress">{localize('In progress', 'En cours')}</option>
+                                <option value="Completed">{localize('Completed', 'Terminé')}</option>
+                                <option value="On Hold">{localize('On hold', 'En attente')}</option>
                             </select>
 
                             {/* Tri */}
@@ -1948,7 +2086,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 
                                             <div className="p-6">
                                                 <p className="text-gray-600 text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
-                                                    {project.description || 'Aucune description'}
+                                                    {project.description || localize('No description', 'Aucune description')}
                                                 </p>
                                                 
                                                 {/* Barre de progression */}
@@ -1994,21 +2132,21 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                         <i className="fas fa-eye mr-2"></i>
                                         {t('view_details')}
                                     </button>
-                                    {canManage && (
+                                    {canManageProject(project) && (
                                                         <div className="flex space-x-3">
                                             <button
                                                 onClick={() => handleOpenForm(project)}
                                                 disabled={isLoading}
                                                                 className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-blue-50"
-                                                                title="Modifier"
+                                                                title={localize('Edit', 'Modifier')}
                                             >
                                                 <i className="fas fa-edit"></i>
                                             </button>
                                             <button
-                                                onClick={() => setProjectToDelete(project)}
+                                                onClick={() => handleRequestDeleteProject(project)}
                                                 disabled={isLoading}
                                                                 className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-red-50"
-                                                                title="Supprimer"
+                                                                title={localize('Delete', 'Supprimer')}
                                             >
                                                 <i className="fas fa-trash"></i>
                                             </button>
@@ -2058,7 +2196,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-sm text-gray-600 mb-3 line-clamp-1">
-                                                                    {project.description || 'Aucune description'}
+                                                    {project.description || localize('No description', 'Aucune description')}
                                                                 </p>
                                                                 <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                                                                     <div className="flex items-center">
@@ -2100,13 +2238,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                             <i className="fas fa-eye mr-2"></i>
                                                             {t('view_details')}
                                                         </button>
-                                                        {canManage && (
+                                                        {canManageProject(project) && (
                                                             <>
                                                                 <button
                                                                     onClick={() => handleOpenForm(project)}
                                                                     disabled={isLoading}
                                                                     className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-blue-50"
-                                                                    title="Modifier"
+                                                                    title={localize('Edit', 'Modifier')}
                                                                 >
                                                                     <i className="fas fa-edit"></i>
                                                                 </button>
@@ -2114,7 +2252,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                     onClick={() => setProjectToDelete(project)}
                                                                     disabled={isLoading}
                                                                     className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-red-50"
-                                                                    title="Supprimer"
+                                                                    title={localize('Delete', 'Supprimer')}
                                                                 >
                                                                     <i className="fas fa-trash"></i>
                                                                 </button>
@@ -2135,13 +2273,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projet</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Équipe</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tâches</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progression</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échéance</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Project', 'Projet')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Status', 'Statut')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Team', 'Équipe')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Tasks', 'Tâches')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Progress', 'Progression')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Due date', 'Échéance')}</th>
+                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Actions', 'Actions')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -2158,7 +2296,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                         <div>
                                                             <div className="text-sm font-medium text-gray-900">{project.title}</div>
                                                             <div className="text-sm text-gray-500 truncate max-w-xs">
-                                                                {project.description || 'Aucune description'}
+                                                    {project.description || localize('No description', 'Aucune description')}
                                                             </div>
                                                         </div>
                                                     </td>
@@ -2203,25 +2341,25 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                 }}
                                                                 disabled={isLoading}
                                                                 className="text-emerald-600 hover:text-emerald-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                title="Voir détails"
+                                                                title={localize('View details', 'Voir détails')}
                                                             >
                                                                 <i className="fas fa-eye"></i>
                                                             </button>
-                                                            {canManage && (
+                                                            {canManageProject(project) && (
                                                                 <>
                                                                     <button
                                                                         onClick={() => handleOpenForm(project)}
                                                                         disabled={isLoading}
                                                                         className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                        title="Modifier"
+                                                                        title={localize('Edit', 'Modifier')}
                                                                     >
                                                                         <i className="fas fa-edit"></i>
                                                                     </button>
                                                                     <button
-                                                                        onClick={() => setProjectToDelete(project)}
+                                                                        onClick={() => handleRequestDeleteProject(project)}
                                                                         disabled={isLoading}
                                                                         className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                        title="Supprimer"
+                                                                        title={localize('Delete', 'Supprimer')}
                                                                     >
                                                                         <i className="fas fa-trash"></i>
                                                                     </button>
@@ -2244,14 +2382,14 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                         </div>
                         <h3 className="text-2xl font-semibold text-gray-800 mb-2">
                             {searchQuery || statusFilter !== 'all' 
-                                ? 'Aucun projet ne correspond à vos critères' 
-                                : 'Aucun projet créé pour le moment'
+                                ? localize('No project matches your filters', 'Aucun projet ne correspond à vos critères') 
+                                : localize('No project created yet', 'Aucun projet créé pour le moment')
                             }
                         </h3>
                         <p className="text-gray-600 mb-6">
                             {searchQuery || statusFilter !== 'all'
-                                ? 'Essayez de modifier vos critères de recherche ou de filtrage'
-                                : 'Commencez par créer votre premier projet pour organiser votre travail'
+                                ? localize('Try adjusting your search or filters', 'Essayez de modifier vos critères de recherche ou de filtrage')
+                                : localize('Start by creating your first project to organize your work', 'Commencez par créer votre premier projet pour organiser votre travail')
                             }
                         </p>
                         {(searchQuery || statusFilter !== 'all') && (
@@ -2263,16 +2401,16 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-semibold shadow-md hover:shadow-lg mr-3"
                             >
                                 <i className="fas fa-times mr-2"></i>
-                                Réinitialiser les filtres
+                                {localize('Reset filters', 'Réinitialiser les filtres')}
                             </button>
                         )}
-                    {canManage && (
+                    {canCreateProject && (
                         <button 
                             onClick={() => setIsProjectCreatePageOpen(true)}
                                 className="bg-emerald-600 text-white px-8 py-3 rounded-lg hover:bg-emerald-700 transition-colors font-semibold shadow-md hover:shadow-lg"
                         >
                             <i className="fas fa-plus mr-2"></i>
-                            Créer un nouveau projet
+                            {localize('Create a new project', 'Créer un nouveau projet')}
                         </button>
                     )}
                 </div>

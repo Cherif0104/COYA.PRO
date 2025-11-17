@@ -111,17 +111,17 @@ const InvoiceFormModal: React.FC<{
             const totalAmount = Number(formData.amount);
             
             if (!formData.paidAmount || isNaN(paidAmount) || paidAmount <= 0) {
-                alert('Veuillez saisir un montant payé valide pour un paiement partiel.');
+                alert(t('finance_partial_payment_amount_required'));
                 return;
             }
             
             if (paidAmount >= totalAmount) {
-                alert('Le montant payé ne peut pas être supérieur ou égal au montant total. Changez le statut en "Payé" si la facture est complètement payée.');
+                alert(t('finance_partial_payment_must_be_less_total'));
                 return;
             }
             
             if (paidAmount > totalAmount) {
-                alert('Le montant payé ne peut pas dépasser le montant total de la facture.');
+                alert(t('finance_partial_payment_cannot_exceed_total'));
                 return;
             }
         }
@@ -191,21 +191,21 @@ const InvoiceFormModal: React.FC<{
                                     <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md">
                                         <option value="Draft">{t('draft')}</option>
                                         <option value="Sent">{t('sent')}</option>
-                                        <option value="Partially Paid">{t('partially_paid') || 'Partiellement payé'}</option>
+                                        <option value="Partially Paid">{t('partially_paid')}</option>
                                         <option value="Paid">{t('paid')}</option>
                                         <option value="Overdue">{t('overdue')}</option>
                                     </select>
                                 </div>
                                 {formData.status === 'Partially Paid' && (
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">{t('paid_amount') || 'Montant payé'}</label>
+                                        <label className="block text-sm font-medium text-gray-700">{t('paid_amount')}</label>
                                         <input 
                                             type="number" 
                                             name="paidAmount" 
                                             value={formData.paidAmount} 
                                             onChange={handleChange} 
                                             className="mt-1 block w-full p-2 border rounded-md" 
-                                            placeholder="Ex: 1500"
+                                            placeholder={t('finance_paid_amount_placeholder')}
                                             min="0.01"
                                             max={formData.amount || undefined}
                                             step="0.01"
@@ -213,8 +213,8 @@ const InvoiceFormModal: React.FC<{
                                         />
                                         {formData.amount && (
                                             <p className="mt-1 text-xs text-gray-500">
-                                                Montant total: ${Number(formData.amount).toFixed(2)} | 
-                                                Reste à payer: ${((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0)).toFixed(2)}
+                                                {t('finance_total_amount_label')}: ${Number(formData.amount).toFixed(2)} | 
+                                                {t('finance_amount_remaining_label')}: ${((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0)).toFixed(2)}
                                             </p>
                                         )}
                                     </div>
@@ -945,26 +945,9 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                      error?.message?.includes('partially_paid');
             
             if (isConstraintError) {
-                alert(`❌ ERREUR : Impossible de créer une facture "Partiellement payé"
-
-🔧 ACTION REQUISE (2 minutes) :
-1. Aller sur https://supabase.com/dashboard
-2. Ouvrir "SQL Editor" → "New query"
-3. Copier-coller ce script :
-
-ALTER TABLE invoices 
-DROP CONSTRAINT IF EXISTS invoices_status_check;
-
-ALTER TABLE invoices
-ADD CONSTRAINT invoices_status_check 
-CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR status IS NULL);
-
-4. Cliquer "Run"
-5. Recharger cette page et réessayer
-
-📄 Voir aussi : docs/ACTIVER-PAIEMENT-PARTIEL.md`);
+                alert(t('finance_partial_payment_constraint_error'));
             } else {
-                alert('Erreur lors de la sauvegarde de la facture. Veuillez réessayer.');
+                alert(t('finance_save_invoice_error'));
             }
         }
     }
@@ -1034,7 +1017,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                         <div className="flex-1">
                             <h1 className="text-4xl font-bold mb-2">{t('finance_title')}</h1>
                             <p className="text-emerald-50 text-sm">
-                                {t('finance_subtitle') || 'Gérez vos finances, factures, dépenses et budgets'}
+                                {t('finance_subtitle')}
                             </p>
             </div>
                     {canManage && activeTab !== 'recurring' && (
@@ -1187,9 +1170,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                     >
                                         <option value="all">{t('all_statuses') || 'Tous les statuts'}</option>
                                         <option value="draft">{t('draft') || 'Brouillon'}</option>
-                                        <option value="sent">{t('sent') || 'Envoyé'}</option>
-                                        <option value="paid">{t('paid') || 'Payé'}</option>
-                                        <option value="partially_paid">{t('partially_paid') || 'Partiellement payé'}</option>
+                                        <option value="sent">{t('sent')}</option>
+                                        <option value="paid">{t('paid')}</option>
+                                        <option value="partially_paid">{t('partially_paid')}</option>
                                         <option value="overdue">{t('overdue') || 'En retard'}</option>
                                     </select>
 
@@ -1209,16 +1192,17 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                     <button
                                         onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                                         className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                                        title={sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre décroissant'}
+                                        title={sortOrder === 'asc' ? t('sort_ascending') : t('sort_descending')}
                                     >
                                         <i className={`fas ${sortOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} mr-2`}></i>
-                                        {sortOrder === 'asc' ? 'Croissant' : 'Décroissant'}
+                                        {t(sortOrder === 'asc' ? 'sort_ascending' : 'sort_descending')}
                                     </button>
                                 </div>
 
                                 {/* Compteur de résultats */}
                                 <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600">
-                                    {filteredInvoices.length} {filteredInvoices.length > 1 ? 'factures trouvées' : 'facture trouvée'}
+                                    {filteredInvoices.length}{' '}
+                                    {filteredInvoices.length > 1 ? t('finance_invoice_found_plural') : t('finance_invoice_found_singular')}
                                     {searchQuery && (
                                         <span className="ml-2">
                                             pour "{searchQuery}"
@@ -1231,7 +1215,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                 <div className="bg-white rounded-lg shadow-lg p-12 text-center">
                                     <i className="fas fa-file-invoice text-6xl text-gray-300 mb-4"></i>
                                     <p className="text-gray-600 text-lg mb-2">
-                                        {searchQuery || statusFilter !== 'all' ? 'Aucune facture ne correspond aux critères' : 'Aucune facture'}
+                                        {searchQuery || statusFilter !== 'all' ? t('finance_no_invoice_match') : t('finance_no_invoice')}
                                     </p>
                                     {canManage && (
                                         <button
@@ -1325,8 +1309,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                         className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                                     >
                                         <option value="all">{t('all_statuses') || 'Tous les statuts'}</option>
-                                        <option value="paid">{t('paid') || 'Payé'}</option>
-                                        <option value="unpaid">{t('unpaid') || 'Non payé'}</option>
+                                        <option value="paid">{t('paid')}</option>
+                                        <option value="unpaid">{t('unpaid')}</option>
                                     </select>
 
                                     {/* Tri */}
@@ -1344,16 +1328,17 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                     <button
                                         onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                                         className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                                        title={sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre décroissant'}
+                                        title={sortOrder === 'asc' ? t('sort_ascending') : t('sort_descending')}
                                     >
                                         <i className={`fas ${sortOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} mr-2`}></i>
-                                        {sortOrder === 'asc' ? 'Croissant' : 'Décroissant'}
+                                        {t(sortOrder === 'asc' ? 'sort_ascending' : 'sort_descending')}
                                     </button>
                                 </div>
 
                                 {/* Compteur de résultats */}
                                 <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600">
-                                    {filteredExpenses.length} {filteredExpenses.length > 1 ? 'dépenses trouvées' : 'dépense trouvée'}
+                                    {filteredExpenses.length}{' '}
+                                    {filteredExpenses.length > 1 ? t('finance_expense_found_plural') : t('finance_expense_found_singular')}
                                     {searchQuery && (
                                         <span className="ml-2">
                                             pour "{searchQuery}"
@@ -1366,7 +1351,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                                 <div className="bg-white rounded-lg shadow-lg p-12 text-center">
                                     <i className="fas fa-money-bill-wave text-6xl text-gray-300 mb-4"></i>
                                     <p className="text-gray-600 text-lg mb-2">
-                                        {searchQuery || expenseStatusFilter !== 'all' ? 'Aucune dépense ne correspond aux critères' : 'Aucune dépense'}
+                                        {searchQuery || expenseStatusFilter !== 'all' ? t('finance_no_expense_match') : t('finance_no_expense')}
                                     </p>
                                     {canManage && (
                                         <button

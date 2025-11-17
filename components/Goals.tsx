@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Project, Objective, KeyResult } from '../types';
+import { Project, Objective, KeyResult, Language } from '../types';
 import { generateOKRs } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import RealtimeService from '../services/realtimeService';
@@ -64,22 +64,22 @@ const ObjectiveFormModal: React.FC<{
         e.preventDefault();
         // MVP client – validations simples
         if (!formData.title.trim()) {
-            alert('Le titre de l\'objectif est requis.');
+            alert(t('goal_title_required'));
             return;
         }
         for (const kr of formData.keyResults) {
             if (!kr.title.trim()) {
-                alert('Chaque Key Result doit avoir un titre.');
+                alert(t('goal_key_result_title_required'));
                 return;
             }
             const tgt = Number(kr.target || 0);
             const cur = Number(kr.current || 0);
             if (tgt <= 0) {
-                alert('La cible d\'un Key Result doit être > 0.');
+                alert(t('goal_key_result_target_positive'));
                 return;
             }
             if (cur < 0 || cur > tgt) {
-                alert('La valeur actuelle d\'un Key Result doit être comprise entre 0 et la cible.');
+                alert(t('goal_key_result_current_range'));
                 return;
             }
         }
@@ -102,7 +102,7 @@ const ObjectiveFormModal: React.FC<{
                     <div className="p-6 space-y-4 flex-grow overflow-y-auto">
                         {!isEditMode && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Projet</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">{t('project')}</label>
                                 <select
                                     value={selectedProjectId}
                                     onChange={(e) => {
@@ -112,7 +112,7 @@ const ObjectiveFormModal: React.FC<{
                                     className="w-full p-2 border rounded-md"
                                     required
                                 >
-                                    <option value="">Sélectionner un projet</option>
+                                    <option value="">{t('goal_select_project')}</option>
                                     {projects.map(p => (
                                         <option key={p.id} value={p.id.toString()}>{p.title}</option>
                                     ))}
@@ -175,7 +175,8 @@ const Goals: React.FC<GoalsProps> = ({
     loadingOperation = null,
     isDataLoaded = true
 }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
     const { hasPermission } = useModulePermissions();
     
@@ -302,7 +303,7 @@ const Goals: React.FC<GoalsProps> = ({
         if (isEditMode) {
             const objectiveId = editingObjective?.id || (objectiveData as Objective).id;
             if (!objectiveId) {
-                alert('Erreur: Impossible de mettre à jour l\'objectif. ID manquant.');
+                alert(t('goal_missing_id_error'));
                 return;
             }
             
@@ -366,7 +367,7 @@ const Goals: React.FC<GoalsProps> = ({
             setSuggestedOKRs(newObjectives);
         } catch (error) {
             console.error('Erreur génération OKRs:', error);
-            alert('Erreur lors de la génération des OKRs. Veuillez réessayer.');
+            alert(t('goal_generate_error'));
         } finally {
             setIsGeneratingOKRs(false);
         }
@@ -394,7 +395,10 @@ const Goals: React.FC<GoalsProps> = ({
                         <div className="flex-1">
                             <h1 className="text-4xl font-bold mb-2">{t('goals_okrs_title')}</h1>
                             <p className="text-emerald-50 text-sm">
-                                Définissez et suivez vos objectifs et résultats clés (OKRs)
+                                {localize(
+                                    'Define and track your Objectives and Key Results (OKRs)',
+                                    'Définissez et suivez vos objectifs et résultats clés (OKRs)'
+                                )}
                             </p>
                         </div>
                         <div className="flex items-center gap-4">
@@ -402,10 +406,10 @@ const Goals: React.FC<GoalsProps> = ({
                                 <div className="flex items-center text-white">
                                     <i className="fas fa-spinner fa-spin mr-2"></i>
                                     <span className="text-sm">
-                                        {loadingOperation === 'create' && 'Création...'}
-                                        {loadingOperation === 'update' && 'Mise à jour...'}
-                                        {loadingOperation === 'delete' && 'Suppression...'}
-                                        {!loadingOperation && 'Chargement...'}
+                                        {loadingOperation === 'create' && localize('Creating...', 'Création...')}
+                                        {loadingOperation === 'update' && localize('Updating...', 'Mise à jour...')}
+                                        {loadingOperation === 'delete' && localize('Deleting...', 'Suppression...')}
+                                        {!loadingOperation && localize('Loading...', 'Chargement...')}
                                     </span>
                                 </div>
                             )}
@@ -436,10 +440,10 @@ const Goals: React.FC<GoalsProps> = ({
                                         }}
                                         disabled={isLoading || isGeneratingOKRs}
                                         className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-purple-50 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center transition-all shadow-md hover:shadow-lg"
-                                        title="Générer des OKRs avec l'IA"
+                                        title={localize('Generate OKRs with AI', 'Générer des OKRs avec l\'IA')}
                                     >
                                         <i className="fas fa-robot mr-2"></i>
-                                        Générer avec IA
+                                        {isGeneratingOKRs ? localize('Generating...', 'Génération...') : localize('Generate with AI', 'Générer avec IA')}
                                     </button>
                                 </>
                             )}
@@ -456,7 +460,9 @@ const Goals: React.FC<GoalsProps> = ({
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-blue-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Objectifs totaux</p>
+                                    <p className="text-sm font-medium text-gray-600 mb-1">
+                                        {localize('Total objectives', 'Objectifs totaux')}
+                                    </p>
                                     <p className="text-3xl font-bold text-gray-900">{totalObjectives}</p>
                                 </div>
                                 <div className="bg-blue-100 rounded-full p-4">
@@ -469,7 +475,9 @@ const Goals: React.FC<GoalsProps> = ({
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-emerald-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
         <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">En cours</p>
+                                    <p className="text-sm font-medium text-gray-600 mb-1">
+                                        {localize('In progress', 'En cours')}
+                                    </p>
                                     <p className="text-3xl font-bold text-gray-900">{objectivesInProgress}</p>
                                 </div>
                                 <div className="bg-emerald-100 rounded-full p-4">
@@ -482,7 +490,9 @@ const Goals: React.FC<GoalsProps> = ({
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-purple-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Key Results</p>
+                                    <p className="text-sm font-medium text-gray-600 mb-1">
+                                        {localize('Key Results', 'Key Results')}
+                                    </p>
                                     <p className="text-3xl font-bold text-gray-900">{totalKeyResults}</p>
                                 </div>
                                 <div className="bg-purple-100 rounded-full p-4">
@@ -495,7 +505,9 @@ const Goals: React.FC<GoalsProps> = ({
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-orange-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Progression moyenne</p>
+                                <p className="text-sm font-medium text-gray-600 mb-1">
+                                    {localize('Average progress', 'Progression moyenne')}
+                                </p>
                                     <p className="text-3xl font-bold text-gray-900">{avgProgress}%</p>
                                 </div>
                                 <div className="bg-orange-100 rounded-full p-4">
@@ -514,7 +526,7 @@ const Goals: React.FC<GoalsProps> = ({
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Rechercher un objectif par titre, description ou Key Result..."
+                                    placeholder={localize('Search an objective by title, description or Key Result...', 'Rechercher un objectif par titre, description ou Key Result...')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
@@ -540,7 +552,7 @@ const Goals: React.FC<GoalsProps> = ({
                                     onChange={(e) => setProjectFilter(e.target.value)}
                                     className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                                 >
-                                    <option value="all">Tous les projets</option>
+                                <option value="all">{localize('All projects', 'Tous les projets')}</option>
                                     {projects.map(project => (
                                         <option key={project.id} value={project.id.toString()}>
                                             {project.title}
@@ -555,10 +567,10 @@ const Goals: React.FC<GoalsProps> = ({
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                             >
-                                <option value="all">Tous les statuts</option>
-                                <option value="active">Actif</option>
-                                <option value="completed">Terminé</option>
-                                <option value="cancelled">Annulé</option>
+                                <option value="all">{localize('All statuses', 'Tous les statuts')}</option>
+                                <option value="active">{localize('Active', 'Actif')}</option>
+                                <option value="completed">{localize('Completed', 'Terminé')}</option>
+                                <option value="cancelled">{localize('Cancelled', 'Annulé')}</option>
                             </select>
 
                             {/* Tri */}
@@ -584,7 +596,7 @@ const Goals: React.FC<GoalsProps> = ({
                         </div>
                     </div>
 
-                    {/* Sélecteur de vue */}
+                    {/* View selector */}
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
                         <div className="text-sm text-gray-600">
                             {filteredObjectives.length} {filteredObjectives.length > 1 ? t('objective_found_plural') : t('objective_found_singular')}
@@ -683,7 +695,9 @@ const Goals: React.FC<GoalsProps> = ({
                                                 
                                                 {/* Key Results */}
                                                 <div className="space-y-2 mb-6">
-                                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Key Results ({objective.keyResults.length})</p>
+                                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                                        {localize('Key Results', 'Key Results')} ({objective.keyResults.length})
+                                                    </p>
                                                     {objective.keyResults.slice(0, 3).map(kr => {
                                                         const krProgress = kr.target > 0 ? (kr.current / kr.target) * 100 : 0;
                                                         return (
@@ -718,7 +732,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                         className="text-emerald-600 hover:text-emerald-700 font-semibold text-sm disabled:text-gray-400 disabled:cursor-not-allowed flex items-center transition-colors"
                                                     >
                                                         <i className="fas fa-eye mr-2"></i>
-                                                        Voir détails
+                                                        {localize('View details', 'Voir détails')}
                                                     </button>
                                                     {canManage && (
                                                         <div className="flex space-x-3">
@@ -729,7 +743,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                 }}
                                                                 disabled={isLoading}
                                                                 className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-blue-50"
-                                                                title="Modifier"
+                                                                title={localize('Edit', 'Modifier')}
                                                             >
                                         <i className="fas fa-edit"></i>
                                     </button>
@@ -737,7 +751,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                 onClick={() => setObjectiveToDelete(objective)}
                                                                 disabled={isLoading}
                                                                 className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-red-50"
-                                                                title="Supprimer"
+                                                                title={localize('Delete', 'Supprimer')}
                                                             >
                                         <i className="fas fa-trash"></i>
                                     </button>
@@ -814,7 +828,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                             className="text-emerald-600 hover:text-emerald-700 font-semibold text-sm disabled:text-gray-400 disabled:cursor-not-allowed flex items-center transition-colors px-4 py-2 rounded-lg hover:bg-emerald-50"
                                                         >
                                                             <i className="fas fa-eye mr-2"></i>
-                                                            Voir détails
+                                                        {localize('View details', 'Voir détails')}
                                                 </button>
                                                         {canManage && (
                                                             <>
@@ -825,7 +839,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                     }}
                                                                     disabled={isLoading}
                                                                     className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-blue-50"
-                                                                    title="Modifier"
+                                                                    title={localize('Edit', 'Modifier')}
                                                                 >
                                                                     <i className="fas fa-edit"></i>
                                                                 </button>
@@ -833,7 +847,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                     onClick={() => setObjectiveToDelete(objective)}
                                                                     disabled={isLoading}
                                                                     className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-red-50"
-                                                                    title="Supprimer"
+                                                                    title={localize('Delete', 'Supprimer')}
                                                                 >
                                                                     <i className="fas fa-trash"></i>
                                                                 </button>
@@ -854,11 +868,11 @@ const Goals: React.FC<GoalsProps> = ({
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Objectif</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projet</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Key Results</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progression</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Objective', 'Objectif')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Project', 'Projet')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Key Results', 'Key Results')}</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Progress', 'Progression')}</th>
+                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Actions', 'Actions')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -879,10 +893,10 @@ const Goals: React.FC<GoalsProps> = ({
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {project?.title || 'N/A'}
+                                                        {project?.title || localize('N/A', 'N/A')}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {objective.keyResults.length} KR
+                                                        {objective.keyResults.length} {localize('KR', 'KR')}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center">
@@ -948,14 +962,14 @@ const Goals: React.FC<GoalsProps> = ({
                 </div>
                             <h3 className="text-2xl font-semibold text-gray-800 mb-2">
                                 {searchQuery || projectFilter !== 'all' || statusFilter !== 'all'
-                                    ? 'Aucun objectif ne correspond à vos critères' 
-                                    : 'Aucun objectif créé pour le moment'
+                                    ? localize('No objective matches your filters', 'Aucun objectif ne correspond à vos critères') 
+                                    : localize('No objective created yet', 'Aucun objectif créé pour le moment')
                                 }
                             </h3>
                             <p className="text-gray-600 mb-6">
                                 {searchQuery || projectFilter !== 'all' || statusFilter !== 'all'
-                                    ? 'Essayez de modifier vos critères de recherche ou de filtrage'
-                                    : 'Commencez par créer votre premier objectif ou générez-en avec l\'IA'
+                                    ? localize('Try adjusting your search or filters', 'Essayez de modifier vos critères de recherche ou de filtrage')
+                                    : localize('Start by creating your first objective or generate one with AI', 'Commencez par créer votre premier objectif ou générez-en avec l\'IA')
                                 }
                             </p>
                         {(searchQuery || projectFilter !== 'all' || statusFilter !== 'all') && (
@@ -968,7 +982,7 @@ const Goals: React.FC<GoalsProps> = ({
                                 className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors font-semibold shadow-md hover:shadow-lg mr-3"
                             >
                                 <i className="fas fa-times mr-2"></i>
-                                Réinitialiser les filtres
+                                {localize('Reset filters', 'Réinitialiser les filtres')}
                     </button>
                         )}
                         {canManage && projects.length > 0 && (
@@ -977,7 +991,7 @@ const Goals: React.FC<GoalsProps> = ({
                                 className="bg-emerald-600 text-white px-8 py-3 rounded-lg hover:bg-emerald-700 transition-colors font-semibold shadow-md hover:shadow-lg"
                             >
                                 <i className="fas fa-plus mr-2"></i>
-                                Créer un objectif
+                                {localize('Create an objective', 'Créer un objectif')}
                             </button>
                         )}
                 </div>
@@ -1041,12 +1055,15 @@ const Goals: React.FC<GoalsProps> = ({
             {/* Modal Confirmation Suppression */}
             {objectiveToDelete && (
                 <ConfirmationModal
-                    title="Supprimer l'objectif"
-                    message={`Êtes-vous sûr de vouloir supprimer l'objectif "${objectiveToDelete.title}" ? Cette action est irréversible.`}
+                    title={localize('Delete objective', 'Supprimer l\'objectif')}
+                    message={localize(
+                        `Are you sure you want to delete the objective "${objectiveToDelete.title}"? This action is irreversible.`,
+                        `Êtes-vous sûr de vouloir supprimer l'objectif "${objectiveToDelete.title}" ? Cette action est irréversible.`
+                    )}
                     onConfirm={handleDeleteObjective}
                     onCancel={() => setObjectiveToDelete(null)}
-                    confirmText="Supprimer"
-                    cancelText="Annuler"
+                    confirmText={localize('Delete', 'Supprimer')}
+                    cancelText={localize('Cancel', 'Annuler')}
                     confirmButtonClass="bg-red-600 hover:bg-red-700"
                 />
             )}
@@ -1056,12 +1073,16 @@ const Goals: React.FC<GoalsProps> = ({
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
                         <div className="p-6 border-b">
-                            <h2 className="text-2xl font-bold">Générer des OKRs avec l'IA</h2>
+                            <h2 className="text-2xl font-bold">
+                                {localize('Generate OKRs with AI', 'Générer des OKRs avec l\'IA')}
+                            </h2>
                         </div>
                         <div className="p-6 flex-grow overflow-y-auto">
                             {!selectedProjectForOKRs && suggestedOKRs.length === 0 && !isGeneratingOKRs ? (
                                 <div className="space-y-4">
-                                    <p className="text-gray-600 mb-4">Sélectionnez un projet pour générer des OKRs avec l'IA :</p>
+                                    <p className="text-gray-600 mb-4">
+                                        {localize('Select a project to generate OKRs with AI:', 'Sélectionnez un projet pour générer des OKRs avec l\'IA :')}
+                                    </p>
                                     <select
                                         value=""
                                         onChange={(e) => {
@@ -1072,7 +1093,7 @@ const Goals: React.FC<GoalsProps> = ({
                                         }}
                                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                                     >
-                                        <option value="">Sélectionner un projet</option>
+                                        <option value="">{localize('Select a project', 'Sélectionner un projet')}</option>
                                         {projects.map(project => (
                                             <option key={project.id} value={project.id.toString()}>
                                                 {project.title}
@@ -1085,7 +1106,7 @@ const Goals: React.FC<GoalsProps> = ({
                                     <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
                                         <p className="text-sm font-semibold text-purple-800 mb-2">
                                             <i className="fas fa-info-circle mr-2"></i>
-                                            Projet sélectionné :
+                                            {localize('Selected project:', 'Projet sélectionné :')}
                                         </p>
                                         <p className="text-lg font-bold text-purple-900">{selectedProjectForOKRs.title}</p>
                                     </div>
@@ -1094,21 +1115,25 @@ const Goals: React.FC<GoalsProps> = ({
                                         className="w-full bg-purple-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center"
                                     >
                                         <i className="fas fa-robot mr-2"></i>
-                                        Générer les OKRs
+                                        {localize('Generate OKRs', 'Générer les OKRs')}
                                     </button>
                                     <button
                                         onClick={() => setSelectedProjectForOKRs(null)}
                                         className="w-full bg-gray-200 text-gray-800 px-4 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
                                     >
-                                        Changer de projet
+                                        {localize('Change project', 'Changer de projet')}
                                     </button>
                                 </div>
                             ) : isGeneratingOKRs ? (
                                 <div className="flex flex-col justify-center items-center h-48">
                                     <i className="fas fa-spinner fa-spin text-3xl text-purple-500 mb-4"></i>
-                                    <p className="text-gray-600">Génération des OKRs en cours...</p>
+                                    <p className="text-gray-600">
+                                        {localize('Generating OKRs...', 'Génération des OKRs en cours...')}
+                                    </p>
                                     {selectedProjectForOKRs && (
-                                        <p className="text-sm text-gray-500 mt-2">Pour le projet: {selectedProjectForOKRs.title}</p>
+                                        <p className="text-sm text-gray-500 mt-2">
+                                            {localize('For project:', 'Pour le projet:')} {selectedProjectForOKRs.title}
+                                        </p>
                                     )}
                                 </div>
                             ) : suggestedOKRs.length > 0 ? (
@@ -1116,7 +1141,10 @@ const Goals: React.FC<GoalsProps> = ({
                                     <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200 flex items-center justify-between">
                                         <p className="text-sm font-semibold text-purple-800">
                                             <i className="fas fa-info-circle mr-2"></i>
-                                            {suggestedOKRs.length} objectif(s) généré(s) pour le projet "{selectedProjectForOKRs?.title}"
+                                            {localize(
+                                                `${suggestedOKRs.length} objective(s) generated for project "${selectedProjectForOKRs?.title}"`,
+                                                `${suggestedOKRs.length} objectif(s) généré(s) pour le projet "${selectedProjectForOKRs?.title}"`
+                                            )}
                                         </p>
                                         <button
                                             onClick={() => setIsEditingOKRs(!isEditingOKRs)}
@@ -1127,7 +1155,9 @@ const Goals: React.FC<GoalsProps> = ({
                                             }`}
                                         >
                                             <i className={`fas ${isEditingOKRs ? 'fa-times' : 'fa-edit'} mr-2`}></i>
-                                            {isEditingOKRs ? 'Terminer la personnalisation' : 'Personnaliser les OKRs'}
+                                            {isEditingOKRs 
+                                                ? localize('Finish customizing', 'Terminer la personnalisation') 
+                                                : localize('Customize OKRs', 'Personnaliser les OKRs')}
                                         </button>
                                     </div>
                                     {suggestedOKRs.map((obj, objIndex) => (
@@ -1143,7 +1173,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                         setSuggestedOKRs(updated);
                                                     }}
                                                     className="w-full p-2 border border-purple-300 rounded-lg mb-3 font-bold text-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                                    placeholder="Titre de l'objectif"
+                                                    placeholder={localize('Objective title', 'Titre de l\'objectif')}
                                                 />
                                             ) : (
                                                 <h3 className="font-bold text-lg text-gray-800 mb-3">{obj.title}</h3>
@@ -1164,7 +1194,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                         setSuggestedOKRs(updated);
                                                                     }}
                                                                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                                                    placeholder="Description du Key Result"
+                                                                    placeholder={localize('Key Result description', 'Description du Key Result')}
                                                                 />
                                                                 <div className="flex gap-2">
                                                                     <input
@@ -1176,7 +1206,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                             setSuggestedOKRs(updated);
                                                                         }}
                                                                         className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                                                        placeholder="Cible"
+                                                                        placeholder={localize('Target', 'Cible')}
                                                                     />
                                                                     <input
                                                                         type="text"
@@ -1187,7 +1217,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                             setSuggestedOKRs(updated);
                                                                         }}
                                                                         className="w-24 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                                                                        placeholder="Unité"
+                                                                        placeholder={localize('Unit', 'Unité')}
                                                                     />
                                                                     <button
                                                                         onClick={() => {
@@ -1196,7 +1226,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                                             setSuggestedOKRs(updated);
                                                                         }}
                                                                         className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                                                        title="Supprimer ce Key Result"
+                                                                        title={localize('Delete this Key Result', 'Supprimer ce Key Result')}
                                                                     >
                                                                         <i className="fas fa-trash"></i>
                                                                     </button>
@@ -1205,7 +1235,9 @@ const Goals: React.FC<GoalsProps> = ({
                                                         ) : (
                                                             <>
                                                                 <p className="font-semibold text-gray-700">{kr.title}</p>
-                                                                <p className="text-sm text-gray-500">Objectif : {kr.target} {kr.unit}</p>
+                                                                <p className="text-sm text-gray-500">
+                                                                    {localize('Target', 'Objectif')} : {kr.target} {kr.unit}
+                                                                </p>
                                                             </>
                                                         )}
                                                     </div>
@@ -1228,7 +1260,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                         className="w-full mt-2 p-2 text-purple-600 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-50 transition-colors flex items-center justify-center"
                                                     >
                                                         <i className="fas fa-plus mr-2"></i>
-                                                        Ajouter un Key Result
+                                                        {localize('Add a Key Result', 'Ajouter un Key Result')}
                                                     </button>
                                                 )}
                                             </div>
@@ -1243,7 +1275,7 @@ const Goals: React.FC<GoalsProps> = ({
                                                     className="mt-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center"
                                                 >
                                                     <i className="fas fa-trash mr-2"></i>
-                                                    Supprimer cet objectif
+                                                    {localize('Delete this objective', 'Supprimer cet objectif')}
                                                 </button>
                                             )}
                                         </div>
@@ -1272,14 +1304,16 @@ const Goals: React.FC<GoalsProps> = ({
                                             className="w-full p-4 text-purple-600 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-50 transition-colors flex items-center justify-center font-semibold"
                                         >
                                             <i className="fas fa-plus mr-2"></i>
-                                            Ajouter un nouvel objectif
+                                            {localize('Add a new objective', 'Ajouter un nouvel objectif')}
                                         </button>
                                     )}
                                 </div>
                             ) : (
                                 <div className="text-center py-8">
                                     <i className="fas fa-exclamation-circle text-3xl text-gray-400 mb-4"></i>
-                                    <p className="text-gray-500">Aucune suggestion générée. Veuillez réessayer.</p>
+                                    <p className="text-gray-500">
+                                        {localize('No suggestion generated. Please try again.', 'Aucune suggestion générée. Veuillez réessayer.')}
+                                    </p>
                                     <button
                                         onClick={() => {
                                             if (selectedProjectForOKRs) {
@@ -1288,7 +1322,7 @@ const Goals: React.FC<GoalsProps> = ({
                                         }}
                                         className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors"
                                     >
-                                        Réessayer
+                                        {localize('Try again', 'Réessayer')}
                                     </button>
                                 </div>
                             )}
@@ -1312,7 +1346,7 @@ const Goals: React.FC<GoalsProps> = ({
                                     className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700 disabled:bg-emerald-300"
                                 >
                                     <i className="fas fa-plus mr-2"></i>
-                                    Ajouter au projet
+                                    {localize('Add to project', 'Ajouter au projet')}
                                 </button>
                             )}
                         </div>

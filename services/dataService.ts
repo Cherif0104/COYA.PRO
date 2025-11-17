@@ -734,9 +734,11 @@ export class DataService {
       // Récupérer l'organization_id de l'utilisateur
       const { data: profile } = await supabase
         .from('profiles')
-        .select('organization_id')
+        .select('organization_id, full_name, email')
         .eq('user_id', currentUser?.id || '')
         .single();
+
+      const creatorName = profile?.full_name || profile?.email || currentUser?.email || null;
 
       return await ApiHelper.post('projects', {
         name: project.title || '',
@@ -750,6 +752,8 @@ export class DataService {
         team_members: teamMemberIds.length > 0 ? teamMemberIds : null,
         owner_id: currentUser?.id || null,
         organization_id: profile?.organization_id || null,
+        created_by_id: currentUser?.id || null,
+        created_by_name: creatorName,
         tasks: project.tasks || [],
         risks: project.risks || []
       });

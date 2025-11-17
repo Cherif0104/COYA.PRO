@@ -268,6 +268,8 @@ export interface Project {
   tasks: Task[];
   risks: Risk[];
   teamMemberIds?: string[];
+  createdById?: string;
+  createdByName?: string;
 }
 
 export interface KeyResult {

@@ -141,6 +141,8 @@ export class DataAdapter {
               teamMemberIds: Array.isArray(project.team_members) ? project.team_members.map((memberId: any) => String(memberId)) : [],
               tasks: project.tasks || [],
               risks: project.risks || [],
+              createdById: project.created_by_id || project.owner_id || null,
+              createdByName: project.created_by_name || null,
               createdAt: project.created_at || new Date().toISOString(),
               updatedAt: project.updated_at || new Date().toISOString()
             };
@@ -202,6 +204,8 @@ export class DataAdapter {
             teamMemberIds: Array.isArray(data.team_members) ? data.team_members.map((memberId: any) => String(memberId)) : [],
             tasks: data.tasks || [],
             risks: data.risks || [],
+            createdById: data.created_by_id || data.owner_id || null,
+            createdByName: data.created_by_name || null,
             createdAt: data.created_at || new Date().toISOString(),
             updatedAt: data.updated_at || new Date().toISOString()
           };

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
-import { Course, Job, Project, TimeLog, LeaveRequest, Invoice, Expense, Role } from '../types';
+import { Course, Job, Project, TimeLog, LeaveRequest, Invoice, Expense, Role, Language } from '../types';
 
 interface DashboardProps {
   setView: (view: string) => void;
@@ -158,7 +158,8 @@ const FinanceSummaryCard: React.FC<{ invoices: Invoice[]; expenses: Expense[]; s
 };
 
 const ProjectStatusPieChart: React.FC<{ projects: Project[]; setView: (view: string) => void }> = ({ projects, setView }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
 
     const statusCounts = useMemo(() => {
         const counts: { [key in Project['status']]: number } = {
@@ -179,12 +180,12 @@ const ProjectStatusPieChart: React.FC<{ projects: Project[]; setView: (view: str
                     <div className="text-gray-400 mb-4">
                         <i className="fas fa-folder-open text-4xl"></i>
                     </div>
-                    <p className="text-gray-600 mb-4">Aucun projet créé pour le moment</p>
+                    <p className="text-gray-600 mb-4">{localize('No projects created yet', 'Aucun projet créé pour le moment')}</p>
                     <button 
                         onClick={() => setView('projects')}
                         className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
                     >
-                        Créer votre premier projet
+                        {localize('Create your first project', 'Créer votre premier projet')}
                     </button>
                 </div>
             </div>
@@ -276,6 +277,8 @@ const TeamAvailabilityCard: React.FC<{ leaveRequests: LeaveRequest[]; setView: (
 
 // Composant pour le message de bienvenue selon l'heure
 const WelcomeMessage: React.FC<{ userName: string }> = ({ userName }) => {
+  const { language } = useLocalization();
+  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
   const [currentTime, setCurrentTime] = useState(new Date());
   
   useEffect(() => {
@@ -288,13 +291,14 @@ const WelcomeMessage: React.FC<{ userName: string }> = ({ userName }) => {
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
-    if (hour < 12) return 'Bonjour';
-    if (hour < 18) return 'Bon après-midi';
-    return 'Bonsoir';
+    if (hour < 12) return localize('Good morning', 'Bonjour');
+    if (hour < 18) return localize('Good afternoon', 'Bon après-midi');
+    return localize('Good evening', 'Bonsoir');
   };
 
   const formatTime = () => {
-    return currentTime.toLocaleTimeString('fr-FR', { 
+    const locale = language === Language.FR ? 'fr-FR' : 'en-US';
+    return currentTime.toLocaleTimeString(locale, { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
@@ -314,26 +318,27 @@ const WelcomeMessage: React.FC<{ userName: string }> = ({ userName }) => {
 
 // Badge de rôle avec couleurs
 const RoleBadge: React.FC<{ role: Role }> = ({ role }) => {
-  const roleConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-    super_administrator: { label: 'Super Administrateur', color: 'text-red-800', bgColor: 'bg-red-100' },
-    administrator: { label: 'Administrateur', color: 'text-purple-800', bgColor: 'bg-purple-100' },
-    manager: { label: 'Manager', color: 'text-blue-800', bgColor: 'bg-blue-100' },
-    supervisor: { label: 'Superviseur', color: 'text-indigo-800', bgColor: 'bg-indigo-100' },
-    intern: { label: 'Stagiaire', color: 'text-gray-800', bgColor: 'bg-gray-100' },
-    student: { label: 'Étudiant', color: 'text-green-800', bgColor: 'bg-green-100' },
-    entrepreneur: { label: 'Entrepreneur', color: 'text-yellow-800', bgColor: 'bg-yellow-100' },
-    employer: { label: 'Employeur', color: 'text-orange-800', bgColor: 'bg-orange-100' },
-    trainer: { label: 'Formateur', color: 'text-teal-800', bgColor: 'bg-teal-100' },
-    mentor: { label: 'Mentor', color: 'text-pink-800', bgColor: 'bg-pink-100' },
-    coach: { label: 'Coach', color: 'text-cyan-800', bgColor: 'bg-cyan-100' },
+  const { t } = useLocalization();
+  const roleConfig: Record<string, { color: string; bgColor: string }> = {
+    super_administrator: { color: 'text-red-800', bgColor: 'bg-red-100' },
+    administrator: { color: 'text-purple-800', bgColor: 'bg-purple-100' },
+    manager: { color: 'text-blue-800', bgColor: 'bg-blue-100' },
+    supervisor: { color: 'text-indigo-800', bgColor: 'bg-indigo-100' },
+    intern: { color: 'text-gray-800', bgColor: 'bg-gray-100' },
+    student: { color: 'text-green-800', bgColor: 'bg-green-100' },
+    entrepreneur: { color: 'text-yellow-800', bgColor: 'bg-yellow-100' },
+    employer: { color: 'text-orange-800', bgColor: 'bg-orange-100' },
+    trainer: { color: 'text-teal-800', bgColor: 'bg-teal-100' },
+    mentor: { color: 'text-pink-800', bgColor: 'bg-pink-100' },
+    coach: { color: 'text-cyan-800', bgColor: 'bg-cyan-100' },
   };
 
-  const config = roleConfig[role] || { label: role, color: 'text-gray-800', bgColor: 'bg-gray-100' };
+  const config = roleConfig[role] || { color: 'text-gray-800', bgColor: 'bg-gray-100' };
 
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${config.color} ${config.bgColor}`}>
       <i className="fas fa-user-tag mr-1.5"></i>
-      {config.label}
+      {t(role)}
     </span>
   );
 };
@@ -347,7 +352,9 @@ const IntelligentInsights: React.FC<{
   expenses: Expense[];
   leaveRequests: LeaveRequest[];
 }> = ({ projects, courses, timeLogs, invoices, expenses, leaveRequests }) => {
+  const { language } = useLocalization();
   const insights = useMemo(() => {
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const now = new Date();
     const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -363,15 +370,21 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'success',
         icon: 'fas fa-trophy',
-        title: 'Excellente performance !',
-        message: `Vous avez complété ${completionRate.toFixed(0)}% de vos projets. Félicitations !`
+        title: localize('Outstanding performance!', 'Excellente performance !'),
+        message: localize(
+          `You have completed ${completionRate.toFixed(0)}% of your projects. Great job!`,
+          `Vous avez complété ${completionRate.toFixed(0)}% de vos projets. Félicitations !`
+        )
       });
     } else if (completionRate < 50 && projects.length > 0) {
       insightsList.push({
         type: 'warning',
         icon: 'fas fa-exclamation-triangle',
-        title: 'Opportunité d\'amélioration',
-        message: `Seulement ${completionRate.toFixed(0)}% de vos projets sont terminés. Concentrez-vous sur les projets prioritaires.`
+        title: localize('Opportunity for improvement', "Opportunité d'amélioration"),
+        message: localize(
+          `Only ${completionRate.toFixed(0)}% of your projects are done. Focus on the most important ones.`,
+          `Seulement ${completionRate.toFixed(0)}% de vos projets sont terminés. Concentrez-vous sur les projets prioritaires.`
+        )
       });
     }
 
@@ -386,9 +399,12 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'danger',
         icon: 'fas fa-clock',
-        title: 'Projets en retard',
-        message: `${overdueProjects.length} projet(s) dépassent leur date d'échéance. Revoyez les priorités.`,
-        action: 'Voir les projets'
+        title: localize('Projects behind schedule', 'Projets en retard'),
+        message: localize(
+          `${overdueProjects.length} project(s) are past their due date. Revisit your priorities.`,
+          `${overdueProjects.length} projet(s) dépassent leur date d'échéance. Revoyez les priorités.`
+        ),
+        action: localize('View projects', 'Voir les projets')
       });
     }
 
@@ -401,15 +417,21 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'success',
         icon: 'fas fa-graduation-cap',
-        title: 'Bonne progression !',
-        message: `Vous progressez bien dans vos cours (${avgProgress.toFixed(0)}% en moyenne). Continuez !`
+        title: localize('Great learning pace!', 'Bonne progression !'),
+        message: localize(
+          `You are progressing well in your courses (${avgProgress.toFixed(0)}% on average). Keep going!`,
+          `Vous progressez bien dans vos cours (${avgProgress.toFixed(0)}% en moyenne). Continuez !`
+        )
       });
     } else if (avgProgress < 30 && courses.length > 0) {
       insightsList.push({
         type: 'info',
         icon: 'fas fa-book',
-        title: 'Boostez votre apprentissage',
-        message: `Vous êtes à ${avgProgress.toFixed(0)}% de progression. Augmentez votre rythme d'apprentissage.`
+        title: localize('Boost your learning', 'Boostez votre apprentissage'),
+        message: localize(
+          `You are at ${avgProgress.toFixed(0)}% progress. Increase your study rhythm.`,
+          `Vous êtes à ${avgProgress.toFixed(0)}% de progression. Augmentez votre rythme d'apprentissage.`
+        )
       });
     }
 
@@ -429,15 +451,21 @@ const IntelligentInsights: React.FC<{
         insightsList.push({
           type: 'success',
           icon: 'fas fa-chart-line',
-          title: 'Productivité en hausse',
-          message: `Vous avez travaillé ${changePercent.toFixed(0)}% de plus cette semaine par rapport à la semaine dernière.`
+          title: localize('Productivity is rising', 'Productivité en hausse'),
+          message: localize(
+            `You worked ${changePercent.toFixed(0)}% more this week compared to last week.`,
+            `Vous avez travaillé ${changePercent.toFixed(0)}% de plus cette semaine par rapport à la semaine dernière.`
+          )
         });
       } else if (changePercent < -20) {
         insightsList.push({
           type: 'warning',
           icon: 'fas fa-chart-line-down',
-          title: 'Activité réduite',
-          message: `Votre temps de travail a diminué de ${Math.abs(changePercent).toFixed(0)}% cette semaine.`
+          title: localize('Activity down', 'Activité réduite'),
+          message: localize(
+            `Your work time decreased by ${Math.abs(changePercent).toFixed(0)}% this week.`,
+            `Votre temps de travail a diminué de ${Math.abs(changePercent).toFixed(0)}% cette semaine.`
+          )
         });
       }
     }
@@ -453,8 +481,11 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'danger',
         icon: 'fas fa-exclamation-circle',
-        title: 'Factures en attente',
-        message: `Vous avez ${unpaidInvoices.toFixed(2)} $ de factures en attente. Suivez les paiements.`
+        title: localize('Pending invoices', 'Factures en attente'),
+        message: localize(
+          `You have $${unpaidInvoices.toFixed(2)} pending. Follow up on payments.`,
+          `Vous avez ${unpaidInvoices.toFixed(2)} $ de factures en attente. Suivez les paiements.`
+        )
       });
     }
     
@@ -462,15 +493,21 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'danger',
         icon: 'fas fa-balance-scale',
-        title: 'Attention aux finances',
-        message: `Vos dépenses dépassent vos revenus de ${Math.abs(netIncome).toFixed(2)} $. Revoyez votre budget.`
+        title: localize('Watch your finances', 'Attention aux finances'),
+        message: localize(
+          `Your expenses exceed your revenue by $${Math.abs(netIncome).toFixed(2)}. Review your budget.`,
+          `Vos dépenses dépassent vos revenus de ${Math.abs(netIncome).toFixed(2)} $. Revoyez votre budget.`
+        )
       });
     } else if (netIncome > paidInvoices * 0.3 && paidInvoices > 0) {
       insightsList.push({
         type: 'success',
         icon: 'fas fa-piggy-bank',
-        title: 'Finances saines',
-        message: `Excellent ! Votre marge bénéficiaire est de ${((netIncome / paidInvoices) * 100).toFixed(0)}%.`
+        title: localize('Healthy finances', 'Finances saines'),
+        message: localize(
+          `Great! Your profit margin is ${((netIncome / paidInvoices) * 100).toFixed(0)}%.`,
+          `Excellent ! Votre marge bénéficiaire est de ${((netIncome / paidInvoices) * 100).toFixed(0)}%.`
+        )
       });
     }
 
@@ -480,8 +517,11 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'info',
         icon: 'fas fa-crystal-ball',
-        title: 'Prédiction',
-        message: `Basé sur vos projets actifs, vous devriez compléter ${Math.round(activeProjects.length * 0.3)} projet(s) dans les prochaines semaines.`
+        title: localize('Projection', 'Prédiction'),
+        message: localize(
+          `Based on your active projects, you should complete about ${Math.round(activeProjects.length * 0.3)} project(s) in the coming weeks.`,
+          `Basé sur vos projets actifs, vous devriez compléter ${Math.round(activeProjects.length * 0.3)} projet(s) dans les prochaines semaines.`
+        )
       });
     }
 
@@ -490,13 +530,17 @@ const IntelligentInsights: React.FC<{
       insightsList.push({
         type: 'warning',
         icon: 'fas fa-battery-full',
-        title: 'Charge de travail élevée',
-        message: `Vous avez travaillé ${weeklyHours.toFixed(1)}h cette semaine. Assurez-vous de préserver votre équilibre.`
+        title: localize('Heavy workload', 'Charge de travail élevée'),
+        message: localize(
+          `You worked ${weeklyHours.toFixed(1)}h this week. Make sure to keep balance.`,
+          `Vous avez travaillé ${weeklyHours.toFixed(1)}h cette semaine. Assurez-vous de préserver votre équilibre.`
+        )
       });
     }
 
     return insightsList.slice(0, 6); // Limiter à 6 insights
-  }, [projects, courses, timeLogs, invoices, expenses, leaveRequests]);
+  }, [projects, courses, timeLogs, invoices, expenses, leaveRequests, language]);
+  const translate = (en: string, fr: string) => (language === Language.FR ? fr : en);
 
   const getTypeStyles = (type: string) => {
     switch (type) {
@@ -529,11 +573,13 @@ const IntelligentInsights: React.FC<{
       <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <i className="fas fa-brain text-emerald-600"></i>
-          Analyse Intelligente
+          {translate('Intelligent Insights', 'Analyse Intelligente')}
         </h3>
         <div className="text-center py-8">
           <i className="fas fa-chart-line text-4xl text-gray-300 mb-4"></i>
-          <p className="text-gray-500">Pas assez de données pour générer des insights. Continuez à utiliser la plateforme !</p>
+          <p className="text-gray-500">
+            {translate('Not enough data to generate insights yet. Keep using the platform!', 'Pas assez de données pour générer des insights. Continuez à utiliser la plateforme !')}
+          </p>
         </div>
       </div>
     );
@@ -544,11 +590,11 @@ const IntelligentInsights: React.FC<{
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
           <i className="fas fa-brain text-emerald-600"></i>
-          Analyse Intelligente & Prédictions
+          {translate('Intelligent Insights & Predictions', 'Analyse Intelligente & Prédictions')}
         </h3>
         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
           <i className="fas fa-robot mr-1"></i>
-          IA Insights
+          {translate('AI Insights', 'IA Insights')}
         </span>
       </div>
       <div className="space-y-3">
@@ -587,7 +633,8 @@ const MetricsDashboard: React.FC<{
   expenses: Expense[];
   leaveRequests: LeaveRequest[];
 }> = ({ projects, courses, timeLogs, invoices, expenses, leaveRequests }) => {
-  const { t } = useLocalization();
+  const { t, language } = useLocalization();
+  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
 
   // Calculs de métriques avancées
   const metrics = useMemo(() => {
@@ -640,11 +687,11 @@ const MetricsDashboard: React.FC<{
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <i className="fas fa-chart-line text-emerald-600"></i>
-          Tableau de Bord Analytique
+          {localize('Analytical Dashboard', 'Tableau de Bord Analytique')}
         </h2>
         <span className="text-sm text-gray-500">
           <i className="fas fa-clock mr-1"></i>
-          Données en temps réel
+          {localize('Real-time data', 'Données en temps réel')}
         </span>
       </div>
 
@@ -653,10 +700,13 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-emerald-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 font-medium">Taux de Complétion</p>
+              <p className="text-sm text-gray-600 font-medium">{localize('Completion rate', 'Taux de Complétion')}</p>
               <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.completionRate}%</p>
               <p className="text-xs text-gray-500 mt-1">
-                {metrics.completedProjects} / {metrics.totalProjects} projets
+                {localize(
+                  `${metrics.completedProjects} / ${metrics.totalProjects} projects`,
+                  `${metrics.completedProjects} / ${metrics.totalProjects} projets`
+                )}
               </p>
             </div>
             <div className="bg-emerald-100 rounded-full p-3">
@@ -677,10 +727,10 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 font-medium">Progression Moyenne</p>
+              <p className="text-sm text-gray-600 font-medium">{localize('Average course progress', 'Progression Moyenne')}</p>
               <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.avgCourseProgress}%</p>
               <p className="text-xs text-gray-500 mt-1">
-                {courses.length} cours suivis
+                {localize(`${courses.length} courses`, `${courses.length} cours suivis`)}
               </p>
             </div>
             <div className="bg-blue-100 rounded-full p-3">
@@ -701,10 +751,10 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 font-medium">Heures Travaillées</p>
+              <p className="text-sm text-gray-600 font-medium">{localize('Hours worked', 'Heures Travaillées')}</p>
               <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.totalHours}h</p>
               <p className="text-xs text-gray-500 mt-1">
-                Derniers 30 jours
+                {localize('Last 30 days', 'Derniers 30 jours')}
               </p>
             </div>
             <div className="bg-purple-100 rounded-full p-3">
@@ -717,12 +767,12 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-orange-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 font-medium">Santé Financière</p>
+              <p className="text-sm text-gray-600 font-medium">{localize('Financial health', 'Santé Financière')}</p>
               <p className={`text-3xl font-bold mt-1 ${metrics.financialHealth >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {metrics.financialHealth >= 0 ? '+' : ''}{metrics.financialHealth}%
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Revenu net: ${metrics.netIncome.toFixed(2)}
+                {localize(`Net revenue: $${metrics.netIncome.toFixed(2)}`, `Revenu net: $${metrics.netIncome.toFixed(2)}`)}
               </p>
             </div>
             <div className={`rounded-full p-3 ${metrics.financialHealth >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
@@ -738,11 +788,11 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md">
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <i className="fas fa-project-diagram text-emerald-600"></i>
-            État des Projets
+            {localize('Project status', 'État des Projets')}
           </h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">En cours</span>
+              <span className="text-sm text-gray-600">{localize('In progress', 'En cours')}</span>
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-3">
                   <div 
@@ -754,7 +804,7 @@ const MetricsDashboard: React.FC<{
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Terminés</span>
+              <span className="text-sm text-gray-600">{localize('Completed', 'Terminés')}</span>
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-3">
                   <div 
@@ -768,7 +818,7 @@ const MetricsDashboard: React.FC<{
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Non démarrés</span>
+              <span className="text-sm text-gray-600">{localize('Not started', 'Non démarrés')}</span>
               <div className="flex items-center gap-2">
                 <div className="w-32 bg-gray-200 rounded-full h-3">
                   <div 
@@ -788,12 +838,12 @@ const MetricsDashboard: React.FC<{
         <div className="bg-white rounded-lg p-5 shadow-md">
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <i className="fas fa-dollar-sign text-emerald-600"></i>
-            Vue Financière
+            {localize('Financial view', 'Vue Financière')}
           </h3>
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600">Factures payées</span>
+                <span className="text-sm text-gray-600">{localize('Paid invoices', 'Factures payées')}</span>
                 <span className="text-sm font-semibold text-emerald-600">${metrics.paidInvoices.toFixed(2)}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -805,7 +855,7 @@ const MetricsDashboard: React.FC<{
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600">Factures en attente</span>
+                <span className="text-sm text-gray-600">{localize('Pending invoices', 'Factures en attente')}</span>
                 <span className="text-sm font-semibold text-orange-600">${metrics.unpaidInvoices.toFixed(2)}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -817,7 +867,7 @@ const MetricsDashboard: React.FC<{
             </div>
             <div className="pt-2 border-t border-gray-200">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">Revenu net</span>
+                <span className="text-sm font-semibold text-gray-700">{localize('Net revenue', 'Revenu net')}</span>
                 <span className={`text-lg font-bold ${metrics.netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   ${metrics.netIncome.toFixed(2)}
                 </span>
@@ -832,12 +882,13 @@ const MetricsDashboard: React.FC<{
 
 const Dashboard: React.FC<DashboardProps> = ({ setView, projects, courses, jobs, timeLogs, leaveRequests, invoices, expenses, isDataLoaded = true }) => {
   const { user } = useAuth();
-  const { t } = useLocalization();
+  const { t, language } = useLocalization();
+  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
 
   if (!user) return null;
 
   // Utiliser fullName s'il existe, sinon name
-  const userName = (user as any).fullName || (user as any).name || user.email || 'Utilisateur';
+  const userName = (user as any).fullName || (user as any).name || user.email || localize('User', 'Utilisateur');
 
   return (
     <div>
