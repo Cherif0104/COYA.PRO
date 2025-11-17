@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { TimeLog, Project, Course, Meeting, User } from '../types';
+import { TimeLog, Project, Course, Meeting, User, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 
@@ -473,7 +473,12 @@ const MeetingDetailModal: React.FC<{
 }> = ({ meeting, users, onClose, onEdit, onDelete, onLogTime }) => {
     const { t } = useLocalization();
     const { user: currentUser } = useAuth();
-    const canManage = String(currentUser?.id) === String(meeting.organizerId) || currentUser?.role === 'manager' || currentUser?.role === 'administrator' || currentUser?.role === 'super_administrator';
+    const userProfileId = currentUser?.profileId ? String(currentUser.profileId) : currentUser?.id ? String(currentUser.id) : null;
+    const organizerId = meeting.organizerId ? String(meeting.organizerId) : null;
+    const hasRole = currentUser ? RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role) : false;
+    const canManage = Boolean(
+        (userProfileId && organizerId && userProfileId === organizerId) || hasRole
+    );
     
     // Récupérer les vraies informations des participants
     const attendeesWithDetails = meeting.attendees.map(attendee => {
@@ -645,21 +650,49 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
   const [isMeetingFormOpen, setMeetingFormOpen] = useState(false);
   const [isMeetingDetailOpen, setMeetingDetailOpen] = useState<Meeting | null>(null);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
-  const [deletingMeetingId, setDeletingMeetingId] = useState<string | number | null>(null);
-  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
+  const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
+  const [logToDelete, setLogToDelete] = useState<TimeLog | null>(null);
   const [logInitialValues, setLogInitialValues] = useState<any>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [meetingSearchQuery, setMeetingSearchQuery] = useState('');
   const [meetingViewMode, setMeetingViewMode] = useState<'calendar' | 'list'>('calendar');
 
+  const userProfileId = useMemo(() => {
+    if (!user) return null;
+    if (user.profileId) return String(user.profileId);
+    if (user.id) return String(user.id);
+    return null;
+  }, [user?.profileId, user?.id]);
+
+  const canManageLog = useCallback(
+    (log: TimeLog | null) => {
+      if (!user || !log) return false;
+      const logOwnerId = log.userId ? String(log.userId) : null;
+      const isCreator = userProfileId && logOwnerId && userProfileId === logOwnerId;
+      const hasRole = RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+      return Boolean(isCreator || hasRole);
+    },
+    [user, userProfileId]
+  );
+
+  const canManageMeeting = useCallback(
+    (meeting: Meeting | null) => {
+      if (!user || !meeting) return false;
+      const organizerId = meeting.organizerId ? String(meeting.organizerId) : null;
+      const isOrganizer = userProfileId && organizerId && organizerId === userProfileId;
+      const hasRole = RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+      return Boolean(isOrganizer || hasRole);
+    },
+    [user, userProfileId]
+  );
+
   if (!user) return null;
 
   // Filtrer les logs de l'utilisateur
   const userTimeLogs = useMemo(() => {
-    // Utiliser profileId si disponible, sinon user.id (compatibilité)
-    const userIdToMatch = user.profileId || String(user.id);
-    return timeLogs.filter(log => String(log.userId) === userIdToMatch);
-  }, [timeLogs, user.id, user.profileId]);
+    if (!userProfileId) return [];
+    return timeLogs.filter(log => String(log.userId) === userProfileId);
+  }, [timeLogs, userProfileId]);
 
   // Calculer les métriques
   const metrics = useMemo(() => {
@@ -732,6 +765,30 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
     setMeetingFormOpen(false);
     setEditingMeeting(null);
   };
+
+  const handleRequestDeleteLog = useCallback(
+    (log: TimeLog) => {
+      if (!canManageLog(log)) {
+        alert(t('project_permission_error'));
+        return;
+      }
+      setLogToDelete(log);
+    },
+    [canManageLog, t]
+  );
+
+  const handleRequestDeleteMeeting = useCallback(
+    (meetingId: string | number) => {
+      const target = meetings.find(m => String(m.id) === String(meetingId)) || null;
+      if (!target) return;
+      if (!canManageMeeting(target)) {
+        alert(t('project_permission_error'));
+        return;
+      }
+      setMeetingToDelete(target);
+    },
+    [canManageMeeting, meetings, t]
+  );
   
   const handleEditMeeting = (meeting: Meeting) => {
       setEditingMeeting(meeting);
@@ -779,13 +836,13 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
 
   // Filtrer les réunions de l'utilisateur (celles où il est participant ou organisateur)
   const userMeetings = useMemo(() => {
-    const userIdToMatch = user.profileId || String(user.id);
+    if (!userProfileId) return [];
     return meetings.filter(m => {
-      const isAttendee = m.attendees.some(a => String(a.id) === userIdToMatch);
-      const isOrganizer = String(m.organizerId) === userIdToMatch;
+      const isAttendee = m.attendees.some(a => String(a.id) === userProfileId);
+      const isOrganizer = String(m.organizerId) === userProfileId;
       return isAttendee || isOrganizer;
     });
-  }, [meetings, user.id, user.profileId]);
+  }, [meetings, userProfileId]);
 
   // Recherche et filtrage des réunions
   const filteredMeetings = useMemo(() => {
@@ -1020,12 +1077,14 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                       <div className="bg-emerald-100 rounded-full w-12 h-12 flex-shrink-0 flex items-center justify-center">
                         <i className={`${getIconForEntityType(log.entityType)} text-emerald-600 text-lg`}></i>
                       </div>
-                      <button
-                        onClick={() => setDeletingLogId(log.id)}
-                        className="text-red-500 hover:text-red-700"
-                      >
+                      {canManageLog(log) && (
+                        <button
+                          onClick={() => handleRequestDeleteLog(log)}
+                          className="text-red-500 hover:text-red-700"
+                        >
                         <i className="fas fa-trash"></i>
-                      </button>
+                        </button>
+                      )}
                     </div>
                     <h3 className="font-semibold text-gray-800 mb-2">{log.entityTitle}</h3>
                     <p className="text-sm text-gray-600 mb-3 line-clamp-2">{log.description}</p>
@@ -1050,12 +1109,14 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                     </div>
                     <div className="text-right">
                     <p className="font-bold text-emerald-600">{log.duration} {t('minutes')}</p>
-                      <button
-                        onClick={() => setDeletingLogId(log.id)}
-                        className="text-red-500 hover:text-red-700 text-sm mt-2"
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
+                      {canManageLog(log) && (
+                        <button
+                          onClick={() => handleRequestDeleteLog(log)}
+                          className="text-red-500 hover:text-red-700 text-sm mt-2"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      )}
                     </div>
                 </div>
                 ))}
@@ -1085,12 +1146,14 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                         <td className="px-4 py-3 text-sm text-gray-600">{new Date(log.date).toLocaleDateString()}</td>
                         <td className="px-4 py-3 font-semibold text-emerald-600">{log.duration} {t('minutes')}</td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => setDeletingLogId(log.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
+                          {canManageLog(log) && (
+                            <button
+                              onClick={() => handleRequestDeleteLog(log)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1511,32 +1574,42 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
           onClose={() => setMeetingDetailOpen(null)} 
           onEdit={handleEditMeeting} 
           onDelete={(id) => {
-            setDeletingMeetingId(id); 
+            handleRequestDeleteMeeting(id); 
             setMeetingDetailOpen(null);
           }} 
           onLogTime={handleLogTimeForMeeting}
         />
       )}
-      {deletingMeetingId && (
+      {meetingToDelete && (
         <ConfirmationModal 
           title={t('delete_meeting')} 
           message={t('confirm_delete_message')} 
           onConfirm={() => {
-            onDeleteMeeting(deletingMeetingId); 
-            setDeletingMeetingId(null);
+            if (!canManageMeeting(meetingToDelete)) {
+              alert(t('project_permission_error'));
+              setMeetingToDelete(null);
+              return;
+            }
+            onDeleteMeeting(meetingToDelete.id); 
+            setMeetingToDelete(null);
           }} 
-          onCancel={() => setDeletingMeetingId(null)} 
+          onCancel={() => setMeetingToDelete(null)} 
         />
       )}
-      {deletingLogId && (
+      {logToDelete && (
         <ConfirmationModal 
           title={t('delete_log')} 
           message={t('confirm_delete_log_message')} 
           onConfirm={() => {
-            onDeleteTimeLog(deletingLogId);
-            setDeletingLogId(null);
+            if (!canManageLog(logToDelete)) {
+              alert(t('project_permission_error'));
+              setLogToDelete(null);
+              return;
+            }
+            onDeleteTimeLog(logToDelete.id);
+            setLogToDelete(null);
           }} 
-          onCancel={() => setDeletingLogId(null)} 
+          onCancel={() => setLogToDelete(null)} 
         />
       )}
     </>

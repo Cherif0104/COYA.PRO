@@ -881,9 +881,12 @@ export class DataService {
       // Récupérer le profil pour obtenir l'ID du profil
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name')
         .eq('user_id', currentUser.id)
         .single();
+      if (!profile) {
+        throw new Error('Profil utilisateur non trouvé');
+      }
 
       if (!profile) {
         throw new Error('Profil utilisateur non trouvé');
@@ -896,13 +899,17 @@ export class DataService {
       const invoiceNumber = invoice.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`;
       
       // Commencer avec les colonnes obligatoires seulement
+      const creatorName = profile?.full_name || currentUser.email || null;
+
       const insertData: any = {
         invoice_number: invoiceNumber, // Basé sur getInvoices qui utilise invoice.invoice_number
       client_name: invoice.clientName || '',
       amount: invoice.amount || 0,
         status: normalizedStatus,
         due_date: invoice.dueDate || null,
-        user_id: profile.id
+        user_id: profile.id,
+        created_by: currentUser.id,
+        created_by_name: creatorName
       };
       
       // Ajouter les colonnes optionnelles seulement si elles ont une valeur
@@ -952,7 +959,9 @@ export class DataService {
           amount: insertData.amount,
           status: insertData.status,
           due_date: insertData.due_date,
-          user_id: insertData.user_id
+          user_id: insertData.user_id,
+          created_by: insertData.created_by,
+          created_by_name: insertData.created_by_name
         };
         
         // Si ça échoue encore, essayer avec 'number' au lieu de 'invoice_number'
@@ -1089,7 +1098,7 @@ export class DataService {
       // Récupérer le profil pour obtenir l'ID du profil
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name')
         .eq('user_id', currentUser.id)
         .single();
 
@@ -1100,6 +1109,8 @@ export class DataService {
       // Normaliser le status en minuscules
       const normalizedStatus = expense.status?.toLowerCase() || 'unpaid';
       
+      const creatorName = profile?.full_name || currentUser.email || null;
+
       const { data, error } = await supabase
         .from('expenses')
         .insert({
@@ -1115,6 +1126,8 @@ export class DataService {
           budget_item_id: expense.budgetItemId || null,
           recurring_source_id: expense.recurringSourceId || null,
           user_id: profile.id,
+          created_by: currentUser.id,
+          created_by_name: creatorName,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -1528,6 +1541,17 @@ export class DataService {
 
   static async createContact(contact: any) {
     try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        throw new Error('Utilisateur non authentifié');
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('user_id', currentUser.id)
+        .single();
+
       // Extrait le prénom et nom depuis le champ 'name' si nécessaire
       let firstName = contact.firstName || '';
       let lastName = contact.lastName || '';
@@ -1547,6 +1571,9 @@ export class DataService {
         'Customer': 'customer'
       };
       const supabaseStatus = statusMap[contact.status] || contact.status?.toLowerCase() || 'lead';
+
+      const ownerId = profile.id;
+      const creatorName = profile.full_name || currentUser.email || null;
       
       const { data, error } = await supabase
         .from('contacts')
@@ -1561,6 +1588,8 @@ export class DataService {
           source: contact.source,
           notes: contact.notes,
           tags: contact.tags || [],
+          created_by: ownerId || currentUser.id,
+          created_by_name: creatorName,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })

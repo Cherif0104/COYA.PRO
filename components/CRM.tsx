@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Contact } from '../types';
+import { Contact, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import { draftSalesEmail } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 
@@ -146,7 +145,6 @@ interface CRMProps {
 const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact }) => {
     const { t } = useLocalization();
     const { user } = useAuth();
-    const { hasPermission } = useModulePermissions();
     const [view, setView] = useState<'list' | 'pipeline'>('list');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -157,14 +155,32 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
 
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact|null>(null);
-    const [deletingContactId, setDeletingContactId] = useState<number|null>(null);
+    const [deletingContactId, setDeletingContactId] = useState<number | string | null>(null);
 
     // Tous les utilisateurs peuvent gérer les contacts (isolation gérée par RLS)
+    const userProfileId = useMemo(() => {
+        if (!user) return null;
+        if (user.profileId) return String(user.profileId);
+        if (user.id) return String(user.id);
+        return null;
+    }, [user?.profileId, user?.id]);
+
     const canManage = useMemo(() => {
         if (!user) return false;
-        if (user.role === 'super_administrator') return true;
-        return hasPermission('crm_sales', 'write');
-    }, [user, hasPermission]);
+        return RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+    }, [user]);
+
+    const canManageContact = useCallback(
+        (contact: Contact | null) => {
+            if (!user || !contact) return false;
+            const ownerId = contact.createdById ? contact.createdById.toString() : null;
+            return Boolean(
+                (userProfileId && ownerId && ownerId === userProfileId) ||
+                RESOURCE_MANAGEMENT_ROLES.includes(user.role)
+            );
+        },
+        [user, userProfileId]
+    );
     
     const pipelineStatuses: Contact['status'][] = ['Lead', 'Contacted', 'Prospect', 'Customer'];
 
@@ -220,8 +236,17 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
     
     const handleSaveContact = (contactData: Contact | Omit<Contact, 'id'>) => {
         if ('id' in contactData) {
-            onUpdateContact(contactData);
+            const existing = contactData as Contact;
+            if (!canManageContact(existing)) {
+                alert(t('project_permission_error'));
+                return;
+            }
+            onUpdateContact(existing);
         } else {
+            if (!canManage) {
+                alert(t('project_permission_error'));
+                return;
+            }
             onAddContact(contactData);
         }
         setFormModalOpen(false);
@@ -229,25 +254,45 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
     };
 
     const handleEdit = (contact: Contact) => {
+        if (!canManageContact(contact)) {
+            alert(t('project_permission_error'));
+            return;
+        }
         setEditingContact(contact);
         setFormModalOpen(true);
     };
     
-    const handleDelete = (contactId: number) => {
-        onDeleteContact(contactId);
+    const handleDelete = (contactId: number | string) => {
+        const target = contacts.find(c => String(c.id) === String(contactId)) || null;
+        if (!canManageContact(target)) {
+            alert(t('project_permission_error'));
+            setDeletingContactId(null);
+            return;
+        }
+        onDeleteContact(contactId as number);
         setDeletingContactId(null);
     }
     
     // Drag and Drop handlers
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, contactId: number) => {
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, contactId: number | string) => {
+        const contact = contacts.find(c => String(c.id) === String(contactId)) || null;
+        if (!canManageContact(contact)) {
+            e.preventDefault();
+            return;
+        }
         e.dataTransfer.setData("contactId", contactId.toString());
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: Contact['status']) => {
         e.preventDefault();
-        const contactId = Number(e.dataTransfer.getData("contactId"));
-        const contactToMove = contacts.find(c => c.id === contactId);
+        const contactId = e.dataTransfer.getData("contactId");
+        const contactToMove = contacts.find(c => String(c.id) === contactId);
         if (contactToMove && contactToMove.status !== newStatus) {
+            if (!canManageContact(contactToMove)) {
+                alert(t('project_permission_error'));
+                e.currentTarget.classList.remove('bg-emerald-100');
+                return;
+            }
             onUpdateContact({ ...contactToMove, status: newStatus });
         }
         e.currentTarget.classList.remove('bg-emerald-100');
@@ -490,7 +535,7 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                         >
                                             <i className="fas fa-magic"></i>
                                         </button>
-                                             {canManage && (
+                                             {canManageContact(contact) && (
                                                 <>
                                                             <button 
                                                                 onClick={() => handleEdit(contact)} 
@@ -547,8 +592,8 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                 {contacts.filter(c => c.status === status).map(contact => (
                                     <div 
                                         key={contact.id} 
-                                        draggable
-                                        onDragStart={(e) => handleDragStart(e, contact.id)}
+                                        draggable={canManageContact(contact)}
+                                        onDragStart={(e) => canManageContact(contact) && handleDragStart(e, contact.id)}
                                             className="bg-white p-4 rounded-lg shadow hover:shadow-md cursor-grab active:cursor-grabbing transition-all group"
                                     >
                                             <div className="flex items-start mb-2">
@@ -565,13 +610,15 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                                 </div>
                                             )}
                                             <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                                                <button 
-                                                    onClick={() => handleEdit(contact)}
-                                                    className="text-blue-600 hover:text-blue-800 text-xs"
-                                                >
-                                                    <i className="fas fa-edit mr-1"></i>
-                                                    Éditer
-                                                </button>
+                                                {canManageContact(contact) ? (
+                                                    <button 
+                                                        onClick={() => handleEdit(contact)}
+                                                        className="text-blue-600 hover:text-blue-800 text-xs"
+                                                    >
+                                                        <i className="fas fa-edit mr-1"></i>
+                                                        Éditer
+                                                    </button>
+                                                ) : <span />}
                                             <button 
                                                 onClick={() => handleDraftEmail(contact)}
                                                 className="text-emerald-600 hover:text-emerald-800 text-xs"

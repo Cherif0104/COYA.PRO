@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, TimeLog, MANAGEMENT_ROLES } from '../types';
+import { Project, TimeLog, MANAGEMENT_ROLES, Role } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import ActivityHistory from './common/ActivityHistory';
 import DataAdapter from '../services/dataAdapter';
 import jsPDF from 'jspdf';
+
+const PROJECT_MANAGEMENT_ROLES: Role[] = [
+    'super_administrator',
+    'manager',
+    'supervisor',
+    'trainer', // mapped to "professeur" role in the requirements
+    'administrator', // keep admins aligned with legacy access
+];
 
 interface ProjectDetailPageProps {
     project: Project;
@@ -31,6 +39,14 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const [activeTab, setActiveTab] = useState<'tasks' | 'risks' | 'report' | 'history'>('tasks');
     const [isLogTimeModalOpen, setLogTimeModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+
+    // Vérification des permissions pour gérer le projet (modifier/supprimer)
+    const canManageProject = useMemo(() => {
+        if (!currentUser || !currentProject) return false;
+        const isCreator = currentProject.createdById?.toString() === currentUser.id?.toString();
+        const hasRole = PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+        return isCreator || hasRole;
+    }, [currentUser, currentProject]);
     const [isLoading, setIsLoading] = useState(false);
     const [pendingTasks, setPendingTasks] = useState<any[]>([]);
     const [pendingRisks, setPendingRisks] = useState<any[]>([]);
@@ -719,13 +735,15 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                 <i className="fas fa-clock"></i>
                                 Enregistrer du temps
                             </button>
-                            <button
-                                onClick={() => setDeleteModalOpen(true)}
-                                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                            >
-                                <i className="fas fa-trash"></i>
-                                Supprimer
-                            </button>
+                            {canManageProject && (
+                                <button
+                                    onClick={() => setDeleteModalOpen(true)}
+                                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                                >
+                                    <i className="fas fa-trash"></i>
+                                    Supprimer
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1864,6 +1882,11 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     title="Supprimer le projet"
                     message={`Êtes-vous sûr de vouloir supprimer le projet "${currentProject.title}" ? Cette action est irréversible.`}
                     onConfirm={() => {
+                        if (!canManageProject) {
+                            alert(t('project_permission_error'));
+                            setDeleteModalOpen(false);
+                            return;
+                        }
                         onDeleteProject(currentProject.id);
                         onClose();
                     }}

@@ -35,6 +35,14 @@ export interface Organization {
 // Rôles ayant accès au Management Ecosysteia (seule restriction)
 export const MANAGEMENT_ROLES: Role[] = ['super_administrator', 'administrator', 'manager', 'supervisor', 'intern'];
 
+export const RESOURCE_MANAGEMENT_ROLES: Role[] = [
+  'super_administrator',
+  'administrator',
+  'manager',
+  'supervisor',
+  'trainer'
+];
+
 // Tous les autres rôles n'ont pas accès au Management Ecosysteia
 export const NON_MANAGEMENT_ROLES: Role[] = [
   'trainer', 'coach', 'facilitator', 'partner_facilitator', 'mentor',
@@ -302,7 +310,7 @@ export interface Objective {
 }
 
 export interface Contact {
-  id: number;
+  id: number | string;
   name: string;
   workEmail: string;
   personalEmail?: string;
@@ -312,6 +320,8 @@ export interface Contact {
   officePhone?: string;
   mobilePhone?: string;
   whatsappNumber?: string;
+  createdById?: string;
+  createdByName?: string;
 }
 
 export interface Document {
@@ -377,6 +387,8 @@ export interface Invoice {
   paidDate?: string;
   paidAmount?: number; // Montant payé pour les factures partiellement payées
   recurringSourceId?: string; // UUID
+  createdById?: string;
+  createdByName?: string;
 }
 
 export interface Expense {
@@ -390,6 +402,8 @@ export interface Expense {
   status: 'Paid' | 'Unpaid';
   budgetItemId?: string; // UUID
   recurringSourceId?: string; // UUID
+  createdById?: string;
+  createdByName?: string;
 }
 
 export type RecurrenceFrequency = 'Monthly' | 'Quarterly' | 'Annually';
@@ -402,6 +416,8 @@ export interface RecurringInvoice {
     startDate: string;
     endDate?: string;
     lastGeneratedDate: string;
+    createdById?: string;
+    createdByName?: string;
 }
 
 export interface RecurringExpense {
@@ -413,6 +429,8 @@ export interface RecurringExpense {
     startDate: string;
     endDate?: string;
     lastGeneratedDate: string;
+    createdById?: string;
+    createdByName?: string;
 }
 
 export interface BudgetItem {
@@ -436,6 +454,8 @@ export interface Budget {
     endDate: string;
     projectId?: string; // UUID
     budgetLines: BudgetLine[];
+    createdById?: string;
+    createdByName?: string;
 }
 
 export interface Meeting {

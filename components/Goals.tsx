@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Project, Objective, KeyResult, Language } from '../types';
+import { Project, Objective, KeyResult, Language, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import { generateOKRs } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import RealtimeService from '../services/realtimeService';
@@ -216,13 +216,20 @@ const Goals: React.FC<GoalsProps> = ({
     // Tous les utilisateurs peuvent créer des objectifs (isolation gérée par RLS)
     const canManage = useMemo(() => {
         if (!currentUser) return false;
-        // Super admin a tous les droits
-        if (currentUser.role === 'super_administrator') {
-            return true;
-        }
-        // Vérifier les permissions de write pour le module goals_okrs
-        return hasPermission('goals_okrs', 'write');
-    }, [currentUser, hasPermission]);
+        return RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
+    }, [currentUser]);
+
+    const canManageObjective = useCallback(
+        (objective: Objective | null) => {
+            if (!currentUser || !objective) return false;
+            const userProfileId = currentUser.profileId ? currentUser.profileId.toString() : currentUser.id?.toString();
+            const objectiveOwnerId = objective.ownerId ? objective.ownerId.toString() : undefined;
+            const isCreator = userProfileId && objectiveOwnerId && userProfileId === objectiveOwnerId;
+            const hasRole = RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
+            return Boolean(isCreator || hasRole);
+        },
+        [currentUser]
+    );
 
     // Calculer la progression globale d'un objectif
     const calculateOverallProgress = (keyResults: KeyResult[]): number => {
@@ -306,6 +313,16 @@ const Goals: React.FC<GoalsProps> = ({
                 alert(t('goal_missing_id_error'));
                 return;
             }
+
+            const targetObjective =
+                editingObjective ||
+                objectives.find(obj => obj.id === objectiveId) ||
+                null;
+
+            if (!canManageObjective(targetObjective)) {
+                alert(t('project_permission_error'));
+                return;
+            }
             
             const objectiveToUpdate: Objective = {
                 ...editingObjective!,
@@ -326,6 +343,11 @@ const Goals: React.FC<GoalsProps> = ({
 
     const handleDeleteObjective = async () => {
         if (objectiveToDelete) {
+            if (!canManageObjective(objectiveToDelete)) {
+                alert(t('project_permission_error'));
+                setObjectiveToDelete(null);
+                return;
+            }
             await onDeleteObjective(objectiveToDelete.id);
             setObjectiveToDelete(null);
         }
@@ -734,10 +756,14 @@ const Goals: React.FC<GoalsProps> = ({
                                                         <i className="fas fa-eye mr-2"></i>
                                                         {localize('View details', 'Voir détails')}
                                                     </button>
-                                                    {canManage && (
+                                                    {canManageObjective(objective) && (
                                                         <div className="flex space-x-3">
                                                             <button
                                                                 onClick={() => {
+                                                                    if (!canManageObjective(objective)) {
+                                                                        alert(t('project_permission_error'));
+                                                                        return;
+                                                                    }
                                                                     setEditingObjective(objective);
                                                                     setIsCreatePageOpen(true);
                                                                 }}
@@ -748,7 +774,13 @@ const Goals: React.FC<GoalsProps> = ({
                                         <i className="fas fa-edit"></i>
                                     </button>
                                                             <button
-                                                                onClick={() => setObjectiveToDelete(objective)}
+                                                                onClick={() => {
+                                                                    if (!canManageObjective(objective)) {
+                                                                        alert(t('project_permission_error'));
+                                                                        return;
+                                                                    }
+                                                                    setObjectiveToDelete(objective);
+                                                                }}
                                                                 disabled={isLoading}
                                                                 className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-2 rounded hover:bg-red-50"
                                                                 title={localize('Delete', 'Supprimer')}

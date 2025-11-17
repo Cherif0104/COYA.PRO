@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, User, TimeLog, MANAGEMENT_ROLES, Language, Translation, Role } from '../types';
+import { Project, User, TimeLog, MANAGEMENT_ROLES, Language, Translation, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import TeamSelector from './common/TeamSelector';
@@ -14,14 +14,6 @@ const statusStyles = {
     'In Progress': 'bg-blue-200 text-blue-800',
     'Completed': 'bg-emerald-200 text-emerald-800',
 };
-
-const PROJECT_MANAGEMENT_ROLES: Role[] = [
-    'super_administrator',
-    'manager',
-    'supervisor',
-    'trainer', // mapped to "professeur" role in the requirements
-    'administrator', // keep admins aligned with legacy access
-];
 
 const ProjectFormModal: React.FC<{
     project: Omit<Project, 'id' | 'tasks' | 'risks'> | Project | null;
@@ -153,7 +145,7 @@ const ProjectDetailModal: React.FC<{
             currentProject?.createdById &&
             currentUser.id &&
             currentProject.createdById.toString() === currentUser.id.toString();
-        const hasRole = PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+        const hasRole = RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
         return Boolean(isCreator || hasRole);
     }, [currentUser, currentProject]);
 
@@ -742,10 +734,12 @@ const ProjectDetailModal: React.FC<{
                                     <i className="fas fa-clock mr-2"></i>
                                         {localize('Log time', 'Heure du journal')}
                                 </button>
-                                <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                    <i className="fas fa-trash mr-2"></i>
-                                        {localize('Delete project', 'Supprimer le projet')}
-                                </button>
+                                {canManageCurrentProject && (
+                                    <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                        <i className="fas fa-trash mr-2"></i>
+                                            {localize('Delete project', 'Supprimer le projet')}
+                                    </button>
+                                )}
                                     </>
                                 )}
                                 
@@ -763,10 +757,12 @@ const ProjectDetailModal: React.FC<{
                                             <i className="fas fa-clock mr-2"></i>
                                             Heure du journal
                                         </button>
-                                        <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                            <i className="fas fa-trash mr-2"></i>
-                                            Supprimer le projet
-                                        </button>
+                                        {canManageCurrentProject && (
+                                            <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                                <i className="fas fa-trash mr-2"></i>
+                                                Supprimer le projet
+                                            </button>
+                                        )}
                                     </>
                                 )}
                                 
@@ -792,10 +788,12 @@ const ProjectDetailModal: React.FC<{
                                             <i className="fas fa-clock mr-2"></i>
                                             {localize('Log time', 'Heure du journal')}
                                         </button>
-                                        <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                            <i className="fas fa-trash mr-2"></i>
-                                            {localize('Delete project', 'Supprimer le projet')}
-                                        </button>
+                                        {canManageCurrentProject && (
+                                            <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                                <i className="fas fa-trash mr-2"></i>
+                                                {localize('Delete project', 'Supprimer le projet')}
+                                            </button>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -1579,7 +1577,15 @@ const ProjectDetailModal: React.FC<{
                 <ConfirmationModal 
                     title={t('delete_project')}
                     message={t('confirm_delete_message')}
-                    onConfirm={() => { onDeleteProject(project.id); onClose(); }}
+                    onConfirm={() => {
+                        if (!canManageCurrentProject) {
+                            alert(t('project_permission_error'));
+                            setDeleteModalOpen(false);
+                            return;
+                        }
+                        onDeleteProject(project.id);
+                        onClose();
+                    }}
                     onCancel={() => setDeleteModalOpen(false)}
                 />
             )}
@@ -1774,7 +1780,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     // Rôles autorisés à créer un projet
     const canCreateProject = useMemo(() => {
         if (!currentUser) return false;
-        return PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+        return RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
     }, [currentUser]);
 
     const canManageProject = useCallback(
@@ -1787,7 +1793,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     return true;
                 }
             }
-            return PROJECT_MANAGEMENT_ROLES.includes(currentUser.role);
+            return RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
         },
         [currentUser]
     );

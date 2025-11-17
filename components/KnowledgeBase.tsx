@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Document } from '../types';
+import { Document, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import { summarizeAndCreateDoc, generateKnowledgeDocument, improveKnowledgeContent } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import { supabase } from '../services/supabaseService';
@@ -314,6 +314,10 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
 
     const handleSaveEdit = async () => {
         if (!editingDocument) return;
+        if (!canEditDocument(editingDocument)) {
+            alert(t('project_permission_error'));
+            return;
+        }
         
         const updated: Document = {
             ...editingDocument,
@@ -349,6 +353,12 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
 
     const handleDelete = async () => {
         if (deletingDocumentId) {
+            const doc = documents.find(d => d.id === deletingDocumentId) || null;
+            if (doc && !canEditDocument(doc)) {
+                alert(t('project_permission_error'));
+                setDeletingDocumentId(null);
+                return;
+            }
             await onDeleteDocument(deletingDocumentId);
             setDeletingDocumentId(null);
         }
@@ -357,10 +367,16 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
     // Tous les utilisateurs peuvent gérer documents (isolation gérée par RLS)
     const canManage = useMemo(() => {
         if (!user) return false;
-        if (user.role === 'super_administrator') return true;
-        return hasPermission('knowledge_base', 'write');
-    }, [user, hasPermission]);
-    const canEdit = (doc: Document) => canManage || doc.createdById === user?.profileId;
+        return RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+    }, [user]);
+    const canEditDocument = useCallback(
+        (doc: Document | null) => {
+            if (!user || !doc) return false;
+            const isCreator = doc.createdById && user.profileId ? doc.createdById === user.profileId : false;
+            return isCreator || RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+        },
+        [user]
+    );
 
     // Métriques améliorées
     const totalDocuments = documents.length;
@@ -676,7 +692,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                                     {doc.category}
                                                 </span>
                                             )}
-                                            {canEdit(doc) && (
+                                            {canEditDocument(doc) && (
                                                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
                                                     <button
                                                         onClick={(e) => {
@@ -723,7 +739,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                                     {doc.createdBy} • {new Date(doc.createdAt).toLocaleDateString('fr-FR')} • {(doc.viewCount || 0)} vues
                                                 </p>
                                             </div>
-                                            {canEdit(doc) && (
+                                            {canEditDocument(doc) && (
                                                 <div className="flex items-center gap-2 ml-4">
                                                     <button
                                                         onClick={(e) => {
@@ -824,7 +840,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                                     </div>
                                                 )}
                                             </div>
-                                            {canEdit(doc) && (
+                                            {canEditDocument(doc) && (
                                                 <div className="flex items-center gap-2 ml-4">
                                                     <button
                                                         onClick={(e) => {
@@ -883,7 +899,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                 >
                                     <i className="fas fa-star"></i>
                                 </button>
-                                {canEdit(viewingDocument) && (
+                                {canEditDocument(viewingDocument) && (
                                     <button
                                         onClick={() => {
                                             setViewingDocument(null);

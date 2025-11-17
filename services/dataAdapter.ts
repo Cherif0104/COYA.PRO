@@ -330,7 +330,7 @@ export class DataAdapter {
           else normalizedStatus = 'Draft';
 
           return {
-          id: invoice.id,
+            id: invoice.id,
             invoiceNumber: invoice.invoice_number || invoice.number || '',
             clientName: invoice.client_name || '',
             amount: Number(invoice.amount) || 0,
@@ -342,7 +342,9 @@ export class DataAdapter {
             } : undefined,
             paidDate: invoice.paid_date || undefined,
             paidAmount: invoice.paid_amount ? Number(invoice.paid_amount) : undefined,
-            recurringSourceId: invoice.recurring_source_id || undefined
+            recurringSourceId: invoice.recurring_source_id || undefined,
+            createdById: invoice.user_id || invoice.created_by || undefined,
+            createdByName: invoice.created_by_name || undefined
           };
         }) || [];
         
@@ -392,7 +394,9 @@ export class DataAdapter {
           } : undefined,
           paidDate: data.paid_date || undefined,
           paidAmount: data.paid_amount ? Number(data.paid_amount) : undefined,
-          recurringSourceId: data.recurring_source_id || undefined
+          recurringSourceId: data.recurring_source_id || undefined,
+          createdById: data.user_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
         
         return convertedInvoice;
@@ -460,7 +464,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           } : undefined,
           paidDate: data.paid_date || undefined,
           paidAmount: data.paid_amount ? Number(data.paid_amount) : undefined,
-          recurringSourceId: data.recurring_source_id || undefined
+          recurringSourceId: data.recurring_source_id || undefined,
+          createdById: data.user_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase mise à jour facture:', error);
@@ -498,7 +504,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           else normalizedStatus = 'Unpaid';
 
           return {
-          id: expense.id,
+            id: expense.id,
             category: expense.category || '',
             description: expense.description || expense.title || '',
             amount: Number(expense.amount) || 0,
@@ -510,7 +516,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             } : undefined,
             status: normalizedStatus,
             budgetItemId: expense.budget_item_id || undefined,
-            recurringSourceId: expense.recurring_source_id || undefined
+            recurringSourceId: expense.recurring_source_id || undefined,
+            createdById: expense.user_id || expense.created_by || undefined,
+            createdByName: expense.created_by_name || undefined
           };
         }) || [];
       } catch (error) {
@@ -548,7 +556,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           } : undefined,
           status: normalizedStatus,
           budgetItemId: data.budget_item_id || undefined,
-          recurringSourceId: data.recurring_source_id || undefined
+          recurringSourceId: data.recurring_source_id || undefined,
+          createdById: data.user_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase création dépense:', error);
@@ -585,7 +595,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           } : undefined,
           status: normalizedStatus,
           budgetItemId: data.budget_item_id || undefined,
-          recurringSourceId: data.recurring_source_id || undefined
+          recurringSourceId: data.recurring_source_id || undefined,
+          createdById: data.user_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase mise à jour dépense:', error);
@@ -630,7 +642,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             frequency: normalizedFrequency,
             startDate: item.start_date || '',
             endDate: item.end_date || undefined,
-            lastGeneratedDate: item.last_generated_date || ''
+            lastGeneratedDate: item.last_generated_date || '',
+            createdById: item.owner_id || item.created_by || undefined,
+            createdByName: item.created_by_name || undefined
           };
         }) || [];
       } catch (error) {
@@ -663,7 +677,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
-          lastGeneratedDate: data.last_generated_date || ''
+          lastGeneratedDate: data.last_generated_date || '',
+          createdById: data.owner_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase création facture récurrente:', error);
@@ -695,7 +711,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
-          lastGeneratedDate: data.last_generated_date || ''
+          lastGeneratedDate: data.last_generated_date || '',
+          createdById: data.owner_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase mise à jour facture récurrente:', error);
@@ -741,7 +759,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             frequency: normalizedFrequency,
             startDate: item.start_date || '',
             endDate: item.end_date || undefined,
-            lastGeneratedDate: item.last_generated_date || ''
+            lastGeneratedDate: item.last_generated_date || '',
+            createdById: item.owner_id || item.created_by || undefined,
+            createdByName: item.created_by_name || undefined
           };
         }) || [];
       } catch (error) {
@@ -775,7 +795,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
-          lastGeneratedDate: data.last_generated_date || ''
+          lastGeneratedDate: data.last_generated_date || '',
+          createdById: data.owner_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase création dépense récurrente:', error);
@@ -808,7 +830,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
-          lastGeneratedDate: data.last_generated_date || ''
+          lastGeneratedDate: data.last_generated_date || '',
+          createdById: data.owner_id || data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         };
       } catch (error) {
         console.error('❌ Erreur Supabase mise à jour dépense récurrente:', error);
@@ -901,7 +925,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
               startDate: budget.start_date || '',
               endDate: budget.end_date || '',
               projectId: budget.project_id || undefined,
-              budgetLines: linesWithItems
+              budgetLines: linesWithItems,
+              createdById: budget.owner_id || undefined,
+              createdByName: budget.created_by_name || undefined
             };
           })
         );
@@ -983,7 +1009,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           officePhone: contact.phone || undefined,
           mobilePhone: contact.phone || undefined,
           whatsappNumber: contact.phone || undefined,
-          personalEmail: undefined
+          personalEmail: undefined,
+          createdById: contact.created_by || undefined,
+          createdByName: contact.created_by_name || undefined
         })) || [];
       } catch (error) {
         console.warn('Erreur Supabase contacts:', error);
@@ -1011,7 +1039,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           notes: data.notes,
           tags: data.tags || [],
           createdAt: data.created_at || new Date().toISOString(),
-          updatedAt: data.updated_at || new Date().toISOString()
+          updatedAt: data.updated_at || new Date().toISOString(),
+          createdById: data.created_by || undefined,
+          createdByName: data.created_by_name || undefined
         } : null;
       } catch (error) {
         console.warn('Erreur Supabase création contact:', error);

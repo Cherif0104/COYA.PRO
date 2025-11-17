@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Invoice, Expense, Receipt, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Project, BudgetLine, BudgetItem } from '../types';
+import { Invoice, Expense, Receipt, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Project, BudgetLine, BudgetItem, RESOURCE_MANAGEMENT_ROLES, Language } from '../types';
 import ConfirmationModal from './common/ConfirmationModal';
 
 const statusStyles: { [key in Invoice['status']]: string } = {
@@ -213,8 +212,8 @@ const InvoiceFormModal: React.FC<{
                                         />
                                         {formData.amount && (
                                             <p className="mt-1 text-xs text-gray-500">
-                                                {t('finance_total_amount_label')}: ${Number(formData.amount).toFixed(2)} | 
-                                                {t('finance_amount_remaining_label')}: ${((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0)).toFixed(2)}
+                                                {t('finance_total_amount_label')}: {formatCurrency(Number(formData.amount) || 0)} | 
+                                                {t('finance_amount_remaining_label')}: {formatCurrency((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0))}
                                             </p>
                                         )}
                                     </div>
@@ -623,9 +622,9 @@ const BudgetDetailModal: React.FC<{
                 <div className="p-6 border-b">
                     <h2 className="text-2xl font-bold">{editedBudget.title}</h2>
                     <div className="flex space-x-4 text-sm mt-2">
-                        <span><strong>{t('total_budget')}:</strong> ${editedBudget.amount.toFixed(2)}</span>
-                        <span><strong>{t('amount_spent')}:</strong> ${totalSpent.toFixed(2)}</span>
-                        <span className={editedBudget.amount - totalSpent < 0 ? 'text-red-500' : 'text-green-500'}><strong>{t('remaining')}:</strong> ${(editedBudget.amount - totalSpent).toFixed(2)}</span>
+                        <span><strong>{t('total_budget')}:</strong> {formatCurrency(editedBudget.amount)}</span>
+                        <span><strong>{t('amount_spent')}:</strong> {formatCurrency(totalSpent)}</span>
+                        <span className={editedBudget.amount - totalSpent < 0 ? 'text-red-500' : 'text-green-500'}><strong>{t('remaining')}:</strong> {formatCurrency(editedBudget.amount - totalSpent)}</span>
                     </div>
                 </div>
                 <div className="p-6 flex-grow overflow-y-auto space-y-4">
@@ -654,8 +653,8 @@ const BudgetDetailModal: React.FC<{
                                         <tr key={item.id}>
                                             <td><input value={item.description} onChange={e => handleItemChange(lIndex, iIndex, 'description', e.target.value)} className="w-full p-1 bg-transparent focus:outline-none focus:bg-white rounded-md"/></td>
                                             <td className="text-right"><input type="number" value={item.amount} onChange={e => handleItemChange(lIndex, iIndex, 'amount', Number(e.target.value))} className="w-24 p-1 text-right bg-transparent focus:outline-none focus:bg-white rounded-md"/></td>
-                                            <td className="text-right">${spent.toFixed(2)}</td>
-                                            <td className={`text-right font-semibold ${remaining < 0 ? 'text-red-500' : 'text-green-600'}`}>${remaining.toFixed(2)}</td>
+                                            <td className="text-right">{formatCurrency(spent)}</td>
+                                            <td className={`text-right font-semibold ${remaining < 0 ? 'text-red-500' : 'text-green-600'}`}>{formatCurrency(remaining)}</td>
                                             <td className="text-center"><button onClick={() => removeItem(lIndex, iIndex)} className="text-gray-400 hover:text-red-500"><i className="fas fa-times-circle"></i></button></td>
                                         </tr>
                                     )})}
@@ -699,6 +698,14 @@ interface FinanceProps {
   onDeleteBudget: (budgetId: string) => Promise<void> | void;
 }
 
+const CURRENCY_RATES = {
+    USD: 1,
+    EUR: 0.92,
+    XOF: 604
+} as const;
+
+type CurrencyCode = keyof typeof CURRENCY_RATES;
+
 const Finance: React.FC<FinanceProps> = (props) => {
     const { 
         invoices, expenses, recurringInvoices, recurringExpenses, budgets, projects,
@@ -708,9 +715,8 @@ const Finance: React.FC<FinanceProps> = (props) => {
         onAddRecurringExpense, onUpdateRecurringExpense, onDeleteRecurringExpense,
         onAddBudget, onUpdateBudget, onDeleteBudget
     } = props;
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
     const { user } = useAuth();
-    const { hasPermission } = useModulePermissions();
     const [activeTab, setActiveTab] = useState<'invoices' | 'expenses' | 'recurring' | 'budgets'>('invoices');
     const [activeRecurringTab, setActiveRecurringTab] = useState<'invoices' | 'expenses'>('invoices');
     
@@ -732,6 +738,26 @@ const Finance: React.FC<FinanceProps> = (props) => {
     const [sortBy, setSortBy] = useState<'date' | 'amount' | 'status' | 'client'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('list');
+
+    const [currency, setCurrency] = useState<CurrencyCode>('USD');
+
+    const getLocale = useMemo(() => (language === Language.FR ? 'fr-FR' : 'en-US'), [language]);
+
+    const formatCurrency = useCallback((value: number) => {
+        const rate = CURRENCY_RATES[currency] || 1;
+        const converted = value * rate;
+        return new Intl.NumberFormat(getLocale, {
+            style: 'currency',
+            currency
+        }).format(converted);
+    }, [currency, getLocale]);
+
+    const currencyLabel = language === Language.FR ? 'Devise' : 'Currency';
+    const currencyOptions: { code: CurrencyCode; label: string }[] = [
+        { code: 'USD', label: 'USD ($)' },
+        { code: 'EUR', label: 'EUR (€)' },
+        { code: 'XOF', label: 'CFA (XOF)' }
+    ];
 
     // Dashboard Metrics Calculations
     const totalRevenue = useMemo(() => {
@@ -779,6 +805,14 @@ const Finance: React.FC<FinanceProps> = (props) => {
 
         return Math.round(totalDaysDiff / paidInvoices.length);
     }, [invoices]);
+
+    const formattedStats = useMemo(() => ({
+        totalRevenue: formatCurrency(totalRevenue),
+        totalExpenses: formatCurrency(totalExpenses),
+        netIncome: formatCurrency(netIncome),
+        outstanding: formatCurrency(totalOutstandingInvoices),
+        dueExpenses: formatCurrency(totalDueExpenses)
+    }), [formatCurrency, totalRevenue, totalExpenses, netIncome, totalOutstandingInvoices, totalDueExpenses]);
 
     const budgetsWithSpent = useMemo(() => {
         return budgets.map(budget => {
@@ -903,12 +937,31 @@ const Finance: React.FC<FinanceProps> = (props) => {
         return filtered;
     }, [expenses, searchQuery, expenseStatusFilter, sortBy, sortOrder]);
 
-    // Tous les utilisateurs peuvent gérer finances (isolation gérée par RLS)
-    const canManage = useMemo(() => {
+    const userProfileId = useMemo(() => {
+        if (!user) return null;
+        if (user.profileId) return String(user.profileId);
+        if (user.id) return String(user.id);
+        return null;
+    }, [user?.profileId, user?.id]);
+
+    const hasManagementRole = useMemo(() => {
         if (!user) return false;
-        if (user.role === 'super_administrator') return true;
-        return hasPermission('finance', 'write');
-    }, [user, hasPermission]);
+        return RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+    }, [user]);
+
+    const canManage = hasManagementRole;
+
+    const canManageEntity = useCallback(
+        (ownerId?: string | null) => {
+            if (!user) return false;
+            const normalizedOwner = ownerId ? ownerId.toString() : null;
+            return Boolean(
+                (userProfileId && normalizedOwner && normalizedOwner === userProfileId) ||
+                hasManagementRole
+            );
+        },
+        [user, userProfileId, hasManagementRole]
+    );
     
     const handleOpenInvoiceModal = (invoice: Invoice | null = null) => {
         setEditingInvoice(invoice);
@@ -976,11 +1029,46 @@ const Finance: React.FC<FinanceProps> = (props) => {
     
     const confirmDelete = async () => {
         if(!deletingId) return;
-        if(deletingId.type === 'invoice') { await onDeleteInvoice(deletingId.id); }
-        else if (deletingId.type === 'expense') { await onDeleteExpense(deletingId.id); }
-        else if (deletingId.type === 'recurringInvoice') { await onDeleteRecurringInvoice(deletingId.id); }
-        else if (deletingId.type === 'recurringExpense') { await onDeleteRecurringExpense(deletingId.id); }
-        else if (deletingId.type === 'budget') { await onDeleteBudget(deletingId.id); }
+        const { type, id } = deletingId;
+
+        const resolveOwnerId = (): string | null => {
+            switch (type) {
+                case 'invoice': {
+                    const target = invoices.find(inv => inv.id === id);
+                    return target?.createdById ? String(target.createdById) : null;
+                }
+                case 'expense': {
+                    const target = expenses.find(exp => exp.id === id);
+                    return target?.createdById ? String(target.createdById) : null;
+                }
+                case 'recurringInvoice': {
+                    const target = recurringInvoices.find(ri => ri.id === id);
+                    return target?.createdById ? String(target.createdById) : null;
+                }
+                case 'recurringExpense': {
+                    const target = recurringExpenses.find(re => re.id === id);
+                    return target?.createdById ? String(target.createdById) : null;
+                }
+                case 'budget': {
+                    const target = budgets.find(b => b.id === id);
+                    return target?.createdById ? String(target.createdById) : null;
+                }
+                default:
+                    return null;
+            }
+        };
+
+        if (!canManageEntity(resolveOwnerId())) {
+            alert(t('project_permission_error'));
+            setDeletingId(null);
+            return;
+        }
+
+        if(type === 'invoice') { await onDeleteInvoice(id); }
+        else if (type === 'expense') { await onDeleteExpense(id); }
+        else if (type === 'recurringInvoice') { await onDeleteRecurringInvoice(id); }
+        else if (type === 'recurringExpense') { await onDeleteRecurringExpense(id); }
+        else if (type === 'budget') { await onDeleteBudget(id); }
         setDeletingId(null);
     }
     
@@ -995,6 +1083,10 @@ const Finance: React.FC<FinanceProps> = (props) => {
     }
 
     const handleToggleExpenseStatus = async (expense: Expense) => {
+        if (!canManageEntity(expense.createdById)) {
+            alert(t('project_permission_error'));
+            return;
+        }
         const newStatus = expense.status === 'Paid' ? 'Unpaid' : 'Paid';
         await onUpdateExpense({ ...expense, status: newStatus });
     };
@@ -1040,6 +1132,22 @@ const Finance: React.FC<FinanceProps> = (props) => {
                 </div>
             </div>
 
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-end">
+                <label className="text-sm font-semibold text-gray-600 mr-3 flex items-center">
+                    <i className="fas fa-coins mr-2 text-emerald-600"></i>
+                    {currencyLabel}
+                </label>
+                <select
+                    value={currency}
+                    onChange={e => setCurrency(e.target.value as CurrencyCode)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-700"
+                >
+                    {currencyOptions.map(option => (
+                        <option key={option.code} value={option.code}>{option.label}</option>
+                    ))}
+                </select>
+            </div>
+
             {/* Métriques Power BI style */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1048,14 +1156,14 @@ const Finance: React.FC<FinanceProps> = (props) => {
                             <span className="text-sm font-medium text-gray-600">{t('total_revenue')}</span>
                             <i className="fas fa-arrow-up text-2xl text-green-500"></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
+                        <p className="text-3xl font-bold text-gray-900">{formattedStats.totalRevenue}</p>
                     </div>
                     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-600">{t('total_expenses')}</span>
                             <i className="fas fa-arrow-down text-2xl text-red-500"></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">${totalExpenses.toFixed(2)}</p>
+                        <p className="text-3xl font-bold text-gray-900">{formattedStats.totalExpenses}</p>
                     </div>
                     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
                         <div className="flex items-center justify-between mb-2">
@@ -1063,7 +1171,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                             <i className="fas fa-dollar-sign text-2xl text-blue-500"></i>
                         </div>
                         <p className={`text-3xl font-bold ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ${netIncome.toFixed(2)}
+                            {formattedStats.netIncome}
                         </p>
                     </div>
                     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
@@ -1071,14 +1179,14 @@ const Finance: React.FC<FinanceProps> = (props) => {
                             <span className="text-sm font-medium text-gray-600">{t('total_outstanding_invoices')}</span>
                             <i className="fas fa-file-invoice text-2xl text-orange-500"></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">${totalOutstandingInvoices.toFixed(2)}</p>
+                        <p className="text-3xl font-bold text-gray-900">{formattedStats.outstanding}</p>
                     </div>
                     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-600">{t('total_due_expenses')}</span>
                             <i className="fas fa-money-bill-wave text-2xl text-yellow-500"></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">${totalDueExpenses.toFixed(2)}</p>
+                        <p className="text-3xl font-bold text-gray-900">{formattedStats.dueExpenses}</p>
                     </div>
                     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
                         <div className="flex items-center justify-between mb-2">
@@ -1239,7 +1347,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <th className="px-6 py-3">{t('due_date')}</th>
                                         <th className="px-6 py-3">{t('status')}</th>
                                         <th className="px-6 py-3">{t('receipt')}</th>
-                                        {canManage && <th className="px-6 py-3 text-right">{t('actions')}</th>}
+                                        <th className="px-6 py-3 text-right">{t('actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
@@ -1252,11 +1360,11 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                 <td className="px-6 py-4">
                                                     {inv.status === 'Partially Paid' ? (
                                                         <div className="flex flex-col">
-                                                            <span className="font-medium">${(inv.paidAmount || 0).toFixed(2)} / ${inv.amount.toFixed(2)}</span>
-                                                            <span className="text-xs text-gray-500">Reste: ${(inv.amount - (inv.paidAmount || 0)).toFixed(2)}</span>
+                                                            <span className="font-medium">{formatCurrency(inv.paidAmount || 0)} / {formatCurrency(inv.amount)}</span>
+                                                            <span className="text-xs text-gray-500">{t('remaining')}: {formatCurrency(inv.amount - (inv.paidAmount || 0))}</span>
                                                         </div>
                                                     ) : (
-                                                        <span>${inv.amount.toFixed(2)}</span>
+                                                        <span>{formatCurrency(inv.amount)}</span>
                                                     )}
                                                 </td>
                                                 <td className={`px-6 py-4 ${finalStatus === 'Overdue' ? 'font-bold text-red-600' : ''}`}>{inv.dueDate}</td>
@@ -1269,10 +1377,14 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                         </div>
                                                     ) : (<span className="text-gray-400 text-xs">{t('no_receipt_attached')}</span>)}
                                                 </td>
-                                                {canManage && <td className="px-6 py-4 text-right space-x-2">
-                                                    <button onClick={() => handleOpenInvoiceModal(inv)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
-                                                    <button onClick={() => setDeletingId({type: 'invoice', id: inv.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
-                                                </td>}
+                                                <td className="px-6 py-4 text-right space-x-2">
+                                                    {canManageEntity(inv.createdById) && (
+                                                        <>
+                                                            <button onClick={() => handleOpenInvoiceModal(inv)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
+                                                            <button onClick={() => setDeletingId({type: 'invoice', id: inv.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                                        </>
+                                                    )}
+                                                </td>
                                             </tr>
                                         )
                                     })}
@@ -1375,7 +1487,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <th className="px-6 py-3">{t('amount')}</th>
                                         <th className="px-6 py-3">{t('payable_by')}</th>
                                         <th className="px-6 py-3">{t('receipt')}</th>
-                                        {canManage && <th className="px-6 py-3 text-right">{t('actions')}</th>}
+                                        <th className="px-6 py-3 text-right">{t('actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
@@ -1402,7 +1514,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         </td>
                                         <td className="px-6 py-4">{exp.date}</td>
                                         <td className="px-6 py-4 font-medium text-gray-900">{exp.description}</td>
-                                        <td className="px-6 py-4">${exp.amount.toFixed(2)}</td>
+                                        <td className="px-6 py-4">{formatCurrency(exp.amount)}</td>
                                         <td className="px-6 py-4">{exp.dueDate || 'N/A'}</td>
                                          <td className="px-6 py-4">
                                             {exp.receipt ? (
@@ -1412,10 +1524,14 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                 </div>
                                             ) : (<span className="text-gray-400 text-xs">{t('no_receipt_attached')}</span>)}
                                         </td>
-                                        {canManage && <td className="px-6 py-4 text-right space-x-2">
-                                            <button onClick={() => handleOpenExpenseModal(exp)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
-                                            <button onClick={() => setDeletingId({type: 'expense', id: exp.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
-                                        </td>}
+                                        <td className="px-6 py-4 text-right space-x-2">
+                                            {canManageEntity(exp.createdById) && (
+                                                <>
+                                                    <button onClick={() => handleOpenExpenseModal(exp)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
+                                                    <button onClick={() => setDeletingId({type: 'expense', id: exp.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                                </>
+                                            )}
+                                        </td>
                                     </tr>
                                     ))}
                                 </tbody>
@@ -1446,15 +1562,19 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                             <tr>
                                                 <th className="px-6 py-3">{t('client_name')}</th><th className="px-6 py-3">{t('amount')}</th>
                                                 <th className="px-6 py-3">{t('frequency')}</th><th className="px-6 py-3">{t('next_due_date')}</th>
-                                                {canManage && <th className="px-6 py-3 text-right">{t('actions')}</th>}
+                                                <th className="px-6 py-3 text-right">{t('actions')}</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {recurringInvoices.map(ri => (
                                                 <tr key={ri.id} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 font-medium">{ri.clientName}</td><td className="px-6 py-4">${ri.amount.toFixed(2)}</td>
+                                                <td className="px-6 py-4 font-medium">{ri.clientName}</td><td className="px-6 py-4">{formatCurrency(ri.amount)}</td>
                                                     <td className="px-6 py-4">{t(ri.frequency.toLowerCase())}</td><td className="px-6 py-4">{getNextDueDate(ri)}</td>
-                                                    {canManage && <td className="px-6 py-4 text-right"><button onClick={() => setDeletingId({type: 'recurringInvoice', id: ri.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button></td>}
+                                                    <td className="px-6 py-4 text-right">
+                                                        {canManageEntity(ri.createdById) && (
+                                                            <button onClick={() => setDeletingId({type: 'recurringInvoice', id: ri.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1466,15 +1586,19 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                             <tr>
                                                 <th className="px-6 py-3">{t('description')}</th><th className="px-6 py-3">{t('amount')}</th>
                                                 <th className="px-6 py-3">{t('frequency')}</th><th className="px-6 py-3">{t('next_due_date')}</th>
-                                                {canManage && <th className="px-6 py-3 text-right">{t('actions')}</th>}
+                                                <th className="px-6 py-3 text-right">{t('actions')}</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {recurringExpenses.map(re => (
                                                 <tr key={re.id} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 font-medium">{re.description}</td><td className="px-6 py-4">${re.amount.toFixed(2)}</td>
+                                                <td className="px-6 py-4 font-medium">{re.description}</td><td className="px-6 py-4">{formatCurrency(re.amount)}</td>
                                                     <td className="px-6 py-4">{t(re.frequency.toLowerCase())}</td><td className="px-6 py-4">{getNextDueDate(re)}</td>
-                                                    {canManage && <td className="px-6 py-4 text-right"><button onClick={() => setDeletingId({type: 'recurringExpense', id: re.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button></td>}
+                                                    <td className="px-6 py-4 text-right">
+                                                        {canManageEntity(re.createdById) && (
+                                                            <button onClick={() => setDeletingId({type: 'recurringExpense', id: re.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1505,7 +1629,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <div className="mt-4">
                                             <div className="flex justify-between text-sm mb-1">
                                                 <span className="text-gray-600">{t('amount_spent')}</span>
-                                                <span className="font-semibold">${spent.toFixed(2)}</span>
+                                                <span className="font-semibold">{formatCurrency(spent)}</span>
                                             </div>
                                             <div className="w-full bg-gray-200 rounded-full h-4">
                                                 <div 
@@ -1513,15 +1637,15 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                     style={{ width: `${Math.min(progress, 100)}%` }}
                                                 ></div>
                                             </div>
-                                             <div className="flex justify-between text-sm mt-1">
-                                                <span className="text-gray-600">{t('remaining')}: <span className={remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600'}>${remaining.toFixed(2)}</span></span>
-                                                <span className="font-bold text-gray-800">${budget.amount.toFixed(2)}</span>
+                                            <div className="flex justify-between text-sm mt-1">
+                                                <span className="text-gray-600">{t('remaining')}: <span className={remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600'}>{formatCurrency(remaining)}</span></span>
+                                                <span className="font-bold text-gray-800">{formatCurrency(budget.amount)}</span>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="mt-4 border-t pt-3 flex justify-end space-x-4">
                                         <button onClick={() => handleOpenBudgetDetailModal(budget)} className="text-sm font-semibold text-emerald-600 hover:text-emerald-800">{t('view_details')}</button>
-                                        {canManage && <>
+                                        {canManageEntity(budget.createdById) && <>
                                             <button onClick={() => handleOpenBudgetModal(budget)} className="text-sm font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
                                             <button onClick={() => setDeletingId({type: 'budget', id: budget.id})} className="text-sm font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
                                         </>}
