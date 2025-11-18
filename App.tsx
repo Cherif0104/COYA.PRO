@@ -487,6 +487,114 @@ const App: React.FC = () => {
     setPendingNotification(null);
   }, []);
 
+  const handleActivityLogNavigate = useCallback((entityType: string, entityId?: string, metadata?: Record<string, any>) => {
+    const type = entityType.toLowerCase();
+    const normalizedId = entityId ? String(entityId) : undefined;
+    const meta = metadata || {};
+    const route = meta.route as string | undefined;
+    const autoOpenId = (meta.autoOpenEntityId ?? normalizedId) as string | undefined;
+
+    const navigateFromRoute = (targetRoute: string, routeMeta?: Record<string, any>) => {
+      try {
+        const url = new URL(targetRoute, window.location.origin);
+        const path = url.pathname.replace(/^\//, '');
+        const tab = url.searchParams.get('tab') || routeMeta?.tab;
+
+        switch (path) {
+          case '':
+          case 'dashboard':
+            setPendingNotification(null);
+            handleSetView('dashboard');
+            return true;
+          case 'time-tracking':
+            setPendingNotification({
+              entityType: 'time_tracking',
+              metadata: { tab: tab || routeMeta?.tab }
+            });
+            handleSetView('time_tracking');
+            return true;
+          case 'projects':
+            setPendingNotification({
+              entityType: 'project',
+              entityId: autoOpenId
+            });
+            handleSetView('projects');
+            return true;
+          case 'finance':
+            setPendingNotification(null);
+            handleSetView('finance');
+            return true;
+          case 'goals-okrs':
+          case 'goals':
+            setPendingNotification({
+              entityType: 'goal',
+              metadata: { section: tab || routeMeta?.section }
+            });
+            handleSetView('goals_okrs');
+            return true;
+          case 'knowledge':
+            setPendingNotification(null);
+            handleSetView('knowledge_base');
+            return true;
+          default:
+            return false;
+        }
+      } catch (error) {
+        console.warn('Navigation activity log route invalide:', targetRoute, error);
+        return false;
+      }
+    };
+
+    if (route && navigateFromRoute(route, meta)) {
+      return;
+    }
+
+    if (type === 'project' || type === 'projects') {
+      setPendingNotification({ entityType: 'project', entityId: autoOpenId });
+      handleSetView('projects');
+      return;
+    }
+
+    if (type === 'course' || type === 'courses') {
+      setPendingNotification({ entityType: 'course', entityId: autoOpenId });
+      handleSetView('courses');
+      return;
+    }
+
+    if (type === 'time_log' || type === 'time_tracking') {
+      setPendingNotification({ entityType: 'time_tracking', metadata: meta });
+      handleSetView('time_tracking');
+      return;
+    }
+
+    if (type === 'leave_request' || type === 'leave' || type === 'leave_management') {
+      setPendingNotification(null);
+      handleSetView('leave_management');
+      return;
+    }
+
+    if (type === 'invoice' || type === 'expense' || type === 'budget' || type === 'finance') {
+      setPendingNotification(null);
+      handleSetView('finance');
+      return;
+    }
+
+    if (type === 'goal' || type === 'objective') {
+      setPendingNotification({ entityType: 'goal', metadata: meta });
+      handleSetView('goals_okrs');
+      return;
+    }
+
+    if (type === 'knowledge' || type === 'document') {
+      setPendingNotification(null);
+      handleSetView('knowledge_base');
+      return;
+    }
+
+    setPendingNotification(null);
+    handleSetView('dashboard');
+  }, [handleSetView]);
+
   const handleSelectCourse = useCallback((id: string) => {
     setSelectedCourseId(id);
     handleSetView('course_detail');
@@ -2607,7 +2715,7 @@ const App: React.FC = () => {
           />
         );
       case 'activity_logs':
-        return <ActivityLogsPage />;
+        return <ActivityLogsPage onNavigate={handleActivityLogNavigate} />;
       case 'leave_management':
         return <LeaveManagement 
                     leaveRequests={leaveRequests}
