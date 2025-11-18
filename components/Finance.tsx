@@ -933,9 +933,9 @@ const BudgetFormModal: React.FC<{
                                 </select>
                             </div>
                         )}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">{t('end_date')}</label>
-                            <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('end_date')}</label>
+                                <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
                         </div>
                     </div>
                     <div className="p-4 bg-gray-50 border-t flex justify-end space-x-2">
@@ -1025,7 +1025,7 @@ const BudgetDetailModal: React.FC<{
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b">
                     <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-2xl font-bold">{editedBudget.title}</h2>
+                    <h2 className="text-2xl font-bold">{editedBudget.title}</h2>
                         {editedBudget.currencyCode && (
                             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                                 {t('finance_currency_field_label')}: {editedBudget.currencyCode}
@@ -1860,8 +1860,8 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                 <td className="px-6 py-4 text-right space-x-2">
                                                     {canManageEntity(inv.createdById) && (
                                                         <>
-                                                            <button onClick={() => handleOpenInvoiceModal(inv)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
-                                                            <button onClick={() => setDeletingId({type: 'invoice', id: inv.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                                    <button onClick={() => handleOpenInvoiceModal(inv)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
+                                                    <button onClick={() => setDeletingId({type: 'invoice', id: inv.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
                                                         </>
                                                     )}
                                                 </td>
@@ -2020,8 +2020,8 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <td className="px-6 py-4 text-right space-x-2">
                                             {canManageEntity(exp.createdById) && (
                                                 <>
-                                                    <button onClick={() => handleOpenExpenseModal(exp)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
-                                                    <button onClick={() => setDeletingId({type: 'expense', id: exp.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
+                                            <button onClick={() => handleOpenExpenseModal(exp)} className="font-medium text-blue-600 hover:text-blue-800">{t('edit')}</button>
+                                            <button onClick={() => setDeletingId({type: 'expense', id: exp.id})} className="font-medium text-red-600 hover:text-red-800">{t('delete')}</button>
                                                 </>
                                             )}
                                         </td>
@@ -2169,7 +2169,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                     style={{ width: `${Math.min(progress, 100)}%` }}
                                                 ></div>
                                             </div>
-                                            <div className="flex justify-between text-sm mt-1">
+                                             <div className="flex justify-between text-sm mt-1">
                                                 <span className="text-gray-600">{t('remaining')}: <span className={remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600'}>{formatCurrency(remaining, budget.currencyCode, budget.startDate)}</span></span>
                                                 <div className="flex flex-col items-end">
                                                     <span className="font-bold text-gray-800">{formatCurrency(budget.amount, budget.currencyCode, budget.startDate)}</span>
