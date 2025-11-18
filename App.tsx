@@ -8,6 +8,7 @@ import DataAdapter from './services/dataAdapter';
 import DataService from './services/dataService';
 import { logger } from './services/loggerService';
 import NotificationHelper from './services/notificationHelper';
+import AuditLogService from './services/auditLogService';
 import { Notification } from './services/notificationService';
 
 import Login from './components/Login';
@@ -42,6 +43,7 @@ import { supabase } from './services/supabaseService';
 import OrganizationManagement from './components/OrganizationManagement';
 import { useModulePermissions } from './hooks/useModulePermissions';
 import NotificationsPage from './components/NotificationsPage';
+import ActivityLogsPage from './components/ActivityLogsPage';
 
 
 const App: React.FC = () => {
@@ -1228,6 +1230,16 @@ const App: React.FC = () => {
       NotificationHelper.notifyMeetingScheduled(newMeeting, user as any).catch(err => {
         console.warn('Notification meeting', err);
       });
+      AuditLogService.logAction({
+        action: 'create',
+        module: 'time_tracking',
+        entityType: 'meeting',
+        entityId: newMeeting.id as string,
+        actor: user as any,
+        metadata: {
+          summary: `${user?.name || 'Utilisateur'} a planifié "${newMeeting.title}"`
+        }
+      });
     } catch (error) {
       console.error('Erreur création meeting:', error);
     }
@@ -1341,6 +1353,16 @@ const App: React.FC = () => {
       NotificationHelper.notifyTimeLogCreated(newLog, user as any).catch(err => {
         console.warn('Notification time log', err);
       });
+      AuditLogService.logAction({
+        action: 'create',
+        module: 'time_tracking',
+        entityType: 'time_log',
+        entityId: newLog.id,
+        actor: user as any,
+        metadata: {
+          summary: `${user.name} a enregistré ${newLog.duration} minutes sur ${newLog.entityTitle}`
+        }
+      });
     } catch (error) {
       console.error('Erreur création time log:', error);
     }
@@ -1352,6 +1374,16 @@ const App: React.FC = () => {
       await DataAdapter.deleteTimeLog(logId);
       updateTimeLogsWithProducer(prev => prev.filter(log => log.id !== logId));
       console.log('✅ Time log supprimé avec succès');
+      AuditLogService.logAction({
+        action: 'delete',
+        module: 'time_tracking',
+        entityType: 'time_log',
+        entityId: logId,
+        actor: user as any,
+        metadata: {
+          summary: `${user?.name || 'Utilisateur'} a supprimé un time log`
+        }
+      });
     } catch (error) {
       console.error('Erreur suppression time log:', error);
     }
@@ -1556,6 +1588,16 @@ const App: React.FC = () => {
           NotificationHelper.notifyProjectCreated(newProject, user as any).catch(err => {
             console.error('Erreur notification projet créé:', err);
           });
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'project',
+            entityType: 'project',
+            entityId: newProject.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé le projet "${newProject.title}"`
+            }
+          });
         }
         
         // Recharger les projets pour s'assurer que les données sont à jour
@@ -1600,6 +1642,16 @@ const App: React.FC = () => {
           NotificationHelper.notifyProjectUpdated(updatedProject, user as any).catch(err => {
             console.error('Erreur notification projet modifié:', err);
           });
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'project',
+            entityType: 'project',
+            entityId: updatedProject.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a modifié le projet "${updatedProject.title}"`
+            }
+          });
         }
       } else {
         console.error('❌ Échec de la mise à jour du projet');
@@ -1629,6 +1681,16 @@ const App: React.FC = () => {
         setObjectives(prev => filterObjectivesForUser(prev.filter(o => o.projectId !== projectId), allowedIdsAfterDeletion));
         updateTimeLogsWithProducer(prev => prev.filter(log => !(log.entityType === 'project' && String(log.entityId) === String(projectId))));
         console.log('✅ Projet supprimé avec succès');
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'project',
+          entityType: 'project',
+          entityId: projectId,
+          actor: user as any,
+          metadata: {
+            summary: `${user?.name || 'Utilisateur'} a supprimé un projet`
+          }
+        });
       } else {
         console.error('❌ Échec de la suppression du projet');
         throw new Error('Échec de la suppression du projet');
@@ -1666,6 +1728,16 @@ const App: React.FC = () => {
           NotificationHelper.notifyObjectiveCreated(newObjective, user as any).catch(err => {
             console.error('Erreur notification objectif créé:', err);
           });
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'goal',
+            entityType: 'goal',
+            entityId: newObjective.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé l'objectif "${newObjective.title}"`
+            }
+          });
         }
       } else {
         throw new Error('Aucun objectif retourné par le serveur');
@@ -1691,6 +1763,18 @@ const App: React.FC = () => {
       if (updated) {
         setObjectives(prev => filterObjectivesForUser(prev.map(o => o.id === updated.id ? updated : o), new Set(accessibleProjectIds.map(id => String(id)))));
         console.log('✅ Objectif mis à jour avec succès');
+        if (user) {
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'goal',
+            entityType: 'goal',
+            entityId: updated.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a mis à jour l'objectif "${updated.title}"`
+            }
+          });
+        }
       } else {
         throw new Error('Aucun objectif retourné par le serveur');
       }
@@ -1715,6 +1799,18 @@ const App: React.FC = () => {
       if (success) {
         setObjectives(prev => filterObjectivesForUser(prev.filter(o => o.id !== objectiveId), new Set(accessibleProjectIds.map(id => String(id)))));
         console.log('✅ Objectif supprimé avec succès');
+        if (user) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'goal',
+            entityType: 'goal',
+            entityId: objectiveId,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé un objectif`
+            }
+          });
+        }
       } else {
         throw new Error('Échec de la suppression');
       }
@@ -2023,6 +2119,8 @@ const App: React.FC = () => {
             onNavigateToEntity={handleNotificationNavigate}
           />
         );
+      case 'activity_logs':
+        return <ActivityLogsPage />;
       case 'leave_management':
         return <LeaveManagement 
                     leaveRequests={leaveRequests}
