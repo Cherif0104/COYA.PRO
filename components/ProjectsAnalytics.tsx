@@ -167,31 +167,39 @@ const ProjectsAnalytics: React.FC<ProjectsAnalyticsProps> = ({ projects }) => {
     };
 
     const handleExportTasks = () => {
-        const rows = projects.flatMap(project =>
-            (project.tasks || []).map(task => ({
-                'Projet ID': project.id,
-                'Projet': project.title,
-                'Tâche': task.text,
-                'Statut': task.status,
-                'Priorité': task.priority,
-                'Assigné à': task.assignee?.name || '',
-                "Date d'échéance": task.dueDate || ''
-            }))
-        );
+        const rows = projects.reduce((acc: any[], project) => {
+            const projectTasks = Array.isArray(project.tasks) ? project.tasks : [];
+            projectTasks.forEach(task => {
+                acc.push({
+                    'Projet ID': project.id,
+                    'Projet': project.title,
+                    'Tâche': task.text,
+                    'Statut': task.status,
+                    'Priorité': task.priority,
+                    'Assigné à': task.assignee?.name || '',
+                    "Date d'échéance": task.dueDate || ''
+                });
+            });
+            return acc;
+        }, []);
         exportToCSV(rows, `project_tasks_${new Date().toISOString().split('T')[0]}.csv`);
     };
 
     const handleExportRisks = () => {
-        const rows = projects.flatMap(project =>
-            (project.risks || []).map(risk => ({
-                'Projet ID': project.id,
-                'Projet': project.title,
-                'Description': risk.description,
-                'Probabilité': risk.likelihood,
-                'Impact': risk.impact,
-                'Mitigation': risk.mitigationStrategy
-            }))
-        );
+        const rows = projects.reduce((acc: any[], project) => {
+            const projectRisks = Array.isArray(project.risks) ? project.risks : [];
+            projectRisks.forEach(risk => {
+                acc.push({
+                    'Projet ID': project.id,
+                    'Projet': project.title,
+                    'Description': risk.description,
+                    'Probabilité': risk.likelihood,
+                    'Impact': risk.impact,
+                    'Mitigation': risk.mitigationStrategy
+                });
+            });
+            return acc;
+        }, []);
         exportToCSV(rows, `project_risks_${new Date().toISOString().split('T')[0]}.csv`);
     };
 

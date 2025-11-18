@@ -1613,6 +1613,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const { t, language } = useLocalization();
     const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
+    const locale = language === Language.FR ? 'fr-FR' : 'en-US';
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -1859,8 +1860,17 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const totalProjects = projects.length;
     const activeProjects = projects.filter(p => p.status === 'In Progress').length;
     const completedProjects = projects.filter(p => p.status === 'Completed').length;
-    const totalTasks = projects.reduce((sum, p) => sum + (p.tasks?.length || 0), 0);
-    const totalTeamMembers = new Set(projects.flatMap(p => p.team.map(m => m.id))).size;
+    const totalTasks = projects.reduce((sum, p) => sum + (Array.isArray(p.tasks) ? p.tasks.length : 0), 0);
+    const allTeamMemberIds: string[] = [];
+    projects.forEach(project => {
+        const teamMembers = Array.isArray(project.team) ? project.team : [];
+        teamMembers.forEach(member => {
+            if (member?.id !== undefined && member?.id !== null) {
+                allTeamMemberIds.push(member.id.toString());
+            }
+        });
+    });
+    const totalTeamMembers = new Set(allTeamMemberIds).size;
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -1951,7 +1961,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                     <li key={`overdue-${project.id}`}>
                                                         {project.title} —{' '}
                                                         {project.dueDate
-                                                            ? new Date(project.dueDate).toLocaleDateString(getLocale)
+                                                            ? new Date(project.dueDate).toLocaleDateString(locale)
                                                             : '-'}
                                                     </li>
                                                 ))}
