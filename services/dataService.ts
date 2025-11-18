@@ -1573,6 +1573,9 @@ export class DataService {
         budget.startDate,
         (budget as any).manualExchangeRate || budget.exchangeRate || undefined
       );
+      
+      // Pour les budgets, on n'utilise pas transaction_date (la table budgets n'a pas cette colonne)
+      const { transaction_date, ...budgetCurrencyPayload } = currencyPayload;
 
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
@@ -1588,7 +1591,7 @@ export class DataService {
           created_by_name: creatorName,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          ...currencyPayload
+          ...budgetCurrencyPayload
         })
         .select()
         .single();
@@ -1661,7 +1664,9 @@ export class DataService {
           updates.startDate || (updates as any).transactionDate,
           (updates as any).manualExchangeRate || updates.exchangeRate || undefined
         );
-        Object.assign(updateData, currencyPayload);
+        // Pour les budgets, on n'utilise pas transaction_date (la table budgets n'a pas cette colonne)
+        const { transaction_date, ...budgetCurrencyPayload } = currencyPayload;
+        Object.assign(updateData, budgetCurrencyPayload);
       }
 
       const { data, error } = await supabase
