@@ -511,13 +511,19 @@ const InvoiceFormModal: React.FC<{
 const ExpenseFormModal: React.FC<{
     expense: Expense | null;
     budgets: Budget[];
+    expenses: Expense[];
     onClose: () => void;
     onSave: (expense: Expense | Omit<Expense, 'id'>) => void;
     onSaveRecurring: (data: Omit<RecurringExpense, 'id'>) => void;
-}> = ({ expense, budgets, onClose, onSave, onSaveRecurring }) => {
-    const { t } = useLocalization();
+}> = ({ expense, budgets, expenses, onClose, onSave, onSaveRecurring }) => {
+    const { t, language } = useLocalization();
     const isEditMode = expense !== null;
     const [isRecurring, setIsRecurring] = useState(false);
+    const locale = language === Language.FR ? 'fr-FR' : 'en-US';
+    
+    const formatBudgetCurrency = useCallback((value: number, currencyCode: CurrencyCode = 'USD') => {
+        return CurrencyService.formatCurrency(value, currencyCode, locale);
+    }, [locale]);
 
     const [formData, setFormData] = useState({
         category: expense?.category || 'Software',
@@ -720,21 +726,34 @@ const ExpenseFormModal: React.FC<{
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">{t('link_to_budget')}</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('link_to_budget')} <span className="text-xs text-gray-500 font-normal">({t('optional')})</span>
+                                    </label>
                                     <select name="budgetItemId" value={formData.budgetItemId} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md">
-                                        <option value="">{t('no_budget')}</option>
+                                        <option value="">{t('no_budget') || 'Aucun budget'}</option>
                                         {budgets.map(b => (
-                                            <optgroup key={b.id} label={b.title}>
+                                            <optgroup key={b.id} label={`${b.title} (${b.type})`}>
                                                 {b.budgetLines.map(line => (
-                                                    line.items.map(item => (
-                                                        <option key={item.id} value={item.id}>
-                                                            {line.title} - {item.description}
-                                                        </option>
-                                                    ))
+                                                    line.items.map(item => {
+                                                        const spent = expenses.filter(e => e.budgetItemId === item.id).reduce((sum, e) => sum + e.amount, 0);
+                                                        const remaining = item.amount - spent;
+                                                        const budgetCurrency = b.currencyCode || 'USD';
+                                                        const remainingText = remaining >= 0 
+                                                            ? ` - Restant: ${formatBudgetCurrency(remaining, budgetCurrency)}` 
+                                                            : ` - Dépassé: ${formatBudgetCurrency(Math.abs(remaining), budgetCurrency)}`;
+                                                        return (
+                                                            <option key={item.id} value={item.id}>
+                                                                {line.title} → {item.description} ({formatBudgetCurrency(item.amount, budgetCurrency)}){remainingText}
+                                                            </option>
+                                                        );
+                                                    })
                                                 ))}
                                             </optgroup>
                                         ))}
                                     </select>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        {t('link_to_budget_help') || 'Lier cette dépense à un poste de budget pour suivre les dépenses par rapport au budget prévu.'}
+                                    </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">{t('receipt')}</label>
@@ -1993,7 +2012,28 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">{exp.date}</td>
-                                        <td className="px-6 py-4 font-medium text-gray-900">{exp.description}</td>
+                                        <td className="px-6 py-4 font-medium text-gray-900">
+                                            <div className="flex items-center space-x-2">
+                                                <span>{exp.description}</span>
+                                                {exp.budgetItemId && (() => {
+                                                    const budget = budgets.find(b => 
+                                                        b.budgetLines.some(line => 
+                                                            line.items.some(item => item.id === exp.budgetItemId)
+                                                        )
+                                                    );
+                                                    const budgetLine = budget?.budgetLines.find(line => 
+                                                        line.items.some(item => item.id === exp.budgetItemId)
+                                                    );
+                                                    const budgetItem = budgetLine?.items.find(item => item.id === exp.budgetItemId);
+                                                    return budget && budgetItem ? (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title={`Budget: ${budget.title} - ${budgetLine?.title} - ${budgetItem.description}`}>
+                                                            <i className="fas fa-link mr-1"></i>
+                                                            {budget.title}
+                                                        </span>
+                                                    ) : null;
+                                                })()}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span>{formatCurrency(exp.amount, exp.currencyCode, exp.transactionDate)}</span>
@@ -2211,7 +2251,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
         </div>
         
         {isInvoiceModalOpen && <InvoiceFormModal invoice={editingInvoice} onClose={() => setInvoiceModalOpen(false)} onSave={handleSaveInvoice} onSaveRecurring={handleSaveRecurringInvoice} />}
-        {isExpenseModalOpen && <ExpenseFormModal expense={editingExpense} budgets={budgets} onClose={() => setExpenseModalOpen(false)} onSave={handleSaveExpense} onSaveRecurring={handleSaveRecurringExpense} />}
+        {isExpenseModalOpen && <ExpenseFormModal expense={editingExpense} budgets={budgets} expenses={expenses} onClose={() => setExpenseModalOpen(false)} onSave={handleSaveExpense} onSaveRecurring={handleSaveRecurringExpense} />}
         {isBudgetModalOpen && <BudgetFormModal budget={editingBudget} projects={projects} onClose={() => setBudgetModalOpen(false)} onSave={handleSaveBudget} />}
         {isBudgetDetailModalOpen && viewingBudget && (
             <BudgetDetailModal 
