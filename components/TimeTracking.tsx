@@ -5,6 +5,7 @@ import { useModulePermissions } from '../hooks/useModulePermissions';
 import { TimeLog, Project, Course, Meeting, User, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
+import TimeTrackingAnalytics from './TimeTrackingAnalytics';
 
 const MeetingFormModal: React.FC<{
     meeting: Meeting | null;
@@ -639,7 +640,7 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
   const { t, language } = useLocalization();
   const { user } = useAuth();
   const { hasPermission } = useModulePermissions();
-  const [activeTab, setActiveTab] = useState<'logs' | 'calendar'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'calendar' | 'analytics'>('logs');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterEntityType, setFilterEntityType] = useState<'all' | 'project' | 'course' | 'task'>('all');
@@ -693,6 +694,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
     if (!userProfileId) return [];
     return timeLogs.filter(log => String(log.userId) === userProfileId);
   }, [timeLogs, userProfileId]);
+
+  const analyticsLogs = useMemo(() => {
+    if (!user) return [];
+    const isManager = RESOURCE_MANAGEMENT_ROLES.includes(user.role);
+    return isManager ? timeLogs : userTimeLogs;
+  }, [user, timeLogs, userTimeLogs]);
 
   // Calculer les métriques
   const metrics = useMemo(() => {
@@ -914,11 +921,11 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
             <p className="text-emerald-100">{t('time_tracking_subtitle')}</p>
         </div>
           <button 
-            onClick={() => activeTab === 'logs' ? setLogModalOpen(true) : setMeetingFormOpen(true)} 
+            onClick={() => activeTab === 'calendar' ? setMeetingFormOpen(true) : setLogModalOpen(true)} 
             className="bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg hover:bg-emerald-50 flex items-center shadow-md"
           >
           <i className="fas fa-plus mr-2"></i>
-          {activeTab === 'logs' ? t('log_time') : t('schedule_meeting')}
+          {activeTab === 'calendar' ? t('schedule_meeting') : t('log_time')}
         </button>
       </div>
       </div>
@@ -995,6 +1002,16 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
             }`}
           >
             {t('calendar_and_meetings')}
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'analytics'
+                ? 'border-emerald-500 text-emerald-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            {t('analytics')}
           </button>
             </nav>
        </div>
@@ -1540,6 +1557,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
             </div>
           )}
         </>
+      )}
+
+      {activeTab === 'analytics' && (
+        <div className="mt-6">
+          <TimeTrackingAnalytics logs={analyticsLogs} users={users} projects={projects} />
+        </div>
       )}
 
       {/* Modals */}
