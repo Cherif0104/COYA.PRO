@@ -470,6 +470,19 @@ const App: React.FC = () => {
     handleSetView('dashboard');
   }, [handleSetView]);
 
+  const buildDiff = (previous: any | undefined, next: any | undefined, fields: string[]) => {
+    if (!previous || !next) return undefined;
+    const diff: Record<string, { old: any; new: any }> = {};
+    fields.forEach(field => {
+      const oldValue = previous[field];
+      const newValue = next[field];
+      if (oldValue !== newValue) {
+        diff[field] = { old: oldValue, new: newValue };
+      }
+    });
+    return Object.keys(diff).length > 0 ? diff : undefined;
+  };
+
   const handleNotificationHandled = useCallback(() => {
     setPendingNotification(null);
   }, []);
@@ -1180,10 +1193,27 @@ const App: React.FC = () => {
       }
     };
     const handleUpdateBudget = async (updatedBudget: Budget) => {
+      const previousBudget = budgets.find(b => b.id === updatedBudget.id);
       try {
         const result = await DataAdapter.updateBudget(updatedBudget.id, updatedBudget);
         if (result) {
           setBudgets(prev => prev.map(b => b.id === updatedBudget.id ? result : b));
+          if (user) {
+            const diff = previousBudget
+              ? buildDiff(previousBudget, updatedBudget, ['title', 'type', 'amount', 'startDate', 'endDate'])
+              : undefined;
+            AuditLogService.logAction({
+              action: 'update',
+              module: 'finance',
+              entityType: 'budget',
+              entityId: updatedBudget.id,
+              actor: user as any,
+              metadata: {
+                summary: `${user.name} a modifié le budget "${updatedBudget.title}"`,
+                diff
+              }
+            });
+          }
         }
       } catch (error) {
         console.error('Erreur mise à jour budget:', error);
@@ -1628,6 +1658,7 @@ const App: React.FC = () => {
   const handleUpdateProject = async (updatedProject: Project) => {
     setLoadingOperation('update');
     setIsLoading(true);
+    const previousProject = projects.find(p => p.id === updatedProject.id);
     
     try {
       console.log('🔄 Mise à jour projet avec données:', updatedProject);
@@ -1642,6 +1673,9 @@ const App: React.FC = () => {
           NotificationHelper.notifyProjectUpdated(updatedProject, user as any).catch(err => {
             console.error('Erreur notification projet modifié:', err);
           });
+          const diff = previousProject
+            ? buildDiff(previousProject, updatedProject, ['title', 'status', 'dueDate', 'budget', 'description'])
+            : undefined;
           AuditLogService.logAction({
             action: 'update',
             module: 'project',
@@ -1649,7 +1683,8 @@ const App: React.FC = () => {
             entityId: updatedProject.id,
             actor: user as any,
             metadata: {
-              summary: `${user.name} a modifié le projet "${updatedProject.title}"`
+              summary: `${user.name} a modifié le projet "${updatedProject.title}"`,
+              diff
             }
           });
         }
@@ -2191,6 +2226,7 @@ const App: React.FC = () => {
             setView={handleSetView}
             onNotificationNavigate={handleNotificationNavigate}
             onShowAllNotifications={() => handleSetView('notifications_center')}
+            onShowActivityLogs={() => handleSetView('activity_logs')}
         />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
           <div className="container mx-auto px-6 py-8">

@@ -12,9 +12,10 @@ interface HeaderProps {
   setView: (view: string) => void;
   onNotificationNavigate: (notification: Notification) => void;
   onShowAllNotifications?: () => void;
+  onShowActivityLogs?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationNavigate, onShowAllNotifications }) => {
+const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationNavigate, onShowAllNotifications, onShowActivityLogs }) => {
   const { user, signOut } = useAuth();
   const { language, setLanguage, t } = useLocalization();
   const { theme, toggleTheme } = useTheme();
@@ -57,6 +58,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationN
                   onNotificationNavigate(notification);
                 }
               }}
+              onShowActivityLogs={onShowActivityLogs}
             />
 
             {/* Theme Switcher */}

@@ -66,6 +66,19 @@ const ActivityHistory: React.FC<ActivityHistoryProps> = ({ entityType, entityId,
     return <p className="text-sm text-gray-500">{t('no_history') || 'Aucune activité enregistrée.'}</p>;
   }
 
+  const renderDiff = (diff: Record<string, { old: any; new: any }>) => (
+    <div className="mt-2 text-xs text-gray-600 space-y-1">
+      {Object.entries(diff).map(([field, values]) => (
+        <div key={field} className="flex items-center gap-2">
+          <span className="font-semibold">{field}</span>
+          <span className="line-through text-red-500">{values.old === undefined || values.old === null ? '-' : String(values.old)}</span>
+          <span>→</span>
+          <span className="text-emerald-600">{values.new === undefined || values.new === null ? '-' : String(values.new)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       {logs.map((log) => (
@@ -84,6 +97,7 @@ const ActivityHistory: React.FC<ActivityHistoryProps> = ({ entityType, entityId,
           {log.metadata?.summary && (
             <p className="text-sm text-gray-600 mt-2">{log.metadata.summary}</p>
           )}
+          {log.metadata?.diff && renderDiff(log.metadata.diff)}
         </div>
       ))}
     </div>

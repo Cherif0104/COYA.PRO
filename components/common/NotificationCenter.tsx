@@ -6,9 +6,10 @@ import NotificationService, { Notification } from '../../services/notificationSe
 interface NotificationCenterProps {
   onNavigateToEntity?: (entityType: string, entityId?: string) => void;
   onNavigate?: (notification: Notification) => void;
+  onShowActivityLogs?: () => void;
 }
 
-const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEntity, onNavigate }) => {
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEntity, onNavigate, onShowActivityLogs }) => {
   const { user } = useAuth();
   const { t } = useLocalization();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -384,6 +385,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEnt
                 >
                   Voir toutes les notifications
                 </button>
+                {onShowActivityLogs && (
+                  <button
+                    onClick={() => {
+                      onShowActivityLogs();
+                      setIsOpen(false);
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium ml-3"
+                  >
+                    Historique des activités
+                  </button>
+                )}
               </div>
             )}
           </div>

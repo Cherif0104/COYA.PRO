@@ -115,6 +115,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
     { icon: 'fas fa-robot', label: t('ai_coach'), view: 'ai_coach' as ModuleName },
     { icon: 'fas fa-flask', label: t('gen_ai_lab'), view: 'gen_ai_lab' as ModuleName },
   ];
+  const monitoringItems = [
+    { icon: 'fas fa-bell', label: t('notifications_center') || 'Centre de notifications', view: 'notifications_center' },
+    { icon: 'fas fa-history', label: t('activity_history') || 'Historique des activités', view: 'activity_logs' },
+  ];
   
   const settingsItem = { icon: 'fas fa-cog', label: t('settings'), view: 'settings' as ModuleName };
 
@@ -163,6 +167,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
               .map(item => (
                 <NavLink key={item.view} icon={item.icon} label={item.label} viewName={item.view} currentView={currentView} setView={setView} />
               ))}
+            <p className="px-4 pt-4 pb-2 text-xs uppercase text-gray-400">Monitoring</p>
+            {monitoringItems.map(item => (
+              <NavLink key={item.view} icon={item.icon} label={item.label} viewName={item.view} currentView={currentView} setView={setView} />
+            ))}
           </>
         )}
 
