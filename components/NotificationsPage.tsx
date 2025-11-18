@@ -83,6 +83,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigateToEntit
   const handleLoadMore = () => {
     if (loading || !hasMore) return;
     setPage(prev => prev + 1);
+    loadNotifications();
   };
 
   useEffect(() => {

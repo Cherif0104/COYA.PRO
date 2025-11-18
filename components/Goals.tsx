@@ -517,8 +517,8 @@ const Goals: React.FC<GoalsProps> = ({
 
                 {activeSection === 'overview' ? (
                     <>
-                        {/* Section Métriques - Style Power BI */}
-                        {objectives.length > 0 && (
+                {/* Section Métriques - Style Power BI */}
+                {objectives.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         {/* Carte Objectifs totaux */}
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-blue-500 p-6 hover:shadow-xl transition-shadow">
@@ -1073,7 +1073,7 @@ const Goals: React.FC<GoalsProps> = ({
                     </>
                 ) : (
                     <GoalsAnalytics objectives={objectives} projects={projects} />
-                )}
+            )}
             </div>
             
 
