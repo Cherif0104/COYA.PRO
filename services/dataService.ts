@@ -1534,16 +1534,16 @@ export class DataService {
   static async getBudgetLines(budgetId: string) {
     return await ApiHelper.get('budget_lines', { 
       select: '*', 
-      filter: `budget_id.eq.${budgetId}`,
-      order: 'created_at.asc' 
+      order: 'created_at.asc',
+      budget_id: `eq.${budgetId}`
     });
   }
 
   static async getBudgetItems(budgetLineId: string) {
     return await ApiHelper.get('budget_items', { 
       select: '*', 
-      filter: `budget_line_id.eq.${budgetLineId}`,
-      order: 'created_at.asc' 
+      order: 'created_at.asc',
+      budget_line_id: `eq.${budgetLineId}`
     });
   }
 
@@ -1672,6 +1672,115 @@ export class DataService {
         .single();
       
       if (error) throw error;
+      
+      if (updates.budgetLines && Array.isArray(updates.budgetLines)) {
+        const { data: existingLinesData } = await supabase
+          .from('budget_lines')
+          .select('id')
+          .eq('budget_id', id);
+        const existingLineIds = new Set((existingLinesData || []).map(line => line.id));
+        const keptLineIds = new Set<string>();
+
+        for (const line of updates.budgetLines) {
+          const timestamp = new Date().toISOString();
+          let lineId = (line.id && existingLineIds.has(line.id)) ? line.id : undefined;
+
+          if (lineId) {
+            await supabase
+              .from('budget_lines')
+              .update({
+                title: line.title || '',
+                updated_at: timestamp
+              })
+              .eq('id', lineId);
+          } else {
+            const { data: insertedLine } = await supabase
+              .from('budget_lines')
+              .insert({
+                budget_id: id,
+                title: line.title || '',
+                created_at: timestamp,
+                updated_at: timestamp
+              })
+              .select()
+              .single();
+            lineId = insertedLine?.id;
+          }
+
+          if (!lineId) continue;
+          keptLineIds.add(lineId);
+
+          if (line.items && Array.isArray(line.items)) {
+            const { data: existingItemsData } = await supabase
+              .from('budget_items')
+              .select('id')
+              .eq('budget_line_id', lineId);
+            const existingItemIds = new Set((existingItemsData || []).map(item => item.id));
+            const keptItemIds = new Set<string>();
+
+            for (const item of line.items) {
+              let itemId = (item.id && existingItemIds.has(item.id)) ? item.id : undefined;
+
+              if (itemId) {
+                await supabase
+                  .from('budget_items')
+                  .update({
+                    description: item.description || '',
+                    amount: item.amount || 0,
+                    updated_at: timestamp
+                  })
+                  .eq('id', itemId);
+              } else {
+                const { data: insertedItem } = await supabase
+                  .from('budget_items')
+                  .insert({
+                    budget_line_id: lineId,
+                    description: item.description || '',
+                    amount: item.amount || 0,
+                    created_at: timestamp,
+                    updated_at: timestamp
+                  })
+                  .select()
+                  .single();
+                itemId = insertedItem?.id;
+              }
+
+              if (itemId) {
+                keptItemIds.add(itemId);
+              }
+            }
+
+            const itemsToDelete = [...existingItemIds].filter(itemId => !keptItemIds.has(itemId));
+            if (itemsToDelete.length > 0) {
+              await supabase
+                .from('budget_items')
+                .delete()
+                .in('id', itemsToDelete);
+            }
+          }
+        }
+
+        const linesToDelete = [...existingLineIds].filter(lineId => !keptLineIds.has(lineId));
+        if (linesToDelete.length > 0) {
+          const { data: orphanItems } = await supabase
+            .from('budget_items')
+            .select('id')
+            .in('budget_line_id', linesToDelete);
+          const orphanItemIds = (orphanItems || []).map(item => item.id);
+          if (orphanItemIds.length > 0) {
+            await supabase
+              .from('budget_items')
+              .delete()
+              .in('id', orphanItemIds);
+          }
+
+          await supabase
+            .from('budget_lines')
+            .delete()
+            .in('id', linesToDelete);
+        }
+      }
+
       return { data, error: null };
     } catch (error) {
       console.error('Erreur mise à jour budget:', error);
