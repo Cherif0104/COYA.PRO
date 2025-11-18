@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { Objective, Project, Language, KeyResult } from '../types';
 import { useLocalization } from '../contexts/LocalizationContext';
+import useAlertNotifications, { AlertNotificationPayload } from '../hooks/useAlertNotifications';
 
 interface GoalsAnalyticsProps {
     objectives: Objective[];
@@ -185,6 +186,43 @@ const GoalsAnalytics: React.FC<GoalsAnalyticsProps> = ({ objectives, projects })
             atRisk: atRisk.slice(0, 5)
         };
     }, [normalizedObjectives]);
+
+    const alertNotifications = useMemo<AlertNotificationPayload[]>(() => {
+        const route = '/goals-okrs?tab=analytics';
+        const entries: AlertNotificationPayload[] = [];
+
+        alerts.dueSoon.forEach(obj => {
+            entries.push({
+                id: `goal-due-${obj.id}`,
+                title: t('due_soon') || 'Échéance proche',
+                message: `${obj.title} — ${obj.endDate ? new Date(obj.endDate).toLocaleDateString(locale) : '?'}`,
+                module: 'goal',
+                action: 'reminder',
+                entityType: 'goal',
+                entityId: obj.id,
+                severity: 'warning',
+                metadata: { route, autoOpenEntityId: obj.id }
+            });
+        });
+
+        alerts.atRisk.forEach(obj => {
+            entries.push({
+                id: `goal-risk-${obj.id}`,
+                title: t('at_risk') || 'Objectif à risque',
+                message: `${obj.title} — ${obj.normalizedProgress}%`,
+                module: 'goal',
+                action: 'reminder',
+                entityType: 'goal',
+                entityId: obj.id,
+                severity: 'error',
+                metadata: { route, autoOpenEntityId: obj.id }
+            });
+        });
+
+        return entries;
+    }, [alerts, locale, t]);
+
+    useAlertNotifications(alertNotifications, [alerts]);
 
     const exportObjectives = () => {
         if (normalizedObjectives.length === 0) return;

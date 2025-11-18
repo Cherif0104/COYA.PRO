@@ -8,6 +8,7 @@ import DataAdapter from './services/dataAdapter';
 import DataService from './services/dataService';
 import { logger } from './services/loggerService';
 import NotificationHelper from './services/notificationHelper';
+import { Notification } from './services/notificationService';
 
 import Login from './components/Login';
 import Signup from './components/Signup';
@@ -104,7 +105,7 @@ const App: React.FC = () => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [reminderDays, setReminderDays] = useState<number>(3);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [pendingNotification, setPendingNotification] = useState<{ entityType: string; entityId?: string } | null>(null);
+  const [pendingNotification, setPendingNotification] = useState<{ entityType: string; entityId?: string; metadata?: Record<string, any> } | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [showNewPasswordModal, setShowNewPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -358,24 +359,82 @@ const App: React.FC = () => {
     }
   }, [currentView]);
 
-  const handleNotificationNavigate = useCallback((entityType: string, entityId?: string) => {
-    const type = (entityType || '').toLowerCase();
-    const normalizedId = entityId ? String(entityId) : undefined;
+  const handleNotificationNavigate = useCallback((notification: Notification) => {
+    const type = (notification.entityType || notification.module || '').toLowerCase();
+    const normalizedId = notification.entityId ? String(notification.entityId) : undefined;
+    const metadata = notification.metadata || {};
+    const route = metadata.route as string | undefined;
+    const autoOpenId = (metadata.autoOpenEntityId ?? normalizedId) as string | undefined;
+
+    const navigateFromRoute = (targetRoute: string, meta?: Record<string, any>) => {
+      try {
+        const url = new URL(targetRoute, window.location.origin);
+        const path = url.pathname.replace(/^\//, '');
+        const tab = url.searchParams.get('tab') || meta?.tab;
+
+        switch (path) {
+          case '':
+          case 'dashboard':
+            setPendingNotification(null);
+            handleSetView('dashboard');
+            return true;
+          case 'time-tracking':
+            setPendingNotification({
+              entityType: 'time_tracking',
+              metadata: { tab: tab || meta?.tab }
+            });
+            handleSetView('time_tracking');
+            return true;
+          case 'projects':
+            setPendingNotification({
+              entityType: 'project',
+              entityId: autoOpenId
+            });
+            handleSetView('projects');
+            return true;
+          case 'finance':
+            setPendingNotification(null);
+            handleSetView('finance');
+            return true;
+          case 'goals-okrs':
+          case 'goals':
+            setPendingNotification({
+              entityType: 'goal',
+              metadata: { section: tab || meta?.section }
+            });
+            handleSetView('goals_okrs');
+            return true;
+          case 'knowledge':
+            setPendingNotification(null);
+            handleSetView('knowledge_base');
+            return true;
+          default:
+            return false;
+        }
+      } catch (error) {
+        console.warn('Navigation notification route invalide:', targetRoute, error);
+        return false;
+      }
+    };
+
+    if (route && navigateFromRoute(route, metadata)) {
+      return;
+    }
 
     if (type === 'project' || type === 'projects') {
-      setPendingNotification({ entityType: 'project', entityId: normalizedId });
+      setPendingNotification({ entityType: 'project', entityId: autoOpenId });
       handleSetView('projects');
       return;
     }
 
     if (type === 'course' || type === 'courses') {
-      setPendingNotification({ entityType: 'course', entityId: normalizedId });
+      setPendingNotification({ entityType: 'course', entityId: autoOpenId });
       handleSetView('courses');
       return;
     }
 
     if (type === 'time_log' || type === 'time_tracking') {
-      setPendingNotification(null);
+      setPendingNotification({ entityType: 'time_tracking', metadata });
       handleSetView('time_tracking');
       return;
     }
@@ -393,7 +452,7 @@ const App: React.FC = () => {
     }
 
     if (type === 'goal' || type === 'objective') {
-      setPendingNotification(null);
+      setPendingNotification({ entityType: 'goal', metadata });
       handleSetView('goals_okrs');
       return;
     }
@@ -1165,6 +1224,9 @@ const App: React.FC = () => {
         return updated.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
       });
       console.log('✅ Meeting créé:', newMeeting.id);
+      NotificationHelper.notifyMeetingScheduled(newMeeting, user as any).catch(err => {
+        console.warn('Notification meeting', err);
+      });
     } catch (error) {
       console.error('Erreur création meeting:', error);
     }
@@ -1275,6 +1337,9 @@ const App: React.FC = () => {
       const newLog = await DataAdapter.createTimeLog(logData);
       updateTimeLogsWithProducer(prev => [newLog, ...prev]);
       console.log('✅ Time log créé:', newLog.id);
+      NotificationHelper.notifyTimeLogCreated(newLog, user as any).catch(err => {
+        console.warn('Notification time log', err);
+      });
     } catch (error) {
       console.error('Erreur création time log:', error);
     }
@@ -1833,6 +1898,12 @@ const App: React.FC = () => {
                     onAddMeeting={handleAddMeeting}
                     onUpdateMeeting={handleUpdateMeeting}
                     onDeleteMeeting={handleDeleteMeeting}
+                    defaultTab={
+                      pendingNotification?.entityType === 'time_tracking'
+                        ? (pendingNotification.metadata?.tab as 'logs' | 'calendar' | 'analytics' | undefined)
+                        : undefined
+                    }
+                    onNotificationHandled={handleNotificationHandled}
                 />;
       case 'projects':
         return <Projects 
@@ -1864,6 +1935,12 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                     isDataLoaded={isDataLoaded}
+                    defaultSection={
+                      pendingNotification?.entityType === 'goal'
+                        ? (pendingNotification.metadata?.section as 'overview' | 'analytics' | undefined)
+                        : undefined
+                    }
+                    onNotificationHandled={handleNotificationHandled}
                 />;
       case 'courses':
         return <Courses 

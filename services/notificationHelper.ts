@@ -1,5 +1,5 @@
 import NotificationService, { NotificationType, NotificationModule, NotificationAction } from './notificationService';
-import { Project, Invoice, Expense, Course, Objective, LeaveRequest } from '../types';
+import { Project, Invoice, Expense, Course, Objective, LeaveRequest, TimeLog, Meeting } from '../types';
 import { User } from '../types';
 
 /**
@@ -272,6 +272,84 @@ export class NotificationHelper {
       }
     } catch (error) {
       console.error('Erreur notification création objectif:', error);
+    }
+  }
+
+  // Notifier l'enregistrement d'un time log
+  static async notifyTimeLogCreated(
+    timeLog: TimeLog,
+    creator: User
+  ): Promise<void> {
+    try {
+      if (!creator.profileId) return;
+      await NotificationService.createNotification(
+        creator.profileId,
+        'success',
+        'time_tracking',
+        'created',
+        'Temps enregistré',
+        `Vous avez enregistré ${timeLog.duration} minutes sur "${timeLog.entityTitle}"`,
+        {
+          entityType: 'time_log',
+          entityId: timeLog.id,
+          entityTitle: timeLog.entityTitle,
+          metadata: {
+            route: '/time-tracking?tab=logs',
+            time_log_id: timeLog.id,
+            duration: timeLog.duration,
+            entity_type: timeLog.entityType
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Erreur notification création time log:', error);
+    }
+  }
+
+  // Notifier la planification d'une réunion
+  static async notifyMeetingScheduled(
+    meeting: Meeting,
+    organizer: User
+  ): Promise<void> {
+    try {
+      const attendeeProfileIds =
+        meeting.attendees
+          ?.map(attendee => {
+            if (typeof attendee.id === 'string' && attendee.id.includes('-')) {
+              return attendee.id;
+            }
+            if ((attendee as any).profileId) {
+              return String((attendee as any).profileId);
+            }
+            return undefined;
+          })
+          .filter((id): id is string => Boolean(id)) || [];
+
+      if (attendeeProfileIds.length === 0) {
+        return;
+      }
+
+      await NotificationService.notifyUsers(
+        attendeeProfileIds,
+        'info',
+        'time_tracking',
+        'reminder',
+        'Nouvelle réunion planifiée',
+        `${organizer.fullName || organizer.name} a planifié la réunion "${meeting.title}"`,
+        {
+          entityType: 'meeting',
+          entityId: meeting.id as string,
+          entityTitle: meeting.title,
+          metadata: {
+            route: '/time-tracking?tab=calendar',
+            meeting_id: meeting.id,
+            start_time: meeting.startTime,
+            end_time: meeting.endTime
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Erreur notification réunion planifiée:', error);
     }
   }
 }

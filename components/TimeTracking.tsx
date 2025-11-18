@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
@@ -634,13 +634,15 @@ interface TimeTrackingProps {
   onDeleteMeeting: (meetingId: string | number) => void;
   projects: Project[];
   courses: Course[];
+  defaultTab?: 'logs' | 'calendar' | 'analytics';
+  onNotificationHandled?: () => void;
 }
 
-const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, onAddTimeLog, onDeleteTimeLog, onAddMeeting, onUpdateMeeting, onDeleteMeeting, projects, courses }) => {
+const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, onAddTimeLog, onDeleteTimeLog, onAddMeeting, onUpdateMeeting, onDeleteMeeting, projects, courses, defaultTab, onNotificationHandled }) => {
   const { t, language } = useLocalization();
   const { user } = useAuth();
   const { hasPermission } = useModulePermissions();
-  const [activeTab, setActiveTab] = useState<'logs' | 'calendar' | 'analytics'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'calendar' | 'analytics'>(defaultTab ?? 'logs');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterEntityType, setFilterEntityType] = useState<'all' | 'project' | 'course' | 'task'>('all');
@@ -657,6 +659,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [meetingSearchQuery, setMeetingSearchQuery] = useState('');
   const [meetingViewMode, setMeetingViewMode] = useState<'calendar' | 'list'>('calendar');
+
+  useEffect(() => {
+    if (!defaultTab) return;
+    setActiveTab(defaultTab);
+    onNotificationHandled?.();
+  }, [defaultTab, onNotificationHandled]);
 
   const userProfileId = useMemo(() => {
     if (!user) return null;

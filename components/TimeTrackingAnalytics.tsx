@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { TimeLog, User, Project, Language } from '../types';
 import { useLocalization } from '../contexts/LocalizationContext';
+import useAlertNotifications, { AlertNotificationPayload } from '../hooks/useAlertNotifications';
 
 interface TimeTrackingAnalyticsProps {
     logs: TimeLog[];
@@ -209,6 +210,54 @@ const TimeTrackingAnalytics: React.FC<TimeTrackingAnalyticsProps> = ({ logs, use
             missingLogs
         };
     }, [weeklyHeatmap, normalizedLogs.length]);
+
+    const alertNotifications = useMemo<AlertNotificationPayload[]>(() => {
+        const route = '/time-tracking?tab=analytics';
+        const items: AlertNotificationPayload[] = [];
+
+        if (alerts.missingLogs) {
+            items.push({
+                id: 'time-tracking-missing-logs',
+                title: t('no_time_logs_found') || 'Aucun log détecté',
+                message: t('please_log_time') || 'Commencez à enregistrer vos heures pour suivre votre activité.',
+                module: 'time_tracking',
+                action: 'reminder',
+                entityType: 'time_log',
+                severity: 'warning',
+                metadata: { route }
+            });
+        }
+
+        alerts.lowActivityDays.forEach(day => {
+            items.push({
+                id: `time-tracking-low-${day.label}`,
+                title: t('low_activity_days') || 'Jour à faible activité',
+                message: `${t('low_activity_days') || 'Jour à faible activité'} : ${day.label} (${day.hours}h)`,
+                module: 'time_tracking',
+                action: 'reminder',
+                entityType: 'time_log',
+                severity: 'info',
+                metadata: { route }
+            });
+        });
+
+        alerts.overloadDays.forEach(day => {
+            items.push({
+                id: `time-tracking-overload-${day.label}`,
+                title: t('overload_days') || 'Jour surchargé',
+                message: `${t('overload_days') || 'Jour surchargé'} : ${day.label} (${day.hours}h)`,
+                module: 'time_tracking',
+                action: 'reminder',
+                entityType: 'time_log',
+                severity: 'warning',
+                metadata: { route }
+            });
+        });
+
+        return items;
+    }, [alerts, t]);
+
+    useAlertNotifications(alertNotifications, [alerts]);
 
     const exportLogs = () => {
         if (normalizedLogs.length === 0) return;

@@ -163,6 +163,8 @@ interface GoalsProps {
     isLoading?: boolean;
     loadingOperation?: string | null;
     isDataLoaded?: boolean;
+    defaultSection?: 'overview' | 'analytics';
+    onNotificationHandled?: () => void;
 }
 
 const Goals: React.FC<GoalsProps> = ({
@@ -174,7 +176,9 @@ const Goals: React.FC<GoalsProps> = ({
     onDeleteObjective,
     isLoading = false,
     loadingOperation = null,
-    isDataLoaded = true
+    isDataLoaded = true,
+    defaultSection,
+    onNotificationHandled
 }) => {
     const { t, language } = useLocalization();
     const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
@@ -188,7 +192,7 @@ const Goals: React.FC<GoalsProps> = ({
     const [sortBy, setSortBy] = useState<'date' | 'title' | 'progress'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
-    const [activeSection, setActiveSection] = useState<'overview' | 'analytics'>('overview');
+    const [activeSection, setActiveSection] = useState<'overview' | 'analytics'>(defaultSection ?? 'overview');
     
     // États pour modals et édition
     const [isCreatePageOpen, setIsCreatePageOpen] = useState(false);
@@ -201,6 +205,12 @@ const Goals: React.FC<GoalsProps> = ({
     const [isGeneratingOKRs, setIsGeneratingOKRs] = useState(false);
     const [selectedProjectForOKRs, setSelectedProjectForOKRs] = useState<Project | null>(null);
     const [isEditingOKRs, setIsEditingOKRs] = useState(false);
+
+    useEffect(() => {
+        if (!defaultSection) return;
+        setActiveSection(defaultSection);
+        onNotificationHandled?.();
+    }, [defaultSection, onNotificationHandled]);
 
   // Temps réel – synchroniser la liste des objectifs sans refresh
   useEffect(() => {

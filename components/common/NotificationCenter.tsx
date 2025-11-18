@@ -5,9 +5,10 @@ import NotificationService, { Notification } from '../../services/notificationSe
 
 interface NotificationCenterProps {
   onNavigateToEntity?: (entityType: string, entityId?: string) => void;
+  onNavigate?: (notification: Notification) => void;
 }
 
-const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEntity }) => {
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEntity, onNavigate }) => {
   const { user } = useAuth();
   const { t } = useLocalization();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -97,12 +98,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEnt
 
   // Naviguer vers l'entité
   const handleNavigate = (notification: Notification) => {
-    const targetType = notification.entityType || notification.module;
-    if (targetType && onNavigateToEntity) {
-      onNavigateToEntity(
-        targetType,
-        notification.entityId ? String(notification.entityId) : undefined
-      );
+    if (onNavigate) {
+      onNavigate(notification);
+    } else if (onNavigateToEntity) {
+      const targetType = notification.entityType || notification.module;
+      if (targetType) {
+        onNavigateToEntity(
+          targetType,
+          notification.entityId ? String(notification.entityId) : undefined
+        );
+      }
     }
     handleMarkAsRead(notification.id);
     setIsOpen(false);

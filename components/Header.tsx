@@ -4,12 +4,13 @@ import { useLocalization } from '../contexts/LocalizationContext';
 import { Language } from '../types';
 import NexusFlowIcon from './icons/NexusFlowIcon';
 import NotificationCenter from './common/NotificationCenter';
+import { Notification } from '../services/notificationService';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface HeaderProps {
   toggleSidebar: () => void;
   setView: (view: string) => void;
-  onNotificationNavigate: (entityType: string, entityId?: string) => void;
+  onNotificationNavigate: (notification: Notification) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationNavigate }) => {
@@ -48,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationN
           <div className="flex items-center space-x-4">
             {/* Notifications en temps réel */}
             <NotificationCenter
-              onNavigateToEntity={onNotificationNavigate}
+              onNavigate={onNotificationNavigate}
             />
 
             {/* Theme Switcher */}
