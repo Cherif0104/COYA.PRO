@@ -8,6 +8,7 @@ import TeamSelector from './common/TeamSelector';
 import ProjectDetailPage from './ProjectDetailPage';
 import ProjectCreatePage from './ProjectCreatePage';
 import TeamWorkloadMetrics from './TeamWorkloadMetrics';
+import ProjectsAnalytics from './ProjectsAnalytics';
 
 const statusStyles = {
     'Not Started': 'bg-gray-200 text-gray-800',
@@ -725,7 +726,7 @@ const ProjectDetailModal: React.FC<{
                                 <button 
                                     onClick={handleGenerateTasksWithAI}
                                     disabled={isLoading}
-                                        className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-green-300 flex items-center justify-center text-sm"
+                                            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 disabled:bg-green-300 flex items-center justify-center text-sm"
                                 >
                                     <i className="fas fa-magic mr-2"></i>
                                     {isLoading ? localize('Generating...', 'Génération...') : localize('Generate tasks with AI', 'Générer des tâches avec l\'IA')}
@@ -735,10 +736,10 @@ const ProjectDetailModal: React.FC<{
                                         {localize('Log time', 'Heure du journal')}
                                 </button>
                                 {canManageCurrentProject && (
-                                    <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                        <i className="fas fa-trash mr-2"></i>
+                                <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                    <i className="fas fa-trash mr-2"></i>
                                             {localize('Delete project', 'Supprimer le projet')}
-                                    </button>
+                                </button>
                                 )}
                                     </>
                                 )}
@@ -758,10 +759,10 @@ const ProjectDetailModal: React.FC<{
                                             Heure du journal
                                         </button>
                                         {canManageCurrentProject && (
-                                            <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                                <i className="fas fa-trash mr-2"></i>
-                                                Supprimer le projet
-                                            </button>
+                                        <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                            <i className="fas fa-trash mr-2"></i>
+                                            Supprimer le projet
+                                        </button>
                                         )}
                                     </>
                                 )}
@@ -789,10 +790,10 @@ const ProjectDetailModal: React.FC<{
                                             {localize('Log time', 'Heure du journal')}
                                         </button>
                                         {canManageCurrentProject && (
-                                            <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
-                                                <i className="fas fa-trash mr-2"></i>
+                                        <button onClick={() => setDeleteModalOpen(true)} className="w-full text-red-600 py-2 px-4 rounded-lg font-semibold hover:bg-red-100 flex items-center justify-center text-sm">
+                                            <i className="fas fa-trash mr-2"></i>
                                                 {localize('Delete project', 'Supprimer le projet')}
-                                            </button>
+                                        </button>
                                         )}
                                     </>
                                 )}
@@ -1123,7 +1124,7 @@ const ProjectDetailModal: React.FC<{
                                                             </span>
                                                         </div>
                                                         <div className="flex space-x-2">
-                                                            <button
+                                            <button
                                                                 onClick={handleCancelPendingTasks}
                                                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
                                                             >
@@ -1134,7 +1135,7 @@ const ProjectDetailModal: React.FC<{
                                                                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700"
                                                             >
                                                                 {localize('Save', 'Sauvegarder')}
-                                                            </button>
+                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1625,6 +1626,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const [sortBy, setSortBy] = useState<'date' | 'title' | 'status'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+    const [activeSection, setActiveSection] = useState<'overview' | 'analytics'>('overview');
 
     useEffect(() => {
         if (!autoOpenProjectId) return;
@@ -1833,6 +1835,26 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         return Array.from(teamMembers.values()).slice(0, 3); // Limiter à 3 membres
     }, [projects]);
 
+    const overdueProjects = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return projects
+            .filter(project => {
+                if (!project.dueDate || project.status === 'Completed') return false;
+                return new Date(project.dueDate) < today;
+            })
+            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+            .slice(0, 3);
+    }, [projects]);
+
+    const highRiskProjects = useMemo(() => {
+        return projects
+            .filter(project =>
+                (project.risks || []).some(risk => risk.impact === 'High' || risk.likelihood === 'High')
+            )
+            .slice(0, 3);
+    }, [projects]);
+
     // Calculer les métriques globales
     const totalProjects = projects.length;
     const activeProjects = projects.filter(p => p.status === 'In Progress').length;
@@ -1879,10 +1901,97 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Section Métriques - Style Power BI */}
-            {projects.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-6 flex items-center">
+                <button
+                    onClick={() => setActiveSection('overview')}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        activeSection === 'overview'
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                >
+                    {t('overview') || 'Vue globale'}
+                </button>
+                <button
+                    onClick={() => setActiveSection('analytics')}
+                    className={`ml-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        activeSection === 'analytics'
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                >
+                    {t('analytics') || 'Analytics'}
+                </button>
+            </div>
+
+            {activeSection === 'overview' && (
+                <>
+                    {(overdueProjects.length > 0 || highRiskProjects.length > 0) && (
+                        <div className="space-y-3 mb-6">
+                            {overdueProjects.length > 0 && (
+                                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg shadow-sm">
+                                    <div className="flex items-start gap-3">
+                                        <i className="fas fa-exclamation-triangle text-red-500 text-xl"></i>
+                                        <div className="flex-1">
+                                            <h3 className="text-sm font-bold text-red-800">
+                                                {localize(
+                                                    `${overdueProjects.length} project(s) overdue`,
+                                                    `${overdueProjects.length} projet(s) en retard`
+                                                )}
+                                            </h3>
+                                            <p className="text-sm text-red-700">
+                                                {localize(
+                                                    'Follow up on the due dates below to avoid delays.',
+                                                    'Suivez les échéances ci-dessous pour éviter les retards.'
+                                                )}
+                                            </p>
+                                            <ul className="mt-2 text-sm text-red-700 list-disc list-inside space-y-1">
+                                                {overdueProjects.map(project => (
+                                                    <li key={`overdue-${project.id}`}>
+                                                        {project.title} —{' '}
+                                                        {project.dueDate
+                                                            ? new Date(project.dueDate).toLocaleDateString(getLocale)
+                                                            : '-'}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {highRiskProjects.length > 0 && (
+                                <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg shadow-sm">
+                                    <div className="flex items-start gap-3">
+                                        <i className="fas fa-fire text-orange-500 text-xl"></i>
+                                        <div className="flex-1">
+                                            <h3 className="text-sm font-bold text-orange-800">
+                                                {localize(
+                                                    'Projects with high risks detected',
+                                                    'Projets avec risques élevés détectés'
+                                                )}
+                                            </h3>
+                                            <p className="text-sm text-orange-700">
+                                                {localize(
+                                                    'Review mitigation plans for these projects.',
+                                                    'Révisez les plans de mitigation pour ces projets.'
+                                                )}
+                                            </p>
+                                            <ul className="mt-2 text-sm text-orange-700 list-disc list-inside space-y-1">
+                                                {highRiskProjects.map(project => (
+                                                    <li key={`risk-${project.id}`}>{project.title}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Section Métriques - Style Power BI */}
+                    {projects.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         {/* Carte Projets totaux */}
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-blue-500 p-6 hover:shadow-xl transition-shadow">
                             <div className="flex items-center justify-between">
@@ -2056,12 +2165,10 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     </div>
                 </div>
 
-                {/* Liste des projets */}
-            {filteredProjects.length > 0 ? (
+                {filteredProjects.length > 0 ? (
                     <>
-                        {/* Vue Grille */}
                         {viewMode === 'grid' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {filteredProjects.map(project => {
                                     const projectTasks = project.tasks || [];
                                     const completedTasks = projectTasks.filter(t => t.status === 'Completed').length;
@@ -2421,9 +2528,14 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     )}
                 </div>
             )}
-            </div>
+                </>
+            )}
 
-            {/* Pages */}
+            {activeSection === 'analytics' && (
+                <ProjectsAnalytics projects={projects} />
+            )}
+        </div>
+
             {isProjectCreatePageOpen && (
                 <ProjectCreatePage
                     onClose={() => {

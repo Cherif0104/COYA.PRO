@@ -266,6 +266,10 @@ export interface Risk {
   mitigationStrategy: string;
 }
 
+export type CurrencyCode = 'USD' | 'EUR' | 'XOF';
+
+export const SUPPORTED_CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'XOF'];
+
 export interface Project {
   id: string;
   title: string;
@@ -381,6 +385,10 @@ export interface Invoice {
   invoiceNumber: string;
   clientName: string;
   amount: number;
+  currencyCode?: CurrencyCode;
+  exchangeRate?: number;
+  baseAmountUSD?: number;
+  transactionDate?: string;
   dueDate: string;
   status: 'Draft' | 'Sent' | 'Paid' | 'Overdue' | 'Partially Paid';
   receipt?: Receipt;
@@ -396,6 +404,10 @@ export interface Expense {
   category: string;
   description: string;
   amount: number;
+  currencyCode?: CurrencyCode;
+  exchangeRate?: number;
+  baseAmountUSD?: number;
+  transactionDate?: string;
   date: string;
   dueDate?: string;
   receipt?: Receipt;
@@ -412,6 +424,9 @@ export interface RecurringInvoice {
     id: string; // UUID
     clientName: string;
     amount: number;
+    currencyCode?: CurrencyCode;
+    exchangeRate?: number;
+    baseAmountUSD?: number;
     frequency: RecurrenceFrequency;
     startDate: string;
     endDate?: string;
@@ -425,6 +440,9 @@ export interface RecurringExpense {
     category: string;
     description: string;
     amount: number;
+    currencyCode?: CurrencyCode;
+    exchangeRate?: number;
+    baseAmountUSD?: number;
     frequency: RecurrenceFrequency;
     startDate: string;
     endDate?: string;
@@ -450,6 +468,9 @@ export interface Budget {
     title: string;
     type: 'Project' | 'Office';
     amount: number;
+    currencyCode?: CurrencyCode;
+    exchangeRate?: number;
+    baseAmountUSD?: number;
     startDate: string;
     endDate: string;
     projectId?: string; // UUID

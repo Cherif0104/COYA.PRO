@@ -2,7 +2,7 @@ import { DataService } from './dataService';
 import { AuthService } from './authService';
 import { AuthService } from './authService';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
-import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role } from '../types';
+import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
@@ -330,10 +330,14 @@ export class DataAdapter {
           else normalizedStatus = 'Draft';
 
           return {
-            id: invoice.id,
+          id: invoice.id,
             invoiceNumber: invoice.invoice_number || invoice.number || '',
             clientName: invoice.client_name || '',
             amount: Number(invoice.amount) || 0,
+            currencyCode: (invoice.currency_code || 'USD') as CurrencyCode,
+            exchangeRate: invoice.exchange_rate ? Number(invoice.exchange_rate) : undefined,
+            baseAmountUSD: invoice.base_amount_usd ? Number(invoice.base_amount_usd) : undefined,
+            transactionDate: invoice.transaction_date || invoice.due_date || undefined,
             dueDate: invoice.due_date || '',
             status: normalizedStatus,
             receipt: invoice.receipt_file_name && invoice.receipt_data_url ? {
@@ -386,6 +390,10 @@ export class DataAdapter {
           invoiceNumber: data.number || data.invoice_number || '',
           clientName: data.client_name || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
+          transactionDate: data.transaction_date || data.due_date || undefined,
           dueDate: data.due_date || '',
           status: normalizedStatus,
           receipt: data.receipt_file_name && data.receipt_data_url ? {
@@ -504,10 +512,14 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           else normalizedStatus = 'Unpaid';
 
           return {
-            id: expense.id,
+          id: expense.id,
             category: expense.category || '',
             description: expense.description || expense.title || '',
             amount: Number(expense.amount) || 0,
+            currencyCode: (expense.currency_code || 'USD') as CurrencyCode,
+            exchangeRate: expense.exchange_rate ? Number(expense.exchange_rate) : undefined,
+            baseAmountUSD: expense.base_amount_usd ? Number(expense.base_amount_usd) : undefined,
+            transactionDate: expense.transaction_date || expense.date || undefined,
             date: expense.date || '',
             dueDate: expense.due_date || undefined,
             receipt: expense.receipt_file_name && expense.receipt_data_url ? {
@@ -548,6 +560,10 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           category: data.category || '',
           description: data.description || data.title || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
+          transactionDate: data.transaction_date || data.date || undefined,
           date: data.date || '',
           dueDate: data.due_date || undefined,
           receipt: data.receipt_file_name && data.receipt_data_url ? {
@@ -587,6 +603,10 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           category: data.category || '',
           description: data.description || data.title || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
+          transactionDate: data.transaction_date || data.date || undefined,
           date: data.date || '',
           dueDate: data.due_date || undefined,
           receipt: data.receipt_file_name && data.receipt_data_url ? {
@@ -639,6 +659,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             id: item.id,
             clientName: item.client_name || '',
             amount: Number(item.amount) || 0,
+            currencyCode: (item.currency_code || 'USD') as CurrencyCode,
+            exchangeRate: item.exchange_rate ? Number(item.exchange_rate) : undefined,
+            baseAmountUSD: item.base_amount_usd ? Number(item.base_amount_usd) : undefined,
             frequency: normalizedFrequency,
             startDate: item.start_date || '',
             endDate: item.end_date || undefined,
@@ -674,6 +697,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           id: data.id,
           clientName: data.client_name || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
@@ -708,6 +734,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           id: data.id,
           clientName: data.client_name || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
@@ -756,6 +785,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             category: item.category || '',
             description: item.description || '',
             amount: Number(item.amount) || 0,
+            currencyCode: (item.currency_code || 'USD') as CurrencyCode,
+            exchangeRate: item.exchange_rate ? Number(item.exchange_rate) : undefined,
+            baseAmountUSD: item.base_amount_usd ? Number(item.base_amount_usd) : undefined,
             frequency: normalizedFrequency,
             startDate: item.start_date || '',
             endDate: item.end_date || undefined,
@@ -792,6 +824,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           category: data.category || '',
           description: data.description || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
@@ -827,6 +862,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           category: data.category || '',
           description: data.description || '',
           amount: Number(data.amount) || 0,
+          currencyCode: (data.currency_code || 'USD') as CurrencyCode,
+          exchangeRate: data.exchange_rate ? Number(data.exchange_rate) : undefined,
+          baseAmountUSD: data.base_amount_usd ? Number(data.base_amount_usd) : undefined,
           frequency: normalizedFrequency,
           startDate: data.start_date || '',
           endDate: data.end_date || undefined,
@@ -922,6 +960,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
               title: budget.title || '',
               type: normalizedType,
               amount: Number(budget.amount) || 0,
+              currencyCode: (budget.currency_code || 'USD') as CurrencyCode,
+              exchangeRate: budget.exchange_rate ? Number(budget.exchange_rate) : undefined,
+              baseAmountUSD: budget.base_amount_usd ? Number(budget.base_amount_usd) : undefined,
               startDate: budget.start_date || '',
               endDate: budget.end_date || '',
               projectId: budget.project_id || undefined,

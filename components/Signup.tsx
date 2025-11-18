@@ -275,7 +275,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                   <i className={`${highlight.icon} text-2xl mb-2`}></i>
                   <h3 className="font-semibold mb-2">{t(highlight.titleKey)}</h3>
                   <p className="text-xs">{t(highlight.descriptionKey)}</p>
-                </div>
+              </div>
               ))}
             </div>
           </div>

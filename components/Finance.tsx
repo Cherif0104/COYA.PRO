@@ -1,8 +1,67 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Invoice, Expense, Receipt, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Project, BudgetLine, BudgetItem, RESOURCE_MANAGEMENT_ROLES, Language } from '../types';
+import { Invoice, Expense, Receipt, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Project, BudgetLine, BudgetItem, RESOURCE_MANAGEMENT_ROLES, Language, CurrencyCode } from '../types';
 import ConfirmationModal from './common/ConfirmationModal';
+import { CurrencyService } from '../services/currencyService';
+import { FinanceAnalytics } from './FinanceAnalytics';
+
+const DEFAULT_USD_RATES: Record<CurrencyCode, number> = {
+    USD: 1,
+    EUR: 0.92,
+    XOF: 604
+};
+
+const currencyOptions: { code: CurrencyCode; label: string }[] = [
+    { code: 'USD', label: 'USD ($)' },
+    { code: 'EUR', label: 'EUR (€)' },
+    { code: 'XOF', label: 'CFA (XOF)' }
+];
+
+type FormatCurrencyOptions = {
+    currencyCode?: CurrencyCode;
+    baseAmountUSD?: number;
+    exchangeRate?: number;
+};
+
+type CurrencyInfo = FormatCurrencyOptions & {
+    amount?: number;
+};
+
+const getInvoiceCurrencyInfo = (invoice: Invoice): CurrencyInfo => ({
+    amount: invoice.amount,
+    currencyCode: invoice.currencyCode,
+    baseAmountUSD: invoice.baseAmountUSD,
+    exchangeRate: invoice.exchangeRate
+});
+
+const getExpenseCurrencyInfo = (expense: Expense): CurrencyInfo => ({
+    amount: expense.amount,
+    currencyCode: expense.currencyCode,
+    baseAmountUSD: expense.baseAmountUSD,
+    exchangeRate: expense.exchangeRate
+});
+
+const getRecurringInvoiceCurrencyInfo = (recurringInvoice: RecurringInvoice): CurrencyInfo => ({
+    amount: recurringInvoice.amount,
+    currencyCode: recurringInvoice.currencyCode,
+    baseAmountUSD: recurringInvoice.baseAmountUSD,
+    exchangeRate: recurringInvoice.exchangeRate
+});
+
+const getRecurringExpenseCurrencyInfo = (recurringExpense: RecurringExpense): CurrencyInfo => ({
+    amount: recurringExpense.amount,
+    currencyCode: recurringExpense.currencyCode,
+    baseAmountUSD: recurringExpense.baseAmountUSD,
+    exchangeRate: recurringExpense.exchangeRate
+});
+
+const getBudgetCurrencyInfo = (budget: Budget): CurrencyInfo => ({
+    amount: budget.amount,
+    currencyCode: budget.currencyCode,
+    baseAmountUSD: budget.baseAmountUSD,
+    exchangeRate: budget.exchangeRate
+});
 
 const statusStyles: { [key in Invoice['status']]: string } = {
     'Draft': 'bg-gray-200 text-gray-800',
@@ -49,6 +108,80 @@ const ReceiptViewerModal: React.FC<{ receipt: Receipt; onClose: () => void; }> =
     );
 };
 
+const ExchangeGainLossIndicator: React.FC<{
+    amount: number;
+    currency?: CurrencyCode;
+    exchangeRate?: number;
+    transactionDate?: string;
+    size?: 'sm' | 'md';
+}> = ({ amount, currency = 'USD' as CurrencyCode, exchangeRate, transactionDate, size = 'sm' }) => {
+    const { t } = useLocalization();
+    const [gainLoss, setGainLoss] = useState<{ gainLoss: number; gainLossPercent: number } | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        if (!currency || currency === 'USD' || amount === 0) {
+            setGainLoss(null);
+            return;
+        }
+
+        // Utiliser le taux de change historique si disponible
+        const calculateGainLoss = async () => {
+            try {
+                // Si on a un taux de change et une date, calculer avec le taux historique
+                if (exchangeRate && transactionDate) {
+                    const currentRate = await CurrencyService.getRateToUSD(currency as CurrencyCode);
+                    const originalUSD = amount * exchangeRate;
+                    const currentUSD = amount * currentRate;
+                    const gainLossValue = currentUSD - originalUSD;
+                    const gainLossPercent = originalUSD === 0 ? 0 : (gainLossValue / originalUSD) * 100;
+                    
+                    if (mounted) {
+                        setGainLoss({
+                            gainLoss: gainLossValue,
+                            gainLossPercent
+                        });
+                    }
+                } else {
+                    // Sinon, utiliser la méthode standard
+                    const result = await CurrencyService.calculateExchangeGainLoss(amount, currency || 'USD' as CurrencyCode, exchangeRate);
+                    if (mounted) {
+                        setGainLoss({
+                            gainLoss: result.gainLoss,
+                            gainLossPercent: result.gainLossPercent
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Erreur calcul gain/perte de change:', error);
+            }
+        };
+
+        calculateGainLoss();
+
+        return () => {
+            mounted = false;
+        };
+    }, [amount, currency, exchangeRate, transactionDate]);
+
+    if (!gainLoss || Math.abs(gainLoss.gainLoss) < 0.01) {
+        return null;
+    }
+
+    const isGain = gainLoss.gainLoss > 0;
+    const sizeClass = size === 'md' ? 'text-sm' : 'text-xs';
+
+    return (
+        <div className={`${sizeClass} ${isGain ? 'text-green-600' : 'text-red-600'} flex items-center gap-1`}>
+            <span>{isGain ? '↑' : '↓'}</span>
+            <span>{Math.abs(gainLoss.gainLossPercent).toFixed(2)}%</span>
+            <span className="text-gray-500 text-xs">
+                ({isGain ? '+' : ''}{gainLoss.gainLoss.toFixed(2)} USD)
+            </span>
+        </div>
+    );
+};
+
 
 const InvoiceFormModal: React.FC<{
     invoice: Invoice | null;
@@ -56,17 +189,21 @@ const InvoiceFormModal: React.FC<{
     onSave: (invoice: Invoice | Omit<Invoice, 'id'>) => void;
     onSaveRecurring: (data: Omit<RecurringInvoice, 'id'>) => void;
 }> = ({ invoice, onClose, onSave, onSaveRecurring }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
     const isEditMode = invoice !== null;
     const [isRecurring, setIsRecurring] = useState(false);
     
     const [formData, setFormData] = useState({
         invoiceNumber: invoice?.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`,
         clientName: invoice?.clientName || '',
-        amount: invoice?.amount || '',
+        amount: invoice?.amount ? String(invoice.amount) : '',
+        currencyCode: invoice?.currencyCode || 'USD',
+        transactionDate: invoice?.transactionDate || new Date().toISOString().split('T')[0],
         dueDate: invoice?.dueDate || '',
         status: invoice?.status || 'Draft',
-        paidAmount: invoice?.paidAmount || '',
+        paidAmount: invoice?.paidAmount ? String(invoice.paidAmount) : '',
+        useManualRate: false,
+        manualExchangeRate: invoice?.exchangeRate ? String(invoice.exchangeRate) : '',
     });
 
     const [recurringData, setRecurringData] = useState({
@@ -101,6 +238,19 @@ const InvoiceFormModal: React.FC<{
         setRecurringData(prev => ({...prev, [name]: value }));
     };
 
+    const formLocale = language === Language.FR ? 'fr-FR' : 'en-US';
+
+    const formatFormCurrency = useCallback((value: number) => {
+        try {
+            return new Intl.NumberFormat(formLocale, {
+                style: 'currency',
+                currency: formData.currencyCode as CurrencyCode
+            }).format(value);
+        } catch (error) {
+            return `${formData.currencyCode} ${value.toFixed(2)}`;
+        }
+    }, [formData.currencyCode, formLocale]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -126,14 +276,22 @@ const InvoiceFormModal: React.FC<{
         }
         
         if (isRecurring) {
-            onSaveRecurring({
+            const recurringToSave: any = {
                 clientName: formData.clientName,
                 amount: Number(formData.amount),
+                currencyCode: formData.currencyCode as CurrencyCode,
                 frequency: recurringData.frequency,
                 startDate: recurringData.startDate,
                 endDate: recurringData.endDate || undefined,
                 lastGeneratedDate: new Date(recurringData.startDate).toISOString().split('T')[0],
-            });
+            };
+            
+            // Ajouter le taux manuel si fourni
+            if (formData.useManualRate && formData.manualExchangeRate) {
+                recurringToSave.manualExchangeRate = Number(formData.manualExchangeRate);
+            }
+            
+            onSaveRecurring(recurringToSave);
         } else {
             const isNowPaid = formData.status === 'Paid' && (!invoice || invoice.status !== 'Paid');
             
@@ -145,13 +303,24 @@ const InvoiceFormModal: React.FC<{
                 finalPaidAmount = Number(formData.amount);
             }
             
-            const dataToSave = {
+            const dataToSave: any = {
                 ...formData,
                 amount: Number(formData.amount),
+                currencyCode: formData.currencyCode as CurrencyCode,
+                transactionDate: formData.transactionDate,
                 paidAmount: finalPaidAmount,
                 receipt: receipt || undefined,
                 paidDate: isNowPaid ? new Date().toISOString().split('T')[0] : (invoice?.paidDate || undefined),
             };
+            
+            // Ajouter le taux manuel si fourni
+            if (formData.useManualRate && formData.manualExchangeRate) {
+                dataToSave.manualExchangeRate = Number(formData.manualExchangeRate);
+            }
+            
+            // Retirer les champs de formulaire non nécessaires
+            delete dataToSave.useManualRate;
+            
             onSave(isEditMode ? { ...invoice, ...dataToSave } as Invoice : dataToSave as Omit<Invoice, 'id'>);
         }
     };
@@ -172,6 +341,71 @@ const InvoiceFormModal: React.FC<{
                                 <input type="number" name="amount" value={formData.amount} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
                             </div>
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('finance_currency_field_label')}</label>
+                                <select
+                                    name="currencyCode"
+                                    value={formData.currencyCode}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full p-2 border rounded-md"
+                                >
+                                    {currencyOptions.map(option => (
+                                        <option key={option.code} value={option.code}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('finance_transaction_date')}</label>
+                                <input
+                                    type="date"
+                                    name="transactionDate"
+                                    value={formData.transactionDate}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full p-2 border rounded-md"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        
+                        {/* Option de saisie manuelle du taux de change */}
+                        {formData.currencyCode !== 'USD' && (
+                            <div className="border-t pt-4 mt-4">
+                                <div className="flex items-center mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="useManualRate"
+                                        checked={formData.useManualRate}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, useManualRate: e.target.checked }))}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="useManualRate" className="text-sm font-medium text-gray-700">
+                                        {t('finance_use_manual_rate') || 'Utiliser un taux de change manuel'}
+                                    </label>
+                                </div>
+                                {formData.useManualRate && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {t('finance_manual_exchange_rate') || 'Taux de change vers USD'} (1 {formData.currencyCode} = ? USD)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="manualExchangeRate"
+                                            value={formData.manualExchangeRate}
+                                            onChange={handleChange}
+                                            className="mt-1 block w-full p-2 border rounded-md"
+                                            placeholder="Ex: 1.08"
+                                            step="0.0001"
+                                            min="0.0001"
+                                            required={formData.useManualRate}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {t('finance_manual_rate_help') || 'Laissez vide pour utiliser le taux automatique de l\'API'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {!isRecurring && (
                             <>
@@ -212,8 +446,8 @@ const InvoiceFormModal: React.FC<{
                                         />
                                         {formData.amount && (
                                             <p className="mt-1 text-xs text-gray-500">
-                                                {t('finance_total_amount_label')}: {formatCurrency(Number(formData.amount) || 0)} | 
-                                                {t('finance_amount_remaining_label')}: {formatCurrency((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0))}
+                                                {t('finance_total_amount_label')}: {formatFormCurrency(Number(formData.amount) || 0)} | 
+                                                {t('finance_amount_remaining_label')}: {formatFormCurrency((Number(formData.amount) || 0) - (Number(formData.paidAmount) || 0))}
                                             </p>
                                         )}
                                     </div>
@@ -288,11 +522,15 @@ const ExpenseFormModal: React.FC<{
     const [formData, setFormData] = useState({
         category: expense?.category || 'Software',
         description: expense?.description || '',
-        amount: expense?.amount || '',
+        amount: expense?.amount ? String(expense.amount) : '',
+        currencyCode: expense?.currencyCode || 'USD',
         date: expense?.date || new Date().toISOString().split('T')[0],
+        transactionDate: expense?.transactionDate || expense?.date || new Date().toISOString().split('T')[0],
         dueDate: expense?.dueDate || '',
         status: expense?.status || 'Unpaid',
         budgetItemId: expense?.budgetItemId || '',
+        useManualRate: false,
+        manualExchangeRate: expense?.exchangeRate ? String(expense.exchangeRate) : '',
     });
     
      const [recurringData, setRecurringData] = useState({
@@ -329,24 +567,43 @@ const ExpenseFormModal: React.FC<{
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
          if (isRecurring) {
-            onSaveRecurring({
+            const recurringToSave: any = {
                 category: formData.category,
                 description: formData.description,
                 amount: Number(formData.amount),
+                currencyCode: formData.currencyCode as CurrencyCode,
                 frequency: recurringData.frequency,
                 startDate: recurringData.startDate,
                 endDate: recurringData.endDate || undefined,
                 lastGeneratedDate: new Date(recurringData.startDate).toISOString().split('T')[0],
-            });
+            };
+            
+            // Ajouter le taux manuel si fourni
+            if (formData.useManualRate && formData.manualExchangeRate) {
+                recurringToSave.manualExchangeRate = Number(formData.manualExchangeRate);
+            }
+            
+            onSaveRecurring(recurringToSave);
         } else {
-            const dataToSave = {
+            const dataToSave: any = {
                 ...formData,
                 amount: Number(formData.amount),
+                currencyCode: formData.currencyCode as CurrencyCode,
+                transactionDate: formData.transactionDate || formData.date,
                 status: formData.status as 'Unpaid' | 'Paid',
                 dueDate: formData.dueDate || undefined,
                 budgetItemId: formData.budgetItemId || undefined,
                 receipt: receipt || undefined,
             };
+            
+            // Ajouter le taux manuel si fourni
+            if (formData.useManualRate && formData.manualExchangeRate) {
+                dataToSave.manualExchangeRate = Number(formData.manualExchangeRate);
+            }
+            
+            // Retirer les champs de formulaire non nécessaires
+            delete dataToSave.useManualRate;
+            
             onSave(isEditMode ? { ...expense, ...dataToSave } : dataToSave);
         }
     };
@@ -377,6 +634,71 @@ const ExpenseFormModal: React.FC<{
                                 <input type="number" name="amount" value={formData.amount} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
                             </div>
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('finance_currency_field_label')}</label>
+                                <select
+                                    name="currencyCode"
+                                    value={formData.currencyCode}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full p-2 border rounded-md"
+                                >
+                                    {currencyOptions.map(option => (
+                                        <option key={option.code} value={option.code}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('finance_transaction_date')}</label>
+                                <input
+                                    type="date"
+                                    name="transactionDate"
+                                    value={formData.transactionDate}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full p-2 border rounded-md"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        
+                        {/* Option de saisie manuelle du taux de change */}
+                        {formData.currencyCode !== 'USD' && (
+                            <div className="border-t pt-4 mt-4">
+                                <div className="flex items-center mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="useManualRateExpense"
+                                        checked={formData.useManualRate}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, useManualRate: e.target.checked }))}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="useManualRateExpense" className="text-sm font-medium text-gray-700">
+                                        {t('finance_use_manual_rate') || 'Utiliser un taux de change manuel'}
+                                    </label>
+                                </div>
+                                {formData.useManualRate && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {t('finance_manual_exchange_rate') || 'Taux de change vers USD'} (1 {formData.currencyCode} = ? USD)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="manualExchangeRate"
+                                            value={formData.manualExchangeRate}
+                                            onChange={handleChange}
+                                            className="mt-1 block w-full p-2 border rounded-md"
+                                            placeholder="Ex: 1.08"
+                                            step="0.0001"
+                                            min="0.0001"
+                                            required={formData.useManualRate}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {t('finance_manual_rate_help') || 'Laissez vide pour utiliser le taux automatique de l\'API'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {!isRecurring && (
                             <>
@@ -483,9 +805,12 @@ const BudgetFormModal: React.FC<{
         title: budget?.title || '',
         type: budget?.type || 'Project' as 'Project' | 'Office',
         amount: budget?.amount || '',
+        currencyCode: budget?.currencyCode || 'USD',
         startDate: budget?.startDate || '',
         endDate: budget?.endDate || '',
         projectId: budget?.projectId || '',
+        useManualRate: false,
+        manualExchangeRate: budget?.exchangeRate ? String(budget.exchangeRate) : '',
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -498,12 +823,23 @@ const BudgetFormModal: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const dataToSave = {
+        const dataToSave: any = {
             ...formData,
             amount: Number(formData.amount),
+            currencyCode: formData.currencyCode as CurrencyCode,
             projectId: formData.projectId ? Number(formData.projectId) : undefined,
-            budgetLines: budget?.budgetLines || []
+            budgetLines: budget?.budgetLines || [],
+            transactionDate: formData.startDate, // Utiliser startDate comme date de transaction
         };
+        
+        // Ajouter le taux manuel si fourni
+        if (formData.useManualRate && formData.manualExchangeRate) {
+            dataToSave.manualExchangeRate = Number(formData.manualExchangeRate);
+        }
+        
+        // Retirer les champs de formulaire non nécessaires
+        delete dataToSave.useManualRate;
+        
         onSave(isEditMode ? { ...budget, ...dataToSave } as Budget : dataToSave as Omit<Budget, 'id'>);
     };
 
@@ -530,6 +866,64 @@ const BudgetFormModal: React.FC<{
                                 <input type="number" name="amount" value={formData.amount} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
                             </div>
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('finance_currency_field_label')}</label>
+                                <select
+                                    name="currencyCode"
+                                    value={formData.currencyCode}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full p-2 border rounded-md"
+                                >
+                                    {currencyOptions.map(option => (
+                                        <option key={option.code} value={option.code}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">{t('start_date')}</label>
+                                <input type="date" name="startDate" value={formData.startDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
+                            </div>
+                        </div>
+                        
+                        {/* Option de saisie manuelle du taux de change */}
+                        {formData.currencyCode !== 'USD' && (
+                            <div className="border-t pt-4 mt-4">
+                                <div className="flex items-center mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="useManualRateBudget"
+                                        checked={formData.useManualRate}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, useManualRate: e.target.checked }))}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="useManualRateBudget" className="text-sm font-medium text-gray-700">
+                                        {t('finance_use_manual_rate') || 'Utiliser un taux de change manuel'}
+                                    </label>
+                                </div>
+                                {formData.useManualRate && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {t('finance_manual_exchange_rate') || 'Taux de change vers USD'} (1 {formData.currencyCode} = ? USD)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="manualExchangeRate"
+                                            value={formData.manualExchangeRate}
+                                            onChange={handleChange}
+                                            className="mt-1 block w-full p-2 border rounded-md"
+                                            placeholder="Ex: 1.08"
+                                            step="0.0001"
+                                            min="0.0001"
+                                            required={formData.useManualRate}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {t('finance_manual_rate_help') || 'Laissez vide pour utiliser le taux automatique de l\'API'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {formData.type === 'Project' && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">{t('select_project')}</label>
@@ -539,15 +933,9 @@ const BudgetFormModal: React.FC<{
                                 </select>
                             </div>
                         )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">{t('start_date')}</label>
-                                <input type="date" name="startDate" value={formData.startDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700">{t('end_date')}</label>
-                                <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
-                            </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">{t('end_date')}</label>
+                            <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md" required/>
                         </div>
                     </div>
                     <div className="p-4 bg-gray-50 border-t flex justify-end space-x-2">
@@ -565,9 +953,23 @@ const BudgetDetailModal: React.FC<{
     expenses: Expense[];
     onClose: () => void;
     onUpdateBudget: (budget: Budget) => void;
-}> = ({ budget, expenses, onClose, onUpdateBudget }) => {
-    const { t } = useLocalization();
+    formatCurrencyFn?: (value: number, originalCurrency?: CurrencyCode, transactionDate?: string) => string;
+}> = ({ budget, expenses, onClose, onUpdateBudget, formatCurrencyFn }) => {
+    const { t, language } = useLocalization();
     const [editedBudget, setEditedBudget] = useState(budget);
+    
+    // Fonction de formatage de devise avec conversions intelligentes
+    const formatCurrency = useCallback((value: number, currencyCode?: CurrencyCode, transactionDate?: string) => {
+        // Si une fonction de formatage externe est fournie (avec conversions), l'utiliser
+        if (formatCurrencyFn) {
+            return formatCurrencyFn(value, currencyCode || budget.currencyCode, transactionDate || budget.startDate);
+        }
+        
+        // Sinon, formatage simple
+        const code = currencyCode || budget.currencyCode || 'USD';
+        const locale = language === Language.FR ? 'fr-FR' : 'en-US';
+        return CurrencyService.formatCurrency(value, code, locale);
+    }, [language, budget.currencyCode, budget.startDate, formatCurrencyFn]);
 
     const handleLineChange = (lineIndex: number, newTitle: string) => {
         const newLines = [...editedBudget.budgetLines];
@@ -582,12 +984,14 @@ const BudgetDetailModal: React.FC<{
     };
     
     const addLine = () => {
-        const newLine: BudgetLine = { id: `bl-${Date.now()}`, title: 'New Budget Line', items: [] };
+        const newLineTitle = language === Language.FR ? 'Nouvelle Ligne Budgétaire' : 'New Budget Line';
+        const newLine: BudgetLine = { id: `bl-${Date.now()}`, title: newLineTitle, items: [] };
         setEditedBudget({ ...editedBudget, budgetLines: [...editedBudget.budgetLines, newLine] });
     };
 
     const addItem = (lineIndex: number) => {
-        const newItem: BudgetItem = { id: `bi-${Date.now()}`, description: 'New Item', amount: 0 };
+        const newItemDescription = language === Language.FR ? 'Nouveau Poste' : 'New Item';
+        const newItem: BudgetItem = { id: `bi-${Date.now()}`, description: newItemDescription, amount: 0 };
         const newLines = [...editedBudget.budgetLines];
         newLines[lineIndex].items.push(newItem);
         setEditedBudget({ ...editedBudget, budgetLines: newLines });
@@ -620,11 +1024,20 @@ const BudgetDetailModal: React.FC<{
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b">
-                    <h2 className="text-2xl font-bold">{editedBudget.title}</h2>
-                    <div className="flex space-x-4 text-sm mt-2">
-                        <span><strong>{t('total_budget')}:</strong> {formatCurrency(editedBudget.amount)}</span>
-                        <span><strong>{t('amount_spent')}:</strong> {formatCurrency(totalSpent)}</span>
-                        <span className={editedBudget.amount - totalSpent < 0 ? 'text-red-500' : 'text-green-500'}><strong>{t('remaining')}:</strong> {formatCurrency(editedBudget.amount - totalSpent)}</span>
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-2xl font-bold">{editedBudget.title}</h2>
+                        {editedBudget.currencyCode && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                {t('finance_currency_field_label')}: {editedBudget.currencyCode}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-4 text-sm mt-2">
+                        <span><strong>{t('total_budget')}:</strong> {formatCurrency(editedBudget.amount, editedBudget.currencyCode, editedBudget.startDate)}</span>
+                        <span><strong>{t('amount_spent')}:</strong> {formatCurrency(totalSpent, editedBudget.currencyCode, editedBudget.startDate)}</span>
+                        <span className={editedBudget.amount - totalSpent < 0 ? 'text-red-500' : 'text-green-500'}>
+                            <strong>{t('remaining')}:</strong> {formatCurrency(editedBudget.amount - totalSpent, editedBudget.currencyCode, editedBudget.startDate)}
+                        </span>
                     </div>
                 </div>
                 <div className="p-6 flex-grow overflow-y-auto space-y-4">
@@ -653,8 +1066,8 @@ const BudgetDetailModal: React.FC<{
                                         <tr key={item.id}>
                                             <td><input value={item.description} onChange={e => handleItemChange(lIndex, iIndex, 'description', e.target.value)} className="w-full p-1 bg-transparent focus:outline-none focus:bg-white rounded-md"/></td>
                                             <td className="text-right"><input type="number" value={item.amount} onChange={e => handleItemChange(lIndex, iIndex, 'amount', Number(e.target.value))} className="w-24 p-1 text-right bg-transparent focus:outline-none focus:bg-white rounded-md"/></td>
-                                            <td className="text-right">{formatCurrency(spent)}</td>
-                                            <td className={`text-right font-semibold ${remaining < 0 ? 'text-red-500' : 'text-green-600'}`}>{formatCurrency(remaining)}</td>
+                                            <td className="text-right">{formatCurrency(spent, editedBudget.currencyCode, editedBudget.startDate)}</td>
+                                            <td className={`text-right font-semibold ${remaining < 0 ? 'text-red-500' : 'text-green-600'}`}>{formatCurrency(remaining, editedBudget.currencyCode, editedBudget.startDate)}</td>
                                             <td className="text-center"><button onClick={() => removeItem(lIndex, iIndex)} className="text-gray-400 hover:text-red-500"><i className="fas fa-times-circle"></i></button></td>
                                         </tr>
                                     )})}
@@ -698,13 +1111,6 @@ interface FinanceProps {
   onDeleteBudget: (budgetId: string) => Promise<void> | void;
 }
 
-const CURRENCY_RATES = {
-    USD: 1,
-    EUR: 0.92,
-    XOF: 604
-} as const;
-
-type CurrencyCode = keyof typeof CURRENCY_RATES;
 
 const Finance: React.FC<FinanceProps> = (props) => {
     const { 
@@ -717,7 +1123,7 @@ const Finance: React.FC<FinanceProps> = (props) => {
     } = props;
     const { t, language } = useLocalization();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'invoices' | 'expenses' | 'recurring' | 'budgets'>('invoices');
+    const [activeTab, setActiveTab] = useState<'invoices' | 'expenses' | 'recurring' | 'budgets' | 'analytics'>('invoices');
     const [activeRecurringTab, setActiveRecurringTab] = useState<'invoices' | 'expenses'>('invoices');
     
     const [isInvoiceModalOpen, setInvoiceModalOpen] = useState(false);
@@ -739,25 +1145,18 @@ const Finance: React.FC<FinanceProps> = (props) => {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('list');
 
-    const [currency, setCurrency] = useState<CurrencyCode>('USD');
-
     const getLocale = useMemo(() => (language === Language.FR ? 'fr-FR' : 'en-US'), [language]);
 
-    const formatCurrency = useCallback((value: number) => {
-        const rate = CURRENCY_RATES[currency] || 1;
-        const converted = value * rate;
-        return new Intl.NumberFormat(getLocale, {
-            style: 'currency',
-            currency
-        }).format(converted);
-    }, [currency, getLocale]);
+    // Fonction de formatage simple - affiche toujours dans la devise originale
+    const formatCurrency = useCallback((
+        value: number,
+        originalCurrency?: CurrencyCode,
+        transactionDate?: string
+    ) => {
+        const code = originalCurrency || 'USD';
+        return CurrencyService.formatCurrency(value, code, getLocale);
+    }, [getLocale]);
 
-    const currencyLabel = language === Language.FR ? 'Devise' : 'Currency';
-    const currencyOptions: { code: CurrencyCode; label: string }[] = [
-        { code: 'USD', label: 'USD ($)' },
-        { code: 'EUR', label: 'EUR (€)' },
-        { code: 'XOF', label: 'CFA (XOF)' }
-    ];
 
     // Dashboard Metrics Calculations
     const totalRevenue = useMemo(() => {
@@ -1132,21 +1531,80 @@ const Finance: React.FC<FinanceProps> = (props) => {
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-end">
-                <label className="text-sm font-semibold text-gray-600 mr-3 flex items-center">
-                    <i className="fas fa-coins mr-2 text-emerald-600"></i>
-                    {currencyLabel}
-                </label>
-                <select
-                    value={currency}
-                    onChange={e => setCurrency(e.target.value as CurrencyCode)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-700"
-                >
-                    {currencyOptions.map(option => (
-                        <option key={option.code} value={option.code}>{option.label}</option>
-                    ))}
-                </select>
-            </div>
+
+            {/* Alertes visuelles */}
+            {(() => {
+                const overdueInvoices = invoices.filter(inv => {
+                    if (inv.status === 'Paid' || inv.status === 'Draft') return false;
+                    const dueDate = new Date(inv.dueDate);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return dueDate < today;
+                });
+                
+                const overBudget = budgets.filter(budget => {
+                    const allItemIds = new Set(budget.budgetLines.flatMap(l => l.items.map(i => i.id)));
+                    const spent = expenses
+                        .filter(exp => exp.budgetItemId && allItemIds.has(exp.budgetItemId))
+                        .reduce((sum, exp) => sum + exp.amount, 0);
+                    return spent > budget.amount;
+                });
+
+                if (overdueInvoices.length > 0 || overBudget.length > 0) {
+                    return (
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+                            <div className="space-y-3">
+                                {overdueInvoices.length > 0 && (
+                                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg shadow-sm">
+                                        <div className="flex items-center">
+                                            <i className="fas fa-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                                            <div className="flex-1">
+                                                <h3 className="text-sm font-bold text-red-800">
+                                                    {t('overdue_invoices_alert') || `${overdueInvoices.length} Facture(s) en retard`}
+                                                </h3>
+                                                <p className="text-sm text-red-700 mt-1">
+                                                    {t('overdue_invoices_message') || 'Vous avez des factures en retard. Veuillez suivre les paiements.'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setActiveTab('invoices');
+                                                    setStatusFilter('overdue');
+                                                }}
+                                                className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold"
+                                            >
+                                                {t('view') || 'Voir'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                {overBudget.length > 0 && (
+                                    <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg shadow-sm">
+                                        <div className="flex items-center">
+                                            <i className="fas fa-chart-line text-orange-500 text-xl mr-3"></i>
+                                            <div className="flex-1">
+                                                <h3 className="text-sm font-bold text-orange-800">
+                                                    {t('budgets_exceeded_alert') || `${overBudget.length} Budget(s) dépassé(s)`}
+                                                </h3>
+                                                <p className="text-sm text-orange-700 mt-1">
+                                                    {t('budgets_exceeded_message') || 'Certains budgets ont été dépassés. Vérifiez vos dépenses.'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => setActiveTab('budgets')}
+                                                className="ml-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-semibold"
+                                            >
+                                                {t('view') || 'Voir'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
+                return null;
+            })()}
 
             {/* Métriques Power BI style */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
@@ -1245,6 +1703,17 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                 }`}
                             >
                                 {t('budgets')} ({budgets.length})
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('analytics')} 
+                                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'analytics' 
+                                        ? 'border-emerald-500 text-emerald-600' 
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
+                            >
+                                <i className="fas fa-chart-line mr-2"></i>
+                                {t('analytics') || 'Analytics'}
                             </button>
                         </nav>
                     </div>
@@ -1360,11 +1829,22 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                 <td className="px-6 py-4">
                                                     {inv.status === 'Partially Paid' ? (
                                                         <div className="flex flex-col">
-                                                            <span className="font-medium">{formatCurrency(inv.paidAmount || 0)} / {formatCurrency(inv.amount)}</span>
-                                                            <span className="text-xs text-gray-500">{t('remaining')}: {formatCurrency(inv.amount - (inv.paidAmount || 0))}</span>
+                                                            <span className="font-medium">{formatCurrency(inv.paidAmount || 0, inv.currencyCode, inv.transactionDate)} / {formatCurrency(inv.amount, inv.currencyCode, inv.transactionDate)}</span>
+                                                            <span className="text-xs text-gray-500">{t('remaining')}: {formatCurrency(inv.amount - (inv.paidAmount || 0), inv.currencyCode, inv.transactionDate)}</span>
                                                         </div>
                                                     ) : (
-                                                        <span>{formatCurrency(inv.amount)}</span>
+                                                        <div className="flex flex-col">
+                                                            <span>{formatCurrency(inv.amount, inv.currencyCode, inv.transactionDate)}</span>
+                                                            {inv.currencyCode && inv.currencyCode !== 'USD' && inv.exchangeRate && inv.transactionDate && (
+                                                                <ExchangeGainLossIndicator 
+                                                                    amount={inv.amount} 
+                                                                    currency={inv.currencyCode} 
+                                                                    exchangeRate={inv.exchangeRate}
+                                                                    transactionDate={inv.transactionDate}
+                                                                    size="sm"
+                                                                />
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td className={`px-6 py-4 ${finalStatus === 'Overdue' ? 'font-bold text-red-600' : ''}`}>{inv.dueDate}</td>
@@ -1514,7 +1994,20 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         </td>
                                         <td className="px-6 py-4">{exp.date}</td>
                                         <td className="px-6 py-4 font-medium text-gray-900">{exp.description}</td>
-                                        <td className="px-6 py-4">{formatCurrency(exp.amount)}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span>{formatCurrency(exp.amount, exp.currencyCode, exp.transactionDate)}</span>
+                                                {exp.currencyCode && exp.currencyCode !== 'USD' && exp.exchangeRate && exp.transactionDate && (
+                                                    <ExchangeGainLossIndicator 
+                                                        amount={exp.amount} 
+                                                        currency={exp.currencyCode} 
+                                                        exchangeRate={exp.exchangeRate}
+                                                        transactionDate={exp.transactionDate}
+                                                        size="sm"
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4">{exp.dueDate || 'N/A'}</td>
                                          <td className="px-6 py-4">
                                             {exp.receipt ? (
@@ -1568,7 +2061,21 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <tbody className="divide-y">
                                             {recurringInvoices.map(ri => (
                                                 <tr key={ri.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-medium">{ri.clientName}</td><td className="px-6 py-4">{formatCurrency(ri.amount)}</td>
+                                                <td className="px-6 py-4 font-medium">{ri.clientName}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span>{formatCurrency(ri.amount, ri.currencyCode, ri.startDate)}</span>
+                                                        {ri.currencyCode && ri.currencyCode !== 'USD' && ri.exchangeRate && ri.startDate && (
+                                                            <ExchangeGainLossIndicator 
+                                                                amount={ri.amount} 
+                                                                currency={ri.currencyCode} 
+                                                                exchangeRate={ri.exchangeRate}
+                                                                transactionDate={ri.startDate}
+                                                                size="sm"
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </td>
                                                     <td className="px-6 py-4">{t(ri.frequency.toLowerCase())}</td><td className="px-6 py-4">{getNextDueDate(ri)}</td>
                                                     <td className="px-6 py-4 text-right">
                                                         {canManageEntity(ri.createdById) && (
@@ -1592,7 +2099,21 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <tbody className="divide-y">
                                             {recurringExpenses.map(re => (
                                                 <tr key={re.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-medium">{re.description}</td><td className="px-6 py-4">{formatCurrency(re.amount)}</td>
+                                                <td className="px-6 py-4 font-medium">{re.description}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span>{formatCurrency(re.amount, re.currencyCode, re.startDate)}</span>
+                                                        {re.currencyCode && re.currencyCode !== 'USD' && re.exchangeRate && re.startDate && (
+                                                            <ExchangeGainLossIndicator 
+                                                                amount={re.amount} 
+                                                                currency={re.currencyCode} 
+                                                                exchangeRate={re.exchangeRate}
+                                                                transactionDate={re.startDate}
+                                                                size="sm"
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </td>
                                                     <td className="px-6 py-4">{t(re.frequency.toLowerCase())}</td><td className="px-6 py-4">{getNextDueDate(re)}</td>
                                                     <td className="px-6 py-4 text-right">
                                                         {canManageEntity(re.createdById) && (
@@ -1629,7 +2150,18 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                         <div className="mt-4">
                                             <div className="flex justify-between text-sm mb-1">
                                                 <span className="text-gray-600">{t('amount_spent')}</span>
-                                                <span className="font-semibold">{formatCurrency(spent)}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-semibold">{formatCurrency(spent, budget.currencyCode, budget.startDate)}</span>
+                                                    {budget.currencyCode && budget.currencyCode !== 'USD' && budget.exchangeRate && budget.startDate && (
+                                                        <ExchangeGainLossIndicator 
+                                                            amount={budget.amount} 
+                                                            currency={budget.currencyCode} 
+                                                            exchangeRate={budget.exchangeRate}
+                                                            transactionDate={budget.startDate}
+                                                            size="sm"
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="w-full bg-gray-200 rounded-full h-4">
                                                 <div 
@@ -1638,8 +2170,19 @@ const Finance: React.FC<FinanceProps> = (props) => {
                                                 ></div>
                                             </div>
                                             <div className="flex justify-between text-sm mt-1">
-                                                <span className="text-gray-600">{t('remaining')}: <span className={remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600'}>{formatCurrency(remaining)}</span></span>
-                                                <span className="font-bold text-gray-800">{formatCurrency(budget.amount)}</span>
+                                                <span className="text-gray-600">{t('remaining')}: <span className={remaining < 0 ? 'text-red-600 font-bold' : 'text-green-600'}>{formatCurrency(remaining, budget.currencyCode, budget.startDate)}</span></span>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="font-bold text-gray-800">{formatCurrency(budget.amount, budget.currencyCode, budget.startDate)}</span>
+                                                    {budget.currencyCode && budget.currencyCode !== 'USD' && budget.exchangeRate && budget.startDate && (
+                                                        <ExchangeGainLossIndicator 
+                                                            amount={budget.amount} 
+                                                            currency={budget.currencyCode} 
+                                                            exchangeRate={budget.exchangeRate}
+                                                            transactionDate={budget.startDate}
+                                                            size="sm"
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1655,6 +2198,13 @@ const Finance: React.FC<FinanceProps> = (props) => {
                             })}
                         </div>
                     )}
+                    {activeTab === 'analytics' && (
+                        <FinanceAnalytics 
+                            invoices={invoices}
+                            expenses={expenses}
+                            budgets={budgets}
+                        />
+                    )}
                 </div>
 
             </div>
@@ -1663,7 +2213,15 @@ const Finance: React.FC<FinanceProps> = (props) => {
         {isInvoiceModalOpen && <InvoiceFormModal invoice={editingInvoice} onClose={() => setInvoiceModalOpen(false)} onSave={handleSaveInvoice} onSaveRecurring={handleSaveRecurringInvoice} />}
         {isExpenseModalOpen && <ExpenseFormModal expense={editingExpense} budgets={budgets} onClose={() => setExpenseModalOpen(false)} onSave={handleSaveExpense} onSaveRecurring={handleSaveRecurringExpense} />}
         {isBudgetModalOpen && <BudgetFormModal budget={editingBudget} projects={projects} onClose={() => setBudgetModalOpen(false)} onSave={handleSaveBudget} />}
-        {isBudgetDetailModalOpen && viewingBudget && <BudgetDetailModal budget={viewingBudget} expenses={expenses} onClose={() => setBudgetDetailModalOpen(false)} onUpdateBudget={onUpdateBudget} />}
+        {isBudgetDetailModalOpen && viewingBudget && (
+            <BudgetDetailModal 
+                budget={viewingBudget} 
+                expenses={expenses} 
+                onClose={() => setBudgetDetailModalOpen(false)} 
+                onUpdateBudget={onUpdateBudget}
+                formatCurrencyFn={formatCurrency}
+            />
+        )}
         {deletingId && <ConfirmationModal title={t('confirm_delete')} message={t('confirm_delete_message')} onConfirm={confirmDelete} onCancel={() => setDeletingId(null)} />}
         {viewingReceipt && <ReceiptViewerModal receipt={viewingReceipt} onClose={() => setViewingReceipt(null)} />}
     </>

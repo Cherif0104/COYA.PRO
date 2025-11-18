@@ -1,7 +1,8 @@
 import { supabase } from './supabaseService';
 import { ApiHelper } from './apiHelper';
-import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document } from '../types';
+import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode } from '../types';
 import OrganizationService from './organizationService';
+import { CurrencyService } from './currencyService';
 
 // Service de données Supabase
 export class DataService {
@@ -16,6 +17,47 @@ export class DataService {
       console.warn('⚠️ Erreur récupération organization_id (continue sans filtre):', error);
       return null;
     }
+  }
+
+  private static normalizeDate(dateInput?: string | null): string {
+    if (dateInput) return new Date(dateInput).toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
+  }
+
+  private static async buildCurrencyColumns(
+    amount?: number | null,
+    currencyCode?: CurrencyCode | null,
+    transactionDate?: string | null,
+    manualExchangeRate?: number | null
+  ) {
+    const safeAmount = typeof amount === 'number' ? amount : 0;
+    const code: CurrencyCode = (currencyCode as CurrencyCode) || 'USD';
+    const normalizedDate = this.normalizeDate(transactionDate);
+
+    let exchangeRate = 1;
+    let baseAmountUSD = safeAmount;
+
+    try {
+      // Si un taux manuel est fourni, l'utiliser directement
+      if (manualExchangeRate && manualExchangeRate > 0) {
+        exchangeRate = manualExchangeRate;
+        baseAmountUSD = safeAmount * exchangeRate;
+      } else {
+        // Sinon, récupérer les taux manuels de la base et les utiliser en priorité
+        const manualRates = await this.getManualExchangeRates(code, 'USD', normalizedDate);
+        exchangeRate = await CurrencyService.getRateToUSD(code, normalizedDate, manualRates);
+        baseAmountUSD = safeAmount * exchangeRate;
+      }
+    } catch (error) {
+      console.warn('⚠️ Currency conversion fallback:', error);
+    }
+
+    return {
+      currency_code: code,
+      exchange_rate: exchangeRate,
+      base_amount_usd: baseAmountUSD,
+      transaction_date: normalizedDate
+    };
   }
   // ===== PROFILES =====
   static async getProfiles() {
@@ -901,6 +943,13 @@ export class DataService {
       // Commencer avec les colonnes obligatoires seulement
       const creatorName = profile?.full_name || currentUser.email || null;
 
+      const currencyPayload = await this.buildCurrencyColumns(
+        invoice.amount ?? 0,
+        (invoice.currencyCode as CurrencyCode) || 'USD',
+        invoice.transactionDate || invoice.dueDate,
+        (invoice as any).manualExchangeRate || invoice.exchangeRate || undefined
+      );
+
       const insertData: any = {
         invoice_number: invoiceNumber, // Basé sur getInvoices qui utilise invoice.invoice_number
       client_name: invoice.clientName || '',
@@ -909,7 +958,8 @@ export class DataService {
         due_date: invoice.dueDate || null,
         user_id: profile.id,
         created_by: currentUser.id,
-        created_by_name: creatorName
+        created_by_name: creatorName,
+        ...currencyPayload
       };
       
       // Ajouter les colonnes optionnelles seulement si elles ont une valeur
@@ -1048,6 +1098,34 @@ export class DataService {
       }
       if (updates.recurringSourceId !== undefined) updateData.recurring_source_id = updates.recurringSourceId;
 
+      if (
+        updates.amount !== undefined ||
+        updates.currencyCode !== undefined ||
+        updates.transactionDate !== undefined ||
+        (updates as any).manualExchangeRate !== undefined
+      ) {
+        const currencyPayload = await this.buildCurrencyColumns(
+          updates.amount ?? 0,
+          (updates.currencyCode as CurrencyCode) || undefined,
+          updates.transactionDate || updates.date,
+          (updates as any).manualExchangeRate || updates.exchangeRate || undefined
+        );
+        Object.assign(updateData, currencyPayload);
+      }
+
+      if (
+        updates.amount !== undefined ||
+        updates.currencyCode !== undefined ||
+        updates.transactionDate !== undefined
+      ) {
+        const currencyPayload = await this.buildCurrencyColumns(
+          updates.amount ?? 0,
+          (updates.currencyCode as CurrencyCode) || undefined,
+          updates.transactionDate || updates.dueDate
+        );
+        Object.assign(updateData, currencyPayload);
+      }
+
       const { data, error } = await supabase
         .from('invoices')
         .update(updateData)
@@ -1111,6 +1189,13 @@ export class DataService {
       
       const creatorName = profile?.full_name || currentUser.email || null;
 
+      const currencyPayload = await this.buildCurrencyColumns(
+        expense.amount ?? 0,
+        (expense.currencyCode as CurrencyCode) || 'USD',
+        expense.transactionDate || expense.date,
+        (expense as any).manualExchangeRate || expense.exchangeRate || undefined
+      );
+      
       const { data, error } = await supabase
         .from('expenses')
         .insert({
@@ -1129,7 +1214,8 @@ export class DataService {
           created_by: currentUser.id,
           created_by_name: creatorName,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          ...currencyPayload
         })
         .select()
         .single();
@@ -1223,6 +1309,15 @@ export class DataService {
         throw new Error('Profil utilisateur non trouvé');
       }
 
+      const creatorName = profile?.full_name || currentUser.email || null;
+      
+      const currencyPayload = await this.buildCurrencyColumns(
+        recurringInvoice.amount ?? 0,
+        (recurringInvoice.currencyCode as CurrencyCode) || 'USD',
+        recurringInvoice.startDate,
+        (recurringInvoice as any).manualExchangeRate || recurringInvoice.exchangeRate || undefined
+      );
+
       const { data, error } = await supabase
         .from('recurring_invoices')
         .insert({
@@ -1233,8 +1328,11 @@ export class DataService {
           end_date: recurringInvoice.endDate || null,
           last_generated_date: recurringInvoice.lastGeneratedDate || recurringInvoice.startDate || new Date().toISOString().split('T')[0],
           owner_id: profile.id,
+          created_by: currentUser.id,
+          created_by_name: creatorName,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          ...currencyPayload
         })
         .select()
         .single();
@@ -1259,6 +1357,20 @@ export class DataService {
       if (updates.startDate !== undefined) updateData.start_date = updates.startDate;
       if (updates.endDate !== undefined) updateData.end_date = updates.endDate;
       if (updates.lastGeneratedDate !== undefined) updateData.last_generated_date = updates.lastGeneratedDate;
+
+      if (
+        updates.amount !== undefined ||
+        updates.currencyCode !== undefined ||
+        (updates as any).manualExchangeRate !== undefined
+      ) {
+        const currencyPayload = await this.buildCurrencyColumns(
+          updates.amount ?? 0,
+          (updates.currencyCode as CurrencyCode) || undefined,
+          updates.startDate,
+          (updates as any).manualExchangeRate || updates.exchangeRate || undefined
+        );
+        Object.assign(updateData, currencyPayload);
+      }
 
       const { data, error } = await supabase
         .from('recurring_invoices')
@@ -1316,6 +1428,15 @@ export class DataService {
         throw new Error('Profil utilisateur non trouvé');
       }
 
+      const creatorName = profile?.full_name || currentUser.email || null;
+      
+      const currencyPayload = await this.buildCurrencyColumns(
+        recurringExpense.amount ?? 0,
+        (recurringExpense.currencyCode as CurrencyCode) || 'USD',
+        recurringExpense.startDate,
+        (recurringExpense as any).manualExchangeRate || recurringExpense.exchangeRate || undefined
+      );
+
       const { data, error } = await supabase
         .from('recurring_expenses')
         .insert({
@@ -1327,8 +1448,11 @@ export class DataService {
           end_date: recurringExpense.endDate || null,
           last_generated_date: recurringExpense.lastGeneratedDate || recurringExpense.startDate || new Date().toISOString().split('T')[0],
           owner_id: profile.id,
+          created_by: currentUser.id,
+          created_by_name: creatorName,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          ...currencyPayload
         })
         .select()
         .single();
@@ -1354,6 +1478,20 @@ export class DataService {
       if (updates.startDate !== undefined) updateData.start_date = updates.startDate;
       if (updates.endDate !== undefined) updateData.end_date = updates.endDate;
       if (updates.lastGeneratedDate !== undefined) updateData.last_generated_date = updates.lastGeneratedDate;
+
+      if (
+        updates.amount !== undefined ||
+        updates.currencyCode !== undefined ||
+        (updates as any).manualExchangeRate !== undefined
+      ) {
+        const currencyPayload = await this.buildCurrencyColumns(
+          updates.amount ?? 0,
+          (updates.currencyCode as CurrencyCode) || undefined,
+          updates.startDate,
+          (updates as any).manualExchangeRate || updates.exchangeRate || undefined
+        );
+        Object.assign(updateData, currencyPayload);
+      }
 
       const { data, error } = await supabase
         .from('recurring_expenses')
@@ -1427,6 +1565,15 @@ export class DataService {
         throw new Error('Profil utilisateur non trouvé');
       }
 
+      const creatorName = profile?.full_name || currentUser.email || null;
+      
+      const currencyPayload = await this.buildCurrencyColumns(
+        budget.amount ?? 0,
+        (budget.currencyCode as CurrencyCode) || 'USD',
+        budget.startDate,
+        (budget as any).manualExchangeRate || budget.exchangeRate || undefined
+      );
+
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .insert({
@@ -1437,8 +1584,11 @@ export class DataService {
           end_date: budget.endDate || new Date().toISOString().split('T')[0],
           project_id: budget.projectId || null,
           owner_id: profile.id,
+          created_by: currentUser.id,
+          created_by_name: creatorName,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          ...currencyPayload
         })
         .select()
         .single();
@@ -1499,6 +1649,20 @@ export class DataService {
       if (updates.startDate !== undefined) updateData.start_date = updates.startDate;
       if (updates.endDate !== undefined) updateData.end_date = updates.endDate;
       if (updates.projectId !== undefined) updateData.project_id = updates.projectId;
+
+      if (
+        updates.amount !== undefined ||
+        updates.currencyCode !== undefined ||
+        (updates as any).manualExchangeRate !== undefined
+      ) {
+        const currencyPayload = await this.buildCurrencyColumns(
+          updates.amount ?? 0,
+          (updates.currencyCode as CurrencyCode) || undefined,
+          updates.startDate || (updates as any).transactionDate,
+          (updates as any).manualExchangeRate || updates.exchangeRate || undefined
+        );
+        Object.assign(updateData, currencyPayload);
+      }
 
       const { data, error } = await supabase
         .from('budgets')
@@ -3240,6 +3404,178 @@ export class DataService {
   // Récupérer l'historique pour une entité spécifique
   static async getEntityActivityHistory(entityType: string, entityId: string) {
     return this.getActivityLogs(entityType, entityId);
+  }
+
+  // ===== GESTION DES TAUX DE CHANGE MANUELS =====
+  
+  /**
+   * Récupère tous les taux de change manuels
+   */
+  static async getManualExchangeRates(
+    baseCurrency?: CurrencyCode,
+    targetCurrency?: CurrencyCode,
+    date?: string
+  ) {
+    try {
+      let query = supabase
+        .from('manual_exchange_rates')
+        .select('*')
+        .order('effective_date', { ascending: false });
+
+      if (baseCurrency) {
+        query = query.eq('base_currency', baseCurrency);
+      }
+
+      if (targetCurrency) {
+        query = query.eq('target_currency', targetCurrency);
+      }
+
+      if (date) {
+        query = query
+          .lte('effective_date', date)
+          .or(`end_date.is.null,end_date.gte.${date}`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return (data || []).map((rate: any) => ({
+        id: rate.id,
+        baseCurrency: rate.base_currency as CurrencyCode,
+        targetCurrency: rate.target_currency as CurrencyCode,
+        rate: Number(rate.rate),
+        effectiveDate: rate.effective_date,
+        endDate: rate.end_date || undefined,
+        source: rate.source || 'manual',
+        notes: rate.notes || undefined,
+        createdBy: rate.created_by || undefined,
+        createdAt: rate.created_at || undefined,
+        updatedAt: rate.updated_at || undefined
+      }));
+    } catch (error) {
+      console.error('❌ Erreur récupération taux manuels:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Crée un nouveau taux de change manuel
+   */
+  static async createManualExchangeRate(rate: {
+    baseCurrency: CurrencyCode;
+    targetCurrency: CurrencyCode;
+    rate: number;
+    effectiveDate: string;
+    endDate?: string;
+    source?: string;
+    notes?: string;
+  }) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Utilisateur non authentifié');
+
+      const { data, error } = await supabase
+        .from('manual_exchange_rates')
+        .insert({
+          base_currency: rate.baseCurrency,
+          target_currency: rate.targetCurrency,
+          rate: rate.rate,
+          effective_date: rate.effectiveDate,
+          end_date: rate.endDate || null,
+          source: rate.source || 'manual',
+          notes: rate.notes || null,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return {
+        id: data.id,
+        baseCurrency: data.base_currency as CurrencyCode,
+        targetCurrency: data.target_currency as CurrencyCode,
+        rate: Number(data.rate),
+        effectiveDate: data.effective_date,
+        endDate: data.end_date || undefined,
+        source: data.source || 'manual',
+        notes: data.notes || undefined,
+        createdBy: data.created_by || undefined,
+        createdAt: data.created_at || undefined,
+        updatedAt: data.updated_at || undefined
+      };
+    } catch (error) {
+      console.error('❌ Erreur création taux manuel:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Met à jour un taux de change manuel
+   */
+  static async updateManualExchangeRate(
+    id: string,
+    updates: {
+      rate?: number;
+      effectiveDate?: string;
+      endDate?: string;
+      source?: string;
+      notes?: string;
+    }
+  ) {
+    try {
+      const updateData: any = {};
+      if (updates.rate !== undefined) updateData.rate = updates.rate;
+      if (updates.effectiveDate !== undefined) updateData.effective_date = updates.effectiveDate;
+      if (updates.endDate !== undefined) updateData.end_date = updates.endDate || null;
+      if (updates.source !== undefined) updateData.source = updates.source;
+      if (updates.notes !== undefined) updateData.notes = updates.notes || null;
+
+      const { data, error } = await supabase
+        .from('manual_exchange_rates')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return {
+        id: data.id,
+        baseCurrency: data.base_currency as CurrencyCode,
+        targetCurrency: data.target_currency as CurrencyCode,
+        rate: Number(data.rate),
+        effectiveDate: data.effective_date,
+        endDate: data.end_date || undefined,
+        source: data.source || 'manual',
+        notes: data.notes || undefined,
+        createdBy: data.created_by || undefined,
+        createdAt: data.created_at || undefined,
+        updatedAt: data.updated_at || undefined
+      };
+    } catch (error) {
+      console.error('❌ Erreur mise à jour taux manuel:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Supprime un taux de change manuel
+   */
+  static async deleteManualExchangeRate(id: string) {
+    try {
+      const { error } = await supabase
+        .from('manual_exchange_rates')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erreur suppression taux manuel:', error);
+      throw error;
+    }
   }
 }
 

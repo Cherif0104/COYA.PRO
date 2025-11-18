@@ -1078,12 +1078,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                         <i className={`${getIconForEntityType(log.entityType)} text-emerald-600 text-lg`}></i>
                       </div>
                       {canManageLog(log) && (
-                        <button
+                      <button
                           onClick={() => handleRequestDeleteLog(log)}
-                          className="text-red-500 hover:text-red-700"
-                        >
+                        className="text-red-500 hover:text-red-700"
+                      >
                         <i className="fas fa-trash"></i>
-                        </button>
+                      </button>
                       )}
                     </div>
                     <h3 className="font-semibold text-gray-800 mb-2">{log.entityTitle}</h3>
@@ -1110,12 +1110,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                     <div className="text-right">
                     <p className="font-bold text-emerald-600">{log.duration} {t('minutes')}</p>
                       {canManageLog(log) && (
-                        <button
+                      <button
                           onClick={() => handleRequestDeleteLog(log)}
-                          className="text-red-500 hover:text-red-700 text-sm mt-2"
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
+                        className="text-red-500 hover:text-red-700 text-sm mt-2"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
                       )}
                     </div>
                 </div>
@@ -1147,12 +1147,12 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
                         <td className="px-4 py-3 font-semibold text-emerald-600">{log.duration} {t('minutes')}</td>
                         <td className="px-4 py-3">
                           {canManageLog(log) && (
-                            <button
+                          <button
                               onClick={() => handleRequestDeleteLog(log)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <i className="fas fa-trash"></i>
-                            </button>
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
                           )}
                         </td>
                       </tr>

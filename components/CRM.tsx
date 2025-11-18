@@ -611,13 +611,13 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                             )}
                                             <div className="flex items-center justify-between mt-3 pt-3 border-t">
                                                 {canManageContact(contact) ? (
-                                                    <button 
-                                                        onClick={() => handleEdit(contact)}
-                                                        className="text-blue-600 hover:text-blue-800 text-xs"
-                                                    >
-                                                        <i className="fas fa-edit mr-1"></i>
-                                                        Éditer
-                                                    </button>
+                                                <button 
+                                                    onClick={() => handleEdit(contact)}
+                                                    className="text-blue-600 hover:text-blue-800 text-xs"
+                                                >
+                                                    <i className="fas fa-edit mr-1"></i>
+                                                    Éditer
+                                                </button>
                                                 ) : <span />}
                                             <button 
                                                 onClick={() => handleDraftEmail(contact)}
