@@ -7,6 +7,7 @@ import { generateOKRs } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import RealtimeService from '../services/realtimeService';
 import DataAdapter from '../services/dataAdapter';
+import GoalsAnalytics from './GoalsAnalytics';
 
 // Composant modal pour création/modification (temporaire, sera remplacé par GoalCreatePage)
 const ObjectiveFormModal: React.FC<{
@@ -187,6 +188,7 @@ const Goals: React.FC<GoalsProps> = ({
     const [sortBy, setSortBy] = useState<'date' | 'title' | 'progress'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+    const [activeSection, setActiveSection] = useState<'overview' | 'analytics'>('overview');
     
     // États pour modals et édition
     const [isCreatePageOpen, setIsCreatePageOpen] = useState(false);
@@ -475,8 +477,38 @@ const Goals: React.FC<GoalsProps> = ({
             </div>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Section Métriques - Style Power BI */}
-                {objectives.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-6 flex items-center justify-between">
+                    <div className="flex items-center">
+                        <button
+                            onClick={() => setActiveSection('overview')}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                activeSection === 'overview'
+                                    ? 'bg-emerald-600 text-white shadow-md'
+                                    : 'text-gray-600 hover:text-gray-800'
+                            }`}
+                        >
+                            {t('overview') || 'Vue globale'}
+                        </button>
+                        <button
+                            onClick={() => setActiveSection('analytics')}
+                            className={`ml-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                activeSection === 'analytics'
+                                    ? 'bg-emerald-600 text-white shadow-md'
+                                    : 'text-gray-600 hover:text-gray-800'
+                            }`}
+                        >
+                            {t('analytics') || 'Analytics'}
+                        </button>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                        {objectives.length} OKR
+                    </span>
+                </div>
+
+                {activeSection === 'overview' ? (
+                    <>
+                        {/* Section Métriques - Style Power BI */}
+                        {objectives.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         {/* Carte Objectifs totaux */}
                         <div className="bg-white rounded-xl shadow-lg border-l-4 border-blue-500 p-6 hover:shadow-xl transition-shadow">
@@ -1028,6 +1060,10 @@ const Goals: React.FC<GoalsProps> = ({
                         )}
                 </div>
             )}
+                    </>
+                ) : (
+                    <GoalsAnalytics objectives={objectives} projects={projects} />
+                )}
             </div>
             
 
