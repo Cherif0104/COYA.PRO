@@ -41,6 +41,7 @@ import OrganizationService from './services/organizationService';
 import { supabase } from './services/supabaseService';
 import OrganizationManagement from './components/OrganizationManagement';
 import { useModulePermissions } from './hooks/useModulePermissions';
+import NotificationsPage from './components/NotificationsPage';
 
 
 const App: React.FC = () => {
@@ -2016,6 +2017,12 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                 />;
+      case 'notifications_center':
+        return (
+          <NotificationsPage
+            onNavigateToEntity={handleNotificationNavigate}
+          />
+        );
       case 'leave_management':
         return <LeaveManagement 
                     leaveRequests={leaveRequests}
@@ -2085,6 +2092,7 @@ const App: React.FC = () => {
             toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} 
             setView={handleSetView}
             onNotificationNavigate={handleNotificationNavigate}
+            onShowAllNotifications={() => handleSetView('notifications_center')}
         />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
           <div className="container mx-auto px-6 py-8">

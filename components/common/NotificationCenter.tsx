@@ -367,7 +367,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEnt
               <div className="p-3 border-t border-gray-200 bg-gray-50 text-center">
                 <button
                   onClick={() => {
-                    // TODO: Naviguer vers la page complète des notifications
+                    onNavigate?.({
+                      id: 'notifications-center',
+                      userId: '',
+                      type: 'info',
+                      module: 'system',
+                      action: 'reminder',
+                      title: 'Center',
+                      message: '',
+                      read: true,
+                      createdAt: new Date().toISOString()
+                    } as Notification);
                     setIsOpen(false);
                   }}
                   className="text-xs text-blue-600 hover:text-blue-800 font-medium"

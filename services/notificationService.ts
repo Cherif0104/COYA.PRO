@@ -159,6 +159,7 @@ export class NotificationService {
       unreadOnly?: boolean;
       limit?: number;
       module?: string;
+      offset?: number;
     }
   ): Promise<Notification[]> {
     try {
@@ -178,6 +179,10 @@ export class NotificationService {
 
       if (options?.limit) {
         query = query.limit(options.limit);
+      }
+
+      if (options?.offset) {
+        query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
       }
 
       const { data, error } = await query;

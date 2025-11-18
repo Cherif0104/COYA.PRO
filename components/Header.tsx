@@ -11,9 +11,10 @@ interface HeaderProps {
   toggleSidebar: () => void;
   setView: (view: string) => void;
   onNotificationNavigate: (notification: Notification) => void;
+  onShowAllNotifications?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationNavigate }) => {
+const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationNavigate, onShowAllNotifications }) => {
   const { user, signOut } = useAuth();
   const { language, setLanguage, t } = useLocalization();
   const { theme, toggleTheme } = useTheme();
@@ -49,7 +50,13 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationN
           <div className="flex items-center space-x-4">
             {/* Notifications en temps réel */}
             <NotificationCenter
-              onNavigate={onNotificationNavigate}
+              onNavigate={(notification) => {
+                if (notification.id === 'notifications-center') {
+                  onShowAllNotifications?.();
+                } else {
+                  onNotificationNavigate(notification);
+                }
+              }}
             />
 
             {/* Theme Switcher */}
