@@ -992,31 +992,78 @@ const App: React.FC = () => {
     // NOTIFICATIONS - Gérées par NotificationCenter en temps réel
 
     // RECURRING INVOICES
-    const handleAddRecurringInvoice = async (data: Omit<RecurringInvoice, 'id'>) => {
+  const handleAddRecurringInvoice = async (data: Omit<RecurringInvoice, 'id'>) => {
       try {
         const newRecurringInvoice = await DataAdapter.createRecurringInvoice(data);
         if (newRecurringInvoice) {
           setRecurringInvoices(prev => [newRecurringInvoice, ...prev]);
+        if (user) {
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'finance',
+            entityType: 'recurring_invoice',
+            entityId: newRecurringInvoice.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé une facture récurrente (${newRecurringInvoice.name || newRecurringInvoice.id})`,
+              amount: newRecurringInvoice.amount,
+              currency: newRecurringInvoice.currencyCode,
+              frequency: newRecurringInvoice.frequency
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur création facture récurrente:', error);
       }
     };
-    const handleUpdateRecurringInvoice = async (updated: RecurringInvoice) => {
+  const handleUpdateRecurringInvoice = async (updated: RecurringInvoice) => {
+    const previous = recurringInvoices.find(i => i.id === updated.id);
       try {
         const result = await DataAdapter.updateRecurringInvoice(updated.id, updated);
         if (result) {
           setRecurringInvoices(prev => prev.map(i => i.id === updated.id ? result : i));
+        if (user) {
+          const diff = previous
+            ? buildDiff(previous, result, ['name', 'amount', 'currencyCode', 'frequency', 'nextRunDate'])
+            : undefined;
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'finance',
+            entityType: 'recurring_invoice',
+            entityId: result.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a modifié une facture récurrente (${result.name || result.id})`,
+              diff
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur mise à jour facture récurrente:', error);
       }
     };
-    const handleDeleteRecurringInvoice = async (id: string) => {
+  const handleDeleteRecurringInvoice = async (id: string) => {
+    const invoiceToDelete = recurringInvoices.find(i => i.id === id);
       try {
         const success = await DataAdapter.deleteRecurringInvoice(id);
         if (success) {
           setRecurringInvoices(prev => prev.filter(i => i.id !== id));
+        if (user && invoiceToDelete) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'finance',
+            entityType: 'recurring_invoice',
+            entityId: id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé une facture récurrente (${invoiceToDelete.name || invoiceToDelete.id})`,
+              amount: invoiceToDelete.amount,
+              currency: invoiceToDelete.currencyCode
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur suppression facture récurrente:', error);
@@ -1024,31 +1071,78 @@ const App: React.FC = () => {
     };
 
     // RECURRING EXPENSES
-    const handleAddRecurringExpense = async (data: Omit<RecurringExpense, 'id'>) => {
+  const handleAddRecurringExpense = async (data: Omit<RecurringExpense, 'id'>) => {
       try {
         const newRecurringExpense = await DataAdapter.createRecurringExpense(data);
         if (newRecurringExpense) {
           setRecurringExpenses(prev => [newRecurringExpense, ...prev]);
+        if (user) {
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'finance',
+            entityType: 'recurring_expense',
+            entityId: newRecurringExpense.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé une dépense récurrente (${newRecurringExpense.name || newRecurringExpense.id})`,
+              amount: newRecurringExpense.amount,
+              currency: newRecurringExpense.currencyCode,
+              frequency: newRecurringExpense.frequency
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur création dépense récurrente:', error);
       }
     };
-    const handleUpdateRecurringExpense = async (updated: RecurringExpense) => {
+  const handleUpdateRecurringExpense = async (updated: RecurringExpense) => {
+    const previous = recurringExpenses.find(e => e.id === updated.id);
       try {
         const result = await DataAdapter.updateRecurringExpense(updated.id, updated);
         if (result) {
           setRecurringExpenses(prev => prev.map(e => e.id === updated.id ? result : e));
+        if (user) {
+          const diff = previous
+            ? buildDiff(previous, result, ['name', 'amount', 'currencyCode', 'frequency', 'nextRunDate'])
+            : undefined;
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'finance',
+            entityType: 'recurring_expense',
+            entityId: result.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a modifié une dépense récurrente (${result.name || result.id})`,
+              diff
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur mise à jour dépense récurrente:', error);
       }
     };
-    const handleDeleteRecurringExpense = async (id: string) => {
+  const handleDeleteRecurringExpense = async (id: string) => {
+    const expenseToDelete = recurringExpenses.find(e => e.id === id);
       try {
         const success = await DataAdapter.deleteRecurringExpense(id);
         if (success) {
           setRecurringExpenses(prev => prev.filter(e => e.id !== id));
+        if (user && expenseToDelete) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'finance',
+            entityType: 'recurring_expense',
+            entityId: id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé une dépense récurrente (${expenseToDelete.name || expenseToDelete.id})`,
+              amount: expenseToDelete.amount,
+              currency: expenseToDelete.currencyCode
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur suppression dépense récurrente:', error);
@@ -1093,6 +1187,19 @@ const App: React.FC = () => {
           NotificationHelper.notifyInvoiceCreated(newInvoice, user as any).catch(err => {
             console.error('Erreur notification facture créée:', err);
           });
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'finance',
+            entityType: 'invoice',
+            entityId: newInvoice.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé la facture ${newInvoice.invoiceNumber || newInvoice.id}`,
+              amount: newInvoice.amount,
+              currency: newInvoice.currencyCode,
+              transactionDate: newInvoice.transactionDate
+            }
+          });
         }
       } else {
         console.error('❌ App.handleAddInvoice - newInvoice est null');
@@ -1132,16 +1239,48 @@ const App: React.FC = () => {
               console.error('Erreur notification facture payée:', err);
             });
           }
-      }
-    } catch (error) {
+
+          if (user) {
+            const diff = oldInvoice
+              ? buildDiff(oldInvoice, result, ['status', 'amount', 'currencyCode', 'paidAmount', 'dueDate', 'transactionDate'])
+              : undefined;
+            AuditLogService.logAction({
+              action: 'update',
+              module: 'finance',
+              entityType: 'invoice',
+              entityId: result.id,
+              actor: user as any,
+              metadata: {
+                summary: `${user.name} a mis à jour la facture ${result.invoiceNumber || result.id}`,
+                diff
+              }
+            });
+          }
+        }
+      } catch (error) {
         console.error('Erreur mise à jour facture:', error);
       }
     };
     const handleDeleteInvoice = async (invoiceId: string) => {
+      const invoiceToDelete = invoices.find(i => i.id === invoiceId);
       try {
         const success = await DataAdapter.deleteInvoice(invoiceId);
         if (success) {
         setInvoices(prev => prev.filter(i => i.id !== invoiceId));
+        if (user && invoiceToDelete) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'finance',
+            entityType: 'invoice',
+            entityId: invoiceId,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé la facture ${invoiceToDelete.invoiceNumber || invoiceToDelete.id}`,
+              amount: invoiceToDelete.amount,
+              currency: invoiceToDelete.currencyCode
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur suppression facture:', error);
@@ -1154,6 +1293,21 @@ const App: React.FC = () => {
       const newExpense = await DataAdapter.createExpense(expenseData);
       if (newExpense) {
         setExpenses(prev => [newExpense, ...prev]);
+        if (user) {
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'finance',
+            entityType: 'expense',
+            entityId: newExpense.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a enregistré une dépense ${newExpense.vendor || newExpense.id}`,
+              amount: newExpense.amount,
+              currency: newExpense.currencyCode,
+              transactionDate: newExpense.transactionDate
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur création dépense:', error);
@@ -1161,20 +1315,52 @@ const App: React.FC = () => {
     }
   };
     const handleUpdateExpense = async (updatedExpense: Expense) => {
+      const previousExpense = expenses.find(e => e.id === updatedExpense.id);
       try {
         const result = await DataAdapter.updateExpense(updatedExpense.id, updatedExpense);
         if (result) {
           setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? result : e));
+          if (user) {
+            const diff = previousExpense
+              ? buildDiff(previousExpense, result, ['amount', 'currencyCode', 'category', 'transactionDate', 'status'])
+              : undefined;
+            AuditLogService.logAction({
+              action: 'update',
+              module: 'finance',
+              entityType: 'expense',
+              entityId: result.id,
+              actor: user as any,
+              metadata: {
+                summary: `${user.name} a modifié une dépense ${result.vendor || result.id}`,
+                diff
+              }
+            });
+          }
         }
       } catch (error) {
         console.error('Erreur mise à jour dépense:', error);
       }
     };
     const handleDeleteExpense = async (expenseId: string) => {
+      const expenseToDelete = expenses.find(e => e.id === expenseId);
       try {
         const success = await DataAdapter.deleteExpense(expenseId);
         if (success) {
         setExpenses(prev => prev.filter(e => e.id !== expenseId));
+        if (user && expenseToDelete) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'finance',
+            entityType: 'expense',
+            entityId: expenseId,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé une dépense ${expenseToDelete.vendor || expenseToDelete.id}`,
+              amount: expenseToDelete.amount,
+              currency: expenseToDelete.currencyCode
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur suppression dépense:', error);
@@ -1187,6 +1373,20 @@ const App: React.FC = () => {
         const newBudget = await DataAdapter.createBudget(budgetData);
         if (newBudget) {
         setBudgets(prev => [newBudget, ...prev]);
+        if (user) {
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'finance',
+            entityType: 'budget',
+            entityId: newBudget.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a créé le budget "${newBudget.title}"`,
+              amount: newBudget.amount,
+              currency: newBudget.currencyCode
+            }
+          });
+        }
         }
       } catch (error) {
         console.error('Erreur création budget:', error);
@@ -1220,26 +1420,41 @@ const App: React.FC = () => {
       }
     };
     const handleDeleteBudget = async (budgetId: string) => {
+      const budgetToDelete = budgets.find(b => b.id === budgetId);
       try {
         const success = await DataAdapter.deleteBudget(budgetId);
         if (success) {
           setBudgets(prev => prev.filter(b => b.id !== budgetId));
           // Unlink expenses from deleted budget items
-        const budgetToDelete = budgets.find(b => b.id === budgetId);
           if (budgetToDelete) {
-        const itemIdsToDelete = new Set<string>();
-        budgetToDelete.budgetLines.forEach(line => {
-            line.items.forEach(item => {
+            const itemIdsToDelete = new Set<string>();
+            budgetToDelete.budgetLines.forEach(line => {
+              line.items.forEach(item => {
                 itemIdsToDelete.add(item.id);
+              });
             });
-        });
 
-        // Unlink expenses from the deleted budget items
-        setExpenses(prev => prev.map(e => 
-            e.budgetItemId && itemIdsToDelete.has(e.budgetItemId) 
-            ? { ...e, budgetItemId: undefined } 
-            : e
-        ));
+            // Unlink expenses from the deleted budget items
+            setExpenses(prev => prev.map(e => 
+              e.budgetItemId && itemIdsToDelete.has(e.budgetItemId) 
+                ? { ...e, budgetItemId: undefined } 
+                : e
+            ));
+
+            if (user) {
+              AuditLogService.logAction({
+                action: 'delete',
+                module: 'finance',
+                entityType: 'budget',
+                entityId: budgetId,
+                actor: user as any,
+                metadata: {
+                  summary: `${user.name} a supprimé le budget "${budgetToDelete.title}"`,
+                  amount: budgetToDelete.amount,
+                  currency: budgetToDelete.currencyCode
+                }
+              });
+            }
           }
         }
       } catch (error) {
@@ -1284,6 +1499,19 @@ const App: React.FC = () => {
         return mapped.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
       });
       console.log('✅ Meeting mis à jour avec succès');
+      if (user) {
+        AuditLogService.logAction({
+          action: 'update',
+          module: 'time_tracking',
+          entityType: 'meeting',
+          entityId: updated.id as string,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a modifié la réunion "${updated.title}"`,
+            newDate: updated.startTime
+          }
+        });
+      }
     } catch (error) {
       console.error('Erreur mise à jour meeting:', error);
     }
@@ -1295,6 +1523,18 @@ const App: React.FC = () => {
       await DataAdapter.deleteMeeting(String(meetingId));
       updateMeetingsWithProducer(prev => prev.filter(m => String(m.id) !== String(meetingId)));
       console.log('✅ Meeting supprimé avec succès');
+      if (user) {
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'time_tracking',
+          entityType: 'meeting',
+          entityId: String(meetingId),
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a supprimé une réunion`
+          }
+        });
+      }
     } catch (error) {
       console.error('Erreur suppression meeting:', error);
     }
@@ -1309,6 +1549,17 @@ const App: React.FC = () => {
       const newRequest = await DataAdapter.createLeaveRequest(requestData);
     setLeaveRequests(prev => [newRequest, ...prev]);
       console.log('✅ Demande de congé créée:', newRequest.id);
+      AuditLogService.logAction({
+        action: 'create',
+        module: 'leave',
+        entityType: 'leave_request',
+        entityId: newRequest.id,
+        actor: user as any,
+        metadata: {
+          summary: `${user.name} a soumis une demande de congé du ${newRequest.startDate} au ${newRequest.endDate}`,
+          status: newRequest.status
+        }
+      });
     } catch (error) {
       console.error('❌ Erreur création demande de congé:', error);
       throw error;
@@ -1335,6 +1586,20 @@ const App: React.FC = () => {
           console.error('Erreur notification demande congé:', err);
         });
       }
+      if (user) {
+        const diff = oldRequest ? buildDiff(oldRequest, updatedRequest, ['status', 'approvalReason', 'rejectionReason']) : undefined;
+        AuditLogService.logAction({
+          action: 'update',
+          module: 'leave',
+          entityType: 'leave_request',
+          entityId: id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a ${status === 'approved' ? 'approuvé' : 'rejeté'} une demande de congé`,
+            diff
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur mise à jour demande de congé:', error);
       throw error;
@@ -1342,11 +1607,25 @@ const App: React.FC = () => {
   };
 
   const handleDeleteLeaveRequest = async (id: string) => {
+    const requestToDelete = leaveRequests.find(req => req.id === id);
     try {
       console.log('🔄 Suppression demande de congé ID:', id);
       await DataAdapter.deleteLeaveRequest(id);
       setLeaveRequests(prev => prev.filter(req => req.id !== id));
       console.log('✅ Demande de congé supprimée');
+      if (user && requestToDelete) {
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'leave',
+          entityType: 'leave_request',
+          entityId: id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a supprimé une demande de congé`,
+            dates: `${requestToDelete.startDate} → ${requestToDelete.endDate}`
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur suppression demande de congé:', error);
       throw error;
@@ -1365,6 +1644,19 @@ const App: React.FC = () => {
       const updatedRequest = await DataAdapter.updateLeaveRequest(id, updates);
       setLeaveRequests(prev => prev.map(req => req.id === id ? updatedRequest : req));
       console.log('✅ Dates de congé modifiées');
+      if (user) {
+        AuditLogService.logAction({
+          action: 'update',
+          module: 'leave',
+          entityType: 'leave_request',
+          entityId: id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a modifié les dates d'une demande de congé`,
+            newDates: `${startDate} → ${endDate}`
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur modification dates:', error);
       throw error;
@@ -1548,6 +1840,19 @@ const App: React.FC = () => {
       setJobs(prev => [createdJob, ...prev]);
       console.log('✅ Job créé:', createdJob.id);
     handleSetView('jobs');
+      if (user) {
+        AuditLogService.logAction({
+          action: 'create',
+          module: 'jobs',
+          entityType: 'job',
+          entityId: createdJob.id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a publié l'offre "${createdJob.title}"`,
+            location: createdJob.location
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur création job:', error);
       alert('Erreur lors de la création de l\'offre d\'emploi. Veuillez réessayer.');
@@ -1560,11 +1865,26 @@ const App: React.FC = () => {
   const handleUpdateJob = async (updatedJob: Job) => {
     setLoadingOperation('update_job');
     setIsLoading(true);
+    const previousJob = jobs.find(job => job.id === updatedJob.id);
     try {
       console.log('🔄 Mise à jour job ID:', updatedJob.id);
       const updated = await DataAdapter.updateJob(updatedJob);
       setJobs(prev => prev.map(job => job.id === updated.id ? updated : job));
       console.log('✅ Job mis à jour');
+      if (user) {
+        const diff = previousJob ? buildDiff(previousJob, updated, ['title', 'status', 'location', 'salaryRange']) : undefined;
+        AuditLogService.logAction({
+          action: 'update',
+          module: 'jobs',
+          entityType: 'job',
+          entityId: updated.id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a modifié l'offre "${updated.title}"`,
+            diff
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur mise à jour job:', error);
       alert('Erreur lors de la mise à jour de l\'offre d\'emploi. Veuillez réessayer.');
@@ -1577,11 +1897,24 @@ const App: React.FC = () => {
   const handleDeleteJob = async (jobId: number) => {
     setLoadingOperation('delete_job');
     setIsLoading(true);
+    const jobToDelete = jobs.find(job => job.id === jobId);
     try {
       console.log('🔄 Suppression job ID:', jobId);
       await DataAdapter.deleteJob(jobId);
       setJobs(prev => prev.filter(job => job.id !== jobId));
       console.log('✅ Job supprimé');
+      if (user && jobToDelete) {
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'jobs',
+          entityType: 'job',
+          entityId: jobId,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a supprimé l'offre "${jobToDelete.title}"`
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Erreur suppression job:', error);
       alert('Erreur lors de la suppression de l\'offre d\'emploi. Veuillez réessayer.');
@@ -1879,6 +2212,19 @@ const App: React.FC = () => {
         });
       }
       }
+      if (user) {
+        AuditLogService.logAction({
+          action: 'create',
+          module: 'knowledge',
+          entityType: 'course',
+          entityId: newCourse.id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a créé le cours "${newCourse.title}"`,
+            target: newCourse.targetStudents?.length || 0
+          }
+        });
+      }
     } catch (error) {
       console.error('Erreur création cours:', error);
     } finally {
@@ -1890,10 +2236,25 @@ const App: React.FC = () => {
   const handleUpdateCourse = async (updatedCourse: Course) => {
     setLoadingOperation('update_course');
     setIsLoading(true);
+    const previousCourse = courses.find(c => c.id === updatedCourse.id);
     try {
       const updated = await DataAdapter.updateCourse(updatedCourse.id, updatedCourse);
       if (updated) {
         setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+        if (user) {
+          const diff = previousCourse ? buildDiff(previousCourse, updatedCourse, ['title', 'duration', 'level', 'status']) : undefined;
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'knowledge',
+            entityType: 'course',
+            entityId: updatedCourse.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a mis à jour le cours "${updatedCourse.title}"`,
+              diff
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur mise à jour cours:', error);
@@ -1906,10 +2267,23 @@ const App: React.FC = () => {
   const handleDeleteCourse = async (courseId: string) => {
     setLoadingOperation('delete_course');
     setIsLoading(true);
+    const courseToDelete = courses.find(c => c.id === courseId);
     try {
       const success = await DataAdapter.deleteCourse(courseId);
       if (success) {
       setCourses(prev => prev.filter(c => c.id !== courseId));
+      if (user && courseToDelete) {
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'knowledge',
+          entityType: 'course',
+          entityId: courseId,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a supprimé le cours "${courseToDelete.title}"`
+          }
+        });
+      }
       }
     } catch (error) {
       console.error('Erreur suppression cours:', error);
@@ -1928,6 +2302,19 @@ const App: React.FC = () => {
       const newContact = await DataAdapter.createContact(contactData);
       if (newContact) {
         setContacts(prev => [newContact, ...prev]);
+        if (user) {
+          AuditLogService.logAction({
+            action: 'create',
+            module: 'crm',
+            entityType: 'contact',
+            entityId: newContact.id as string,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a ajouté le contact ${newContact.name}`,
+              stage: newContact.stage
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur création contact:', error);
@@ -1942,8 +2329,23 @@ const App: React.FC = () => {
   const handleUpdateContact = async (updatedContact: Contact) => {
     setLoadingOperation('update_contact');
     setIsLoading(true);
+    const previousContact = contacts.find(c => c.id === updatedContact.id);
     try {
       setContacts(prev => prev.map(c => c.id === updatedContact.id ? updatedContact : c));
+      if (user) {
+        const diff = previousContact ? buildDiff(previousContact, updatedContact, ['name', 'email', 'stage', 'company']) : undefined;
+        AuditLogService.logAction({
+          action: 'update',
+          module: 'crm',
+          entityType: 'contact',
+          entityId: updatedContact.id as string,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a mis à jour le contact ${updatedContact.name}`,
+            diff
+          }
+        });
+      }
     } finally {
       setLoadingOperation(null);
       setIsLoading(false);
@@ -1952,8 +2354,21 @@ const App: React.FC = () => {
   const handleDeleteContact = async (contactId: number) => {
     setLoadingOperation('delete_contact');
     setIsLoading(true);
+    const contactToDelete = contacts.find(c => c.id === contactId);
     try {
       setContacts(prev => prev.filter(c => c.id !== contactId));
+      if (user && contactToDelete) {
+        AuditLogService.logAction({
+          action: 'delete',
+          module: 'crm',
+          entityType: 'contact',
+          entityId: String(contactId),
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a supprimé le contact ${contactToDelete.name}`
+          }
+        });
+      }
     } finally {
       setLoadingOperation(null);
       setIsLoading(false);
@@ -1969,6 +2384,18 @@ const App: React.FC = () => {
       const newDocument = await DataAdapter.createDocument(documentData);
       if (newDocument) {
       setDocuments(prev => [newDocument, ...prev]);
+      if (user) {
+        AuditLogService.logAction({
+          action: 'create',
+          module: 'knowledge',
+          entityType: 'document',
+          entityId: newDocument.id,
+          actor: user as any,
+          metadata: {
+            summary: `${user.name} a publié le document "${newDocument.title}"`
+          }
+        });
+      }
       }
     } catch (error) {
       console.error('Erreur création document:', error);
@@ -1985,6 +2412,18 @@ const App: React.FC = () => {
       const result = await DataAdapter.updateDocument(updatedDocument.id, updatedDocument);
       if (result) {
         setDocuments(prev => prev.map(d => d.id === updatedDocument.id ? result : d));
+        if (user) {
+          AuditLogService.logAction({
+            action: 'update',
+            module: 'knowledge',
+            entityType: 'document',
+            entityId: updatedDocument.id,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a mis à jour le document "${updatedDocument.title}"`
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur mise à jour document:', error);
@@ -1997,10 +2436,23 @@ const App: React.FC = () => {
   const handleDeleteDocument = async (documentId: string) => {
     setLoadingOperation('delete_document');
     setIsLoading(true);
+    const docToDelete = documents.find(d => d.id === documentId);
     try {
       const success = await DataAdapter.deleteDocument(documentId);
       if (success) {
         setDocuments(prev => prev.filter(d => d.id !== documentId));
+        if (user && docToDelete) {
+          AuditLogService.logAction({
+            action: 'delete',
+            module: 'knowledge',
+            entityType: 'document',
+            entityId: documentId,
+            actor: user as any,
+            metadata: {
+              summary: `${user.name} a supprimé le document "${docToDelete.title}"`
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur suppression document:', error);
