@@ -1,19 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, User, TimeLog, MANAGEMENT_ROLES, Language, Translation, RESOURCE_MANAGEMENT_ROLES } from '../types';
+import { Project, User, TimeLog, Objective, MANAGEMENT_ROLES, Language, Translation, RESOURCE_MANAGEMENT_ROLES, SUPPORTED_CURRENCIES } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import TeamSelector from './common/TeamSelector';
+import ExtensibleSelect from './common/ExtensibleSelect';
 import ProjectDetailPage from './ProjectDetailPage';
 import ProjectCreatePage from './ProjectCreatePage';
 import TeamWorkloadMetrics from './TeamWorkloadMetrics';
 import ProjectsAnalytics from './ProjectsAnalytics';
+import OrganizationService from '../services/organizationService';
+import * as programmeService from '../services/programmeService';
+import * as referentialsService from '../services/referentialsService';
 
-const statusStyles = {
+const statusStyles: Record<string, string> = {
     'Not Started': 'bg-gray-200 text-gray-800',
     'In Progress': 'bg-blue-200 text-blue-800',
     'Completed': 'bg-emerald-200 text-emerald-800',
+    'On Hold': 'bg-amber-200 text-amber-800',
+    'Cancelled': 'bg-red-200 text-red-800',
 };
 
 const ProjectFormModal: React.FC<{
@@ -30,11 +36,59 @@ const ProjectFormModal: React.FC<{
         status: project?.status || 'Not Started',
         dueDate: project?.dueDate || '',
         team: project?.team || [],
+        programmeId: (project && 'programmeId' in project) ? (project.programmeId ?? '') : '',
+        budgetPlanned: (project && 'budgetPlanned' in project) ? (project.budgetPlanned ?? undefined) : undefined,
+        budgetCurrency: (project && 'budgetCurrency' in project) ? (project.budgetCurrency ?? 'XOF') : 'XOF',
     });
+    const [statusOptionId, setStatusOptionId] = useState('');
+    const [organizationId, setOrganizationId] = useState<string | null>(null);
+    const [programmes, setProgrammes] = useState<{ id: string; name: string }[]>([]);
+    const [statusOptions, setStatusOptions] = useState<referentialsService.ReferentialValue[]>([]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const orgId = await OrganizationService.getCurrentUserOrganizationId();
+            if (cancelled) return;
+            setOrganizationId(orgId || null);
+            if (orgId) {
+                try {
+                    const [list, statusList] = await Promise.all([
+                        programmeService.listProgrammes(orgId),
+                        referentialsService.listValues('project_status', orgId),
+                    ]);
+                    if (!cancelled) {
+                        setProgrammes(list.map(p => ({ id: p.id, name: p.name })));
+                        setStatusOptions(statusList);
+                    }
+                } catch (_) { if (!cancelled) setProgrammes([]); }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        if (project) {
+            const p = project as Project;
+            setFormData(prev => ({
+                ...prev,
+                programmeId: p.programmeId ?? '',
+                budgetPlanned: p.budgetPlanned,
+                budgetCurrency: p.budgetCurrency ?? 'XOF',
+            }));
+        }
+    }, [project?.id, (project as Project)?.programmeId, (project as Project)?.budgetPlanned, (project as Project)?.budgetCurrency]);
+
+    useEffect(() => {
+        if (statusOptions.length > 0 && formData.status && !statusOptionId) {
+            const id = statusOptions.find(o => o.name === formData.status)?.id ?? '';
+            setStatusOptionId(id);
+        }
+    }, [statusOptions, formData.status, statusOptionId]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({...prev, [name]: value}));
+        setFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -42,7 +96,8 @@ const ProjectFormModal: React.FC<{
         const projectData = {
             ...project,
             ...formData,
-            team: formData.team // formData.team contient déjà les objets User complets
+            programmeId: formData.programmeId || null,
+            team: formData.team,
         };
         onSave(projectData as Project);
     };
@@ -50,7 +105,7 @@ const ProjectFormModal: React.FC<{
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                 <form onSubmit={handleSubmit} className="flex flex-col h-full">
+                <form onSubmit={handleSubmit} className="flex flex-col h-full">
                     <div className="p-6 border-b">
                         <h2 className="text-2xl font-bold">{isEditMode ? t('edit_project') : t('create_new_project')}</h2>
                     </div>
@@ -59,18 +114,26 @@ const ProjectFormModal: React.FC<{
                             <label className="block text-sm font-medium text-gray-700">{t('project_title')}</label>
                             <input type="text" name="title" value={formData.title} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
-                         <div>
+                        <div>
                             <label className="block text-sm font-medium text-gray-700">{t('project_description')}</label>
                             <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">{t('status')}</label>
-                                <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                                    <option value="Not Started">{t('not_started')}</option>
-                                    <option value="In Progress">{t('in_progress')}</option>
-                                    <option value="Completed">{t('completed')}</option>
-                                </select>
+                                <ExtensibleSelect
+                                    entityType="project_status"
+                                    value={statusOptionId}
+                                    onChange={(id, item) => {
+                                        setStatusOptionId(id);
+                                        setFormData(prev => ({ ...prev, status: item?.name ?? prev.status }));
+                                    }}
+                                    organizationId={organizationId}
+                                    canCreate
+                                    canEdit
+                                    placeholder={t('status')}
+                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">{t('due_date')}</label>
@@ -78,9 +141,43 @@ const ProjectFormModal: React.FC<{
                             </div>
                         </div>
                         <div>
+                            <label className="block text-sm font-medium text-gray-700">Programme</label>
+                            <select name="programmeId" value={formData.programmeId} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                                <option value="">— Aucun —</option>
+                                {programmes.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Budget prévisionnel</label>
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={formData.budgetPlanned ?? ''}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, budgetPlanned: e.target.value === '' ? undefined : Number(e.target.value) }))}
+                                        className="block w-full p-2 border border-gray-300 rounded-md"
+                                        placeholder="Montant"
+                                    />
+                                    <select
+                                        value={formData.budgetCurrency}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, budgetCurrency: e.target.value as any }))}
+                                        className="p-2 border border-gray-300 rounded-md"
+                                    >
+                                        {SUPPORTED_CURRENCIES.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
                             <TeamSelector
                                 selectedUsers={formData.team}
-                                onUsersChange={(users) => setFormData(prev => ({...prev, team: users}))}
+                                onUsersChange={(users) => setFormData(prev => ({ ...prev, team: users }))}
                                 placeholder={t('search_team_members')}
                             />
                         </div>
@@ -1602,6 +1699,8 @@ interface ProjectsProps {
     onAddProject: (project: Omit<Project, 'id' | 'tasks' | 'risks'>) => void;
     onDeleteProject: (projectId: number) => void;
     onAddTimeLog: (log: Omit<TimeLog, 'id' | 'userId'>) => void;
+    objectives?: Objective[];
+    setView?: (view: string) => void;
     isLoading?: boolean;
     loadingOperation?: string | null;
     isDataLoaded?: boolean;
@@ -1609,7 +1708,7 @@ interface ProjectsProps {
     onNotificationHandled?: () => void;
 }
 
-const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdateProject, onAddProject, onDeleteProject, onAddTimeLog, isLoading = false, loadingOperation = null, isDataLoaded = true, autoOpenProjectId = null, onNotificationHandled }) => {
+const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdateProject, onAddProject, onDeleteProject, onAddTimeLog, objectives = [], setView, isLoading = false, loadingOperation = null, isDataLoaded = true, autoOpenProjectId = null, onNotificationHandled }) => {
     const { t, language } = useLocalization();
     const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
@@ -1624,10 +1723,25 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     // États pour recherche, filtres et vue
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [programmeFilter, setProgrammeFilter] = useState<string>('');
+    const [programmesList, setProgrammesList] = useState<{ id: string; name: string }[]>([]);
     const [sortBy, setSortBy] = useState<'date' | 'title' | 'status'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
-    const [activeSection, setActiveSection] = useState<'overview' | 'analytics'>('overview');
+    const [activeSection, setActiveSection] = useState<'overview' | 'analytics' | 'tasks_week'>('overview');
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const orgId = await OrganizationService.getCurrentUserOrganizationId();
+            if (cancelled || !orgId) return;
+            try {
+                const list = await programmeService.listProgrammes(orgId);
+                if (!cancelled) setProgrammesList(list.map(p => ({ id: p.id, name: p.name })));
+            } catch (_) { if (!cancelled) setProgrammesList([]); }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         if (!autoOpenProjectId) return;
@@ -1740,19 +1854,16 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
 
     const filteredProjects = useMemo(() => {
         let filtered = projects.filter(project => {
-            // Filtre de recherche
-            const matchesSearch = searchQuery === '' || 
+            const matchesSearch = searchQuery === '' ||
                 project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 project.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                project.team.some(member => 
+                project.team.some(member =>
                     member.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                     member.email.toLowerCase().includes(searchQuery.toLowerCase())
                 );
-
-            // Filtre par statut
             const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
-
-            return matchesSearch && matchesStatus;
+            const matchesProgramme = !programmeFilter || project.programmeId === programmeFilter;
+            return matchesSearch && matchesStatus && matchesProgramme;
         });
 
         // Tri
@@ -1778,7 +1889,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         });
 
         return filtered;
-    }, [projects, searchQuery, statusFilter, sortBy, sortOrder]);
+    }, [projects, searchQuery, statusFilter, programmeFilter, sortBy, sortOrder]);
 
     // Rôles autorisés à créer un projet
     const canCreateProject = useMemo(() => {
@@ -1846,6 +1957,32 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
             })
             .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
             .slice(0, 3);
+    }, [projects]);
+
+    // Tâches de la semaine (Phase 2.2) : tâches dont l'échéance est dans la semaine courante (lundi–dimanche)
+    const tasksThisWeek = useMemo(() => {
+        const now = new Date();
+        const day = now.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const monday = new Date(now);
+        monday.setDate(monday.getDate() + diff);
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        const weekStart = monday.getTime();
+        const weekEnd = sunday.getTime();
+        const out: Array<{ project: Project; task: import('../types').Task }> = [];
+        projects.forEach(project => {
+            (project.tasks || []).forEach(task => {
+                const due = task.dueDate ? new Date(task.dueDate).getTime() : null;
+                if (due != null && due >= weekStart && due <= weekEnd) {
+                    out.push({ project, task });
+                }
+            });
+        });
+        out.sort((a, b) => (a.task.dueDate || '').localeCompare(b.task.dueDate || ''));
+        return out;
     }, [projects]);
 
     const highRiskProjects = useMemo(() => {
@@ -1932,6 +2069,19 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     }`}
                 >
                     {t('analytics') || 'Analytics'}
+                </button>
+                <button
+                    onClick={() => setActiveSection('tasks_week')}
+                    className={`ml-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        activeSection === 'tasks_week'
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                >
+                    {localize('Tasks this week', 'Tâches de la semaine')}
+                    {tasksThisWeek.length > 0 && (
+                        <span className="ml-1.5 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{tasksThisWeek.length}</span>
+                    )}
                 </button>
             </div>
 
@@ -2103,6 +2253,18 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 <option value="On Hold">{localize('On hold', 'En attente')}</option>
                             </select>
 
+                            {/* Filtre par programme */}
+                            <select
+                                value={programmeFilter}
+                                onChange={(e) => setProgrammeFilter(e.target.value)}
+                                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            >
+                                <option value="">{localize('All programmes', 'Tous les programmes')}</option>
+                                {programmesList.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+
                             {/* Tri */}
                             <select
                                 value={sortBy}
@@ -2229,6 +2391,12 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                 )}
                                                 
                                                 <div className="space-y-2 mb-6">
+                                                    {project.programmeName && (
+                                                        <div className="flex items-center text-sm text-gray-600">
+                                                            <i className="fas fa-bookmark mr-2 text-gray-400"></i>
+                                                            <span>{project.programmeName}{project.programmeBailleurName ? ` (${project.programmeBailleurName})` : ''}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex items-center text-sm text-gray-600">
                                                         <i className="fas fa-calendar-alt mr-2 text-gray-400"></i>
                                                         <span>{project.dueDate ? new Date(project.dueDate).toLocaleDateString('fr-FR') : t('no_due_date')}</span>
@@ -2240,8 +2408,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                     <div className="flex items-center text-sm text-gray-600">
                                                         <i className="fas fa-tasks mr-2 text-gray-400"></i>
                                                         <span>{projectTasks.length} {projectTasks.length > 1 ? 'tâches' : 'tâche'}</span>
-                                    </div>
-                                </div>
+                                                    </div>
+                                                </div>
                                 
                                                 <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                                     <button
@@ -2318,8 +2486,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                         {t(project.status.toLowerCase().replace(' ', '_'))}
                                                                     </span>
                                                                 </div>
+                                                                {project.programmeName && (
+                                                                    <p className="text-xs text-gray-500 mb-1">
+                                                                        {project.programmeName}{project.programmeBailleurName ? ` · ${project.programmeBailleurName}` : ''}
+                                                                    </p>
+                                                                )}
                                                                 <p className="text-sm text-gray-600 mb-3 line-clamp-1">
-                                                    {project.description || localize('No description', 'Aucune description')}
+                                                                    {project.description || localize('No description', 'Aucune description')}
                                                                 </p>
                                                                 <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                                                                     <div className="flex items-center">
@@ -2544,6 +2717,44 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
             {activeSection === 'analytics' && (
                 <ProjectsAnalytics projects={projects} />
             )}
+
+            {activeSection === 'tasks_week' && (
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h2 className="text-xl font-bold text-coya-text mb-4 flex items-center gap-2">
+                        <i className="fas fa-calendar-week text-coya-primary" />
+                        {localize('Tasks this week', 'Tâches de la semaine')}
+                    </h2>
+                    {tasksThisWeek.length === 0 ? (
+                        <p className="text-coya-text-muted py-8 text-center">
+                            {localize('No tasks due this week.', 'Aucune tâche à échéance cette semaine.')}
+                        </p>
+                    ) : (
+                        <ul className="divide-y divide-coya-border">
+                            {tasksThisWeek.map(({ project, task }) => (
+                                <li key={`${project.id}-${task.id}`} className="py-4 flex items-center justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-coya-text truncate">{task.text || (task as any).title}</p>
+                                        <p className="text-sm text-coya-text-muted">{project.title} — {task.dueDate ? new Date(task.dueDate).toLocaleDateString(language === Language.FR ? 'fr-FR' : 'en-US') : ''}</p>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full shrink-0 ${
+                                        task.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                        task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                        {task.status}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSelectedProject(project); setIsProjectDetailPageOpen(true); }}
+                                        className="shrink-0 text-sm font-medium text-coya-primary hover:text-coya-primary-light"
+                                    >
+                                        {localize('Open project', 'Ouvrir le projet')} →
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
         </div>
 
             {isProjectCreatePageOpen && (
@@ -2569,6 +2780,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     onDeleteProject={onDeleteProject}
                     onAddTimeLog={onAddTimeLog}
                     timeLogs={timeLogs}
+                    objectives={objectives}
+                    setView={setView}
                 />
             )}
 

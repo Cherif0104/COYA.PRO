@@ -1,0 +1,47 @@
+/**
+ * Charte graphique COYA.PRO
+ * À appliquer à tous les écrans : Dashboard, Paramètres, administration, chaque module.
+ *
+ * Référence : types de graphiques et disposition validés sur le Dashboard.
+ * Accent : vert menthe. Fonds clairs, ombres douces, coins arrondis.
+ */
+
+:root {
+  /* Primaire */
+  --coya-primary: #2d9d82;
+  --coya-primary-light: #34b894;
+  --coya-primary-dark: #238770;
+  --coya-primary-muted: rgba(45, 157, 130, 0.12);
+
+  /* Vert / émeraude */
+  --coya-green: #1a5f3a;
+  --coya-green-light: #247a4a;
+  --coya-emeraude: #2d8a5a;
+
+  /* Sémantique (indicateurs Dashboard : excellent → critique) */
+  --coya-success: #22c55e;
+  --coya-warning: #e8b923;
+  --coya-warning-amber: #d97706;
+  --coya-danger: #dc2626;
+
+  /* Neutres */
+  --coya-yellow: #e8b923;
+  --coya-yellow-light: #f0c94a;
+  --coya-ambre: #d97706;
+  --coya-or-barke: #b45309;
+  --coya-bg: #f4faf8;
+  --coya-bg-gradient-start: #f0fdf9;
+  --coya-bg-gradient-end: #ffffff;
+  --coya-card-bg: #ffffff;
+  --coya-text: #1f2937;
+  --coya-text-muted: #6b7280;
+  --coya-border: #e5e7eb;
+
+  /* Ombres et forme */
+  --coya-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --coya-shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --coya-radius: 0.75rem;
+  --coya-radius-lg: 1rem;
+  --coya-gap: 1.5rem;
+  --coya-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}

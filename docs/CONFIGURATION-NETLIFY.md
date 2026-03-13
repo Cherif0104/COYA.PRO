@@ -72,9 +72,8 @@ Pour que l'application fonctionne correctement sur Netlify, vous devez configure
 ## 🔍 Vérification après déploiement
 
 1. **Authentification** : Testez la connexion/inscription
-2. **IA Textuelle** : Testez le chatbot Coya et les modules IA
-3. **Génération d'images** : Si configurée, testez dans GenAILab
-4. **Modules principaux** : Vérifiez que tous les modules se chargent correctement
+2. **IA Textuelle** : Testez le chatbot Coya (modules AI Coach et Gen AI Lab retirés en Phase 1 ERP 360°)
+3. **Modules principaux** : Vérifiez que tous les modules se chargent correctement
 
 ## 🚨 Note importante
 

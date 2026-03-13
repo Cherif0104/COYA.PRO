@@ -82,6 +82,9 @@ export interface AuthUser {
   organization_id?: string;
   status?: ProfileStatus;
   pending_role?: string | null;
+  /** Poste (ex. Directeur Général) – distinct du rôle */
+  poste_id?: string | null;
+  poste_name?: string | null;
   review_comment?: string | null;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
@@ -276,6 +279,8 @@ export class AuthService {
               organization_id: newProfile.organization_id || DEFAULT_ORGANIZATION_ID,
               status: (newProfile.status as ProfileStatus) || 'active',
               pending_role: newProfile.pending_role || null,
+              poste_id: newProfile.poste_id ?? null,
+              poste_name: newProfile.poste_name ?? null,
               review_comment: newProfile.review_comment || null,
               reviewed_at: newProfile.reviewed_at || null,
               reviewed_by: newProfile.reviewed_by || null
@@ -322,6 +327,8 @@ export class AuthService {
           organization_id: effectiveProfile.organization_id || DEFAULT_ORGANIZATION_ID,
           status: (effectiveProfile.status as ProfileStatus) || 'active',
           pending_role: effectiveProfile.pending_role || null,
+          poste_id: effectiveProfile.poste_id ?? null,
+          poste_name: effectiveProfile.poste_name ?? null,
           review_comment: effectiveProfile.review_comment || null,
           reviewed_at: effectiveProfile.reviewed_at || null,
           reviewed_by: effectiveProfile.reviewed_by || null
@@ -376,8 +383,11 @@ export class AuthService {
           full_name: profile.full_name,
           role: this.mapStoredRoleToUi(profile.role),
           avatar_url: profile.avatar_url,
+          organization_id: profile.organization_id || DEFAULT_ORGANIZATION_ID,
           status: (profile.status as ProfileStatus) || 'active',
           pending_role: profile.pending_role || null,
+          poste_id: profile.poste_id ?? null,
+          poste_name: profile.poste_name ?? null,
           review_comment: profile.review_comment || null,
           reviewed_at: profile.reviewed_at || null,
           reviewed_by: profile.reviewed_by || null
@@ -406,8 +416,13 @@ export class AuthService {
             id: session.user.id,
             email: profile.email,
             full_name: profile.full_name,
-            role: profile.role,
-            avatar_url: profile.avatar_url
+            role: AuthService.mapStoredRoleToUi(profile.role),
+            avatar_url: profile.avatar_url,
+            organization_id: profile.organization_id || DEFAULT_ORGANIZATION_ID,
+            status: (profile.status as ProfileStatus) || 'active',
+            pending_role: profile.pending_role || null,
+            poste_id: profile.poste_id ?? null,
+            poste_name: profile.poste_name ?? null
           });
         } else {
           callback(null);

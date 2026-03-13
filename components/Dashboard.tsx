@@ -1,7 +1,29 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
-import { Course, Job, Project, TimeLog, LeaveRequest, Invoice, Expense, Role, Language } from '../types';
+import { Course, Job, Project, TimeLog, LeaveRequest, Invoice, Expense, Role, Language, Objective, ModuleName } from '../types';
+import PresenceCountdownWidget from './PresenceCountdownWidget';
+import DashboardAvatar from './dashboard/DashboardAvatar';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { useDashboardMetrics } from '../hooks/useDashboardMetrics';
+import { useModuleLabels } from '../hooks/useModuleLabels';
+import { useDashboardSettings } from '../hooks/useDashboardSettings';
+import { usePlanningToday } from '../hooks/usePlanningToday';
+import DashboardHeaderBar from './dashboard/DashboardHeaderBar';
+import KPICard from './dashboard/KPICard';
+import ProjectRepartitionDonut from './dashboard/ProjectRepartitionDonut';
+import HoursTrendLineChart from './dashboard/HoursTrendLineChart';
+import MainBalanceStyleCard from './dashboard/MainBalanceStyleCard';
+import RecentActivitiesList from './dashboard/RecentActivitiesList';
+import PendingOrdersBlock from './dashboard/PendingOrdersBlock';
+import PerformanceCabanes from './dashboard/PerformanceCabanes';
+import AnalyticsPredictif from './dashboard/AnalyticsPredictif';
+import DashboardSkeleton from './dashboard/DashboardSkeleton';
+import type { DonutSlice } from './dashboard/ProjectRepartitionDonut';
+import type { PerformanceCabaneItem, PerformanceLevel } from './dashboard/PerformanceCabanes';
+import type { TimeSeriesPoint } from './dashboard/HoursTrendLineChart';
+import type { RecentActivityItem } from './dashboard/RecentActivitiesList';
+import type { PendingBlockItem } from './dashboard/PendingOrdersBlock';
 
 interface DashboardProps {
   setView: (view: string) => void;
@@ -12,6 +34,8 @@ interface DashboardProps {
   leaveRequests: LeaveRequest[];
   invoices: Invoice[];
   expenses: Expense[];
+  objectives?: Objective[];
+  canAccessModule?: (module: ModuleName) => boolean;
   isDataLoaded?: boolean;
 }
 
@@ -19,7 +43,7 @@ const CourseCard: React.FC<{ course: Course }> = ({ course }) => {
     const { t } = useLocalization();
     return (
         <div className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow flex items-center space-x-4">
-            <div className="bg-emerald-100 text-emerald-600 rounded-lg p-3">
+            <div className="bg-coya-primary/10 text-coya-primary rounded-lg p-3">
                 <i className={`${course.icon} fa-lg`}></i>
             </div>
             <div className="flex-grow">
@@ -99,19 +123,19 @@ const TimeSummaryCard: React.FC<{ timeLogs: TimeLog[]; setView: (view: string) =
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="bg-coya-card p-6 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-700">{t('time_tracking')}</h2>
-                <a href="#" onClick={(e) => { e.preventDefault(); setView('time_tracking'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('view_time_logs')}</a>
+                <h2 className="text-xl font-bold text-coya-text">{t('time_tracking')}</h2>
+                <a href="#" onClick={(e) => { e.preventDefault(); setView('time_tracking'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('view_time_logs')}</a>
             </div>
             <div className="grid grid-cols-2 gap-4 text-center">
                 <div>
-                    <p className="text-2xl font-bold text-emerald-600">{formatMinutes(timeToday)}</p>
-                    <p className="text-sm text-gray-500">{t('time_logged_today')}</p>
+                    <p className="text-2xl font-bold text-coya-primary">{formatMinutes(timeToday)}</p>
+                    <p className="text-sm text-coya-text-muted">{t('time_logged_today')}</p>
                 </div>
                  <div>
-                    <p className="text-2xl font-bold text-emerald-600">{formatMinutes(timeThisWeek)}</p>
-                    <p className="text-sm text-gray-500">{t('time_logged_this_week')}</p>
+                    <p className="text-2xl font-bold text-coya-primary">{formatMinutes(timeThisWeek)}</p>
+                    <p className="text-sm text-coya-text-muted">{t('time_logged_this_week')}</p>
                 </div>
             </div>
         </div>
@@ -138,10 +162,10 @@ const FinanceSummaryCard: React.FC<{ invoices: Invoice[]; expenses: Expense[]; s
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="bg-coya-card p-6 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-700">{t('finance')}</h2>
-                <a href="#" onClick={(e) => { e.preventDefault(); setView('finance'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('view_finance')}</a>
+                <h2 className="text-xl font-bold text-coya-text">{t('finance')}</h2>
+                <a href="#" onClick={(e) => { e.preventDefault(); setView('finance'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('view_finance')}</a>
             </div>
             <div className="grid grid-cols-2 gap-4 text-center">
                 <div>
@@ -183,7 +207,7 @@ const ProjectStatusPieChart: React.FC<{ projects: Project[]; setView: (view: str
                     <p className="text-gray-600 mb-4">{localize('No projects created yet', 'Aucun projet créé pour le moment')}</p>
                     <button 
                         onClick={() => setView('projects')}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                        className="bg-coya-primary text-white px-4 py-2 rounded-lg hover:bg-coya-primary-light transition-colors"
                     >
                         {localize('Create your first project', 'Créer votre premier projet')}
                     </button>
@@ -219,7 +243,7 @@ const ProjectStatusPieChart: React.FC<{ projects: Project[]; setView: (view: str
                 </div>
                 <div className="space-y-2 text-sm">
                     <div className="flex items-center">
-                        <span className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></span>
+                        <span className="w-3 h-3 rounded-full bg-coya-primary mr-2"></span>
                         <span>{t('completed')} ({statusCounts['Completed']})</span>
                     </div>
                     <div className="flex items-center">
@@ -249,31 +273,70 @@ const TeamAvailabilityCard: React.FC<{ leaveRequests: LeaveRequest[]; setView: (
     }).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="bg-coya-card p-6 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-700">{t('team_availability')}</h2>
-                 <a href="#" onClick={(e) => { e.preventDefault(); setView('leave_management'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('manage_leaves')}</a>
+                <h2 className="text-xl font-bold text-coya-text">{t('team_availability')}</h2>
+                 <a href="#" onClick={(e) => { e.preventDefault(); setView('leave_management'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('manage_leaves')}</a>
             </div>
             <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase">{t('upcoming_leaves')}</h3>
+                <h3 className="text-sm font-semibold text-coya-text-muted uppercase">{t('upcoming_leaves')}</h3>
                 {upcomingLeaves.length > 0 ? (
                     upcomingLeaves.slice(0, 3).map(req => (
                         <div key={req.id} className="flex items-center space-x-3">
                             <img src={req.userAvatar} alt={req.userName} className="w-8 h-8 rounded-full" />
                             <div>
-                                <p className="font-semibold text-gray-700">{req.userName}</p>
-                                <p className="text-xs text-gray-500">{new Date(req.startDate).toLocaleDateString()} - {new Date(req.endDate).toLocaleDateString()}</p>
+                                <p className="font-semibold text-coya-text">{req.userName}</p>
+                                <p className="text-xs text-coya-text-muted">{new Date(req.startDate).toLocaleDateString()} - {new Date(req.endDate).toLocaleDateString()}</p>
                             </div>
                         </div>
                     ))
                 ) : (
-                    <p className="text-sm text-gray-400">{t('no_upcoming_leaves')}</p>
+                    <p className="text-sm text-coya-text-muted">{t('no_upcoming_leaves')}</p>
                 )}
             </div>
         </div>
     );
 };
 
+/** Bloc récap OKR / Objectifs sur le dashboard */
+const OKRSummaryCard: React.FC<{ objectives: Objective[]; setView: (view: string) => void; }> = ({ objectives, setView }) => {
+  const { t, language } = useLocalization();
+  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
+  const list = objectives || [];
+  const completed = list.filter(obj => {
+    const progress = obj.progress;
+    if (progress != null) return progress >= 100;
+    return obj.keyResults?.length > 0 && obj.keyResults.every(kr => kr.current >= kr.target);
+  }).length;
+  const inProgress = list.length - completed;
+
+  return (
+    <div className="bg-coya-card p-6 rounded-lg shadow-md">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-coya-text flex items-center gap-2">
+          <i className="fas fa-bullseye text-coya-primary"></i>
+          {localize('My OKRs', 'Mes OKR')}
+        </h2>
+        <a href="#" onClick={(e) => { e.preventDefault(); setView('goals_okrs'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">
+          {localize('View all', 'Voir tous')}
+        </a>
+      </div>
+      <div className="grid grid-cols-2 gap-4 text-center">
+        <div>
+          <p className="text-2xl font-bold text-coya-primary">{inProgress}</p>
+          <p className="text-sm text-coya-text-muted">{localize('In progress', 'En cours')}</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold text-coya-emeraude">{completed}</p>
+          <p className="text-sm text-coya-text-muted">{localize('Completed', 'Terminés')}</p>
+        </div>
+      </div>
+      {list.length === 0 && (
+        <p className="text-sm text-coya-text-muted mt-2 text-center">{localize('No objectives yet', 'Aucun objectif pour le moment')}</p>
+      )}
+    </div>
+  );
+};
 
 // Composant pour le message de bienvenue selon l'heure
 const WelcomeMessage: React.FC<{ userName: string }> = ({ userName }) => {
@@ -306,10 +369,10 @@ const WelcomeMessage: React.FC<{ userName: string }> = ({ userName }) => {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-2xl font-semibold text-gray-800">
-        {getGreeting()}, <span className="text-emerald-600">{userName}</span>!
+      <span className="text-2xl font-semibold text-coya-text">
+        {getGreeting()}, <span className="text-coya-primary">{userName}</span>!
       </span>
-      <span className="text-sm text-gray-500 font-medium">
+      <span className="text-sm text-coya-text-muted font-medium">
         {formatTime()}
       </span>
     </div>
@@ -343,645 +406,890 @@ const RoleBadge: React.FC<{ role: Role }> = ({ role }) => {
   );
 };
 
-// Section d'analyse intelligente et prédictive
+// Types pour la synthèse par module (analyse intelligente connectée aux données)
+type InsightCardId = 'projects' | 'courses' | 'finance' | 'time' | 'rh' | 'predictions';
+type InsightStatus = 'success' | 'warning' | 'info' | 'danger';
+
+interface SynthesisCard {
+  id: InsightCardId;
+  view: string;
+  icon: string;
+  title: string;
+  metric: string;
+  summary: string;
+  status: InsightStatus;
+  detailTitle: string;
+  detailItems: string[];
+  recommendation: string;
+}
+
+// Section Analyse intelligente : synthèses par module (algorithmes + cartes cliquables + page détail)
 const IntelligentInsights: React.FC<{
+  setView: (view: string) => void;
+  canAccessModule?: (m: ModuleName) => boolean;
   projects: Project[];
   courses: Course[];
   timeLogs: TimeLog[];
   invoices: Invoice[];
   expenses: Expense[];
   leaveRequests: LeaveRequest[];
-}> = ({ projects, courses, timeLogs, invoices, expenses, leaveRequests }) => {
+}> = ({ setView, canAccessModule, projects, courses, timeLogs, invoices, expenses, leaveRequests }) => {
   const { language } = useLocalization();
-  const insights = useMemo(() => {
-    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
-    const now = new Date();
-    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    const insightsList: Array<{ type: 'success' | 'warning' | 'info' | 'danger'; icon: string; title: string; message: string; action?: string }> = [];
+  const [detailCategory, setDetailCategory] = useState<InsightCardId | null>(null);
 
-    // Analyse des projets
+  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
+  const now = new Date();
+  const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const cards = useMemo((): SynthesisCard[] => {
+    const list: SynthesisCard[] = [];
     const activeProjects = projects.filter(p => p.status === 'In Progress');
     const completedProjects = projects.filter(p => p.status === 'Completed');
     const completionRate = projects.length > 0 ? (completedProjects.length / projects.length) * 100 : 0;
-    
-    if (completionRate >= 80 && projects.length > 0) {
-      insightsList.push({
-        type: 'success',
-        icon: 'fas fa-trophy',
-        title: localize('Outstanding performance!', 'Excellente performance !'),
-        message: localize(
-          `You have completed ${completionRate.toFixed(0)}% of your projects. Great job!`,
-          `Vous avez complété ${completionRate.toFixed(0)}% de vos projets. Félicitations !`
-        )
-      });
-    } else if (completionRate < 50 && projects.length > 0) {
-      insightsList.push({
-        type: 'warning',
-        icon: 'fas fa-exclamation-triangle',
-        title: localize('Opportunity for improvement', "Opportunité d'amélioration"),
-        message: localize(
-          `Only ${completionRate.toFixed(0)}% of your projects are done. Focus on the most important ones.`,
-          `Seulement ${completionRate.toFixed(0)}% de vos projets sont terminés. Concentrez-vous sur les projets prioritaires.`
-        )
-      });
-    }
-
-    // Analyse des délais
     const overdueProjects = projects.filter(p => {
       if (p.status === 'Completed' || p.status === 'Not Started') return false;
-      const dueDate = new Date(p.dueDate);
-      return dueDate < now;
+      return new Date(p.dueDate) < now;
     });
-    
-    if (overdueProjects.length > 0) {
-      insightsList.push({
-        type: 'danger',
-        icon: 'fas fa-clock',
-        title: localize('Projects behind schedule', 'Projets en retard'),
-        message: localize(
-          `${overdueProjects.length} project(s) are past their due date. Revisit your priorities.`,
-          `${overdueProjects.length} projet(s) dépassent leur date d'échéance. Revoyez les priorités.`
-        ),
-        action: localize('View projects', 'Voir les projets')
+
+    if (canAccessModule === undefined || canAccessModule('projects' as ModuleName)) {
+      const status: InsightStatus = overdueProjects.length > 0 ? 'danger' : completionRate >= 80 ? 'success' : completionRate < 50 ? 'warning' : 'info';
+      const metric = projects.length === 0 ? localize('No projects', 'Aucun projet') : `${activeProjects.length} ${localize('in progress', 'en cours')}`;
+      const summary = overdueProjects.length > 0
+        ? localize(`${overdueProjects.length} overdue. Review priorities.`, `${overdueProjects.length} en retard. Revoyez les priorités.`)
+        : completionRate >= 80
+          ? localize('Excellent completion rate.', 'Taux de complétion excellent.')
+          : localize(`${completedProjects.length}/${projects.length} completed.`, `${completedProjects.length}/${projects.length} terminés.`);
+      list.push({
+        id: 'projects',
+        view: 'projects',
+        icon: 'fas fa-project-diagram',
+        title: localize('Projects', 'Projets'),
+        metric,
+        summary,
+        status,
+        detailTitle: localize('Project analysis', 'Analyse Projets'),
+        detailItems: [
+          localize(`Total: ${projects.length}`, `Total : ${projects.length}`),
+          localize(`In progress: ${activeProjects.length}`, `En cours : ${activeProjects.length}`),
+          localize(`Completed: ${completedProjects.length}`, `Terminés : ${completedProjects.length}`),
+          localize(`Completion rate: ${completionRate.toFixed(0)}%`, `Taux de complétion : ${completionRate.toFixed(0)} %`),
+          ...(overdueProjects.length > 0 ? [localize(`Overdue: ${overdueProjects.length}`, `En retard : ${overdueProjects.length}`)] : []),
+        ],
+        recommendation: localize('Prioritize by due date and impact.', 'Priorisez par échéance et impact.'),
       });
     }
 
-    // Analyse des cours
-    const avgProgress = courses.length > 0 
-      ? courses.reduce((sum, c) => sum + c.progress, 0) / courses.length 
-      : 0;
-    
-    if (avgProgress > 75 && courses.length > 0) {
-      insightsList.push({
-        type: 'success',
-        icon: 'fas fa-graduation-cap',
-        title: localize('Great learning pace!', 'Bonne progression !'),
-        message: localize(
-          `You are progressing well in your courses (${avgProgress.toFixed(0)}% on average). Keep going!`,
-          `Vous progressez bien dans vos cours (${avgProgress.toFixed(0)}% en moyenne). Continuez !`
-        )
-      });
-    } else if (avgProgress < 30 && courses.length > 0) {
-      insightsList.push({
-        type: 'info',
-        icon: 'fas fa-book',
-        title: localize('Boost your learning', 'Boostez votre apprentissage'),
-        message: localize(
-          `You are at ${avgProgress.toFixed(0)}% progress. Increase your study rhythm.`,
-          `Vous êtes à ${avgProgress.toFixed(0)}% de progression. Augmentez votre rythme d'apprentissage.`
-        )
+    if (canAccessModule === undefined || canAccessModule('courses' as ModuleName)) {
+      const avgProgress = courses.length > 0 ? courses.reduce((s, c) => s + c.progress, 0) / courses.length : 0;
+      const inProgress = courses.filter(c => c.progress > 0 && c.progress < 100).length;
+      const status: InsightStatus = avgProgress >= 75 ? 'success' : avgProgress < 30 && courses.length > 0 ? 'warning' : 'info';
+      const metric = courses.length === 0 ? localize('No courses', 'Aucune formation') : `${courses.length} ${localize('courses', 'formations')}`;
+      const summary = courses.length === 0 ? localize('Start a course.', 'Démarrez une formation.') : localize(`Avg. progress ${avgProgress.toFixed(0)}%. ${inProgress} in progress.`, `Progression moy. ${avgProgress.toFixed(0)} %. ${inProgress} en cours.`);
+      list.push({
+        id: 'courses',
+        view: 'courses',
+        icon: 'fas fa-book-open',
+        title: localize('Training', 'Formations'),
+        metric,
+        summary,
+        status,
+        detailTitle: localize('Training analysis', 'Analyse Formations'),
+        detailItems: [
+          localize(`Courses: ${courses.length}`, `Formations : ${courses.length}`),
+          localize(`Average progress: ${avgProgress.toFixed(0)}%`, `Progression moyenne : ${avgProgress.toFixed(0)} %`),
+          localize(`In progress: ${inProgress}`, `En cours : ${inProgress}`),
+        ],
+        recommendation: localize('Set regular time for training.', 'Réservez des créneaux réguliers.'),
       });
     }
 
-    // Analyse du temps travaillé
+    const paidInvoices = invoices.filter(inv => inv.status === 'Paid').reduce((s, inv) => s + inv.amount, 0);
+    const unpaidAmount = invoices.filter(inv => inv.status !== 'Paid' && inv.status !== 'Draft').reduce((s, inv) => s + inv.amount, 0);
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const netIncome = paidInvoices - totalExpenses;
+    const margin = paidInvoices > 0 ? ((netIncome / paidInvoices) * 100).toFixed(0) : '0';
+
+    if (canAccessModule === undefined || canAccessModule('finance' as ModuleName)) {
+      const status: InsightStatus = netIncome < 0 ? 'danger' : unpaidAmount > paidInvoices * 0.5 ? 'warning' : netIncome > paidInvoices * 0.3 ? 'success' : 'info';
+      const metric = localize(`Net ${netIncome >= 0 ? '+' : ''}$${netIncome.toFixed(0)}`, `Net ${netIncome >= 0 ? '+' : ''}${netIncome.toFixed(0)} $`);
+      const summary = netIncome < 0
+        ? localize('Expenses exceed revenue. Review budget.', 'Dépenses > revenus. Revoyez le budget.')
+        : localize(`Margin ${margin}%. Revenue: $${paidInvoices.toFixed(0)}.`, `Marge ${margin} %. Revenus : ${paidInvoices.toFixed(0)} $.`);
+      list.push({
+        id: 'finance',
+        view: 'finance',
+        icon: 'fas fa-file-invoice-dollar',
+        title: localize('Finance', 'Finance'),
+        metric,
+        summary,
+        status,
+        detailTitle: localize('Financial analysis', 'Analyse Finance'),
+        detailItems: [
+          localize(`Revenue (paid): $${paidInvoices.toFixed(2)}`, `Revenus (payés) : ${paidInvoices.toFixed(2)} $`),
+          localize(`Expenses: $${totalExpenses.toFixed(2)}`, `Dépenses : ${totalExpenses.toFixed(2)} $`),
+          localize(`Net: $${netIncome.toFixed(2)}`, `Net : ${netIncome.toFixed(2)} $`),
+          localize(`Margin: ${margin}%`, `Marge : ${margin} %`),
+          localize(`Pending (unpaid): $${unpaidAmount.toFixed(2)}`, `En attente : ${unpaidAmount.toFixed(2)} $`),
+        ],
+        recommendation: localize('Monitor cash flow and unpaid invoices.', 'Suivez la trésorerie et les factures impayées.'),
+      });
+    }
+
     const recentTimeLogs = timeLogs.filter(log => new Date(log.date) >= last7Days);
     const weeklyHours = recentTimeLogs.reduce((sum, log) => sum + log.duration, 0) / 60;
     const previousWeekLogs = timeLogs.filter(log => {
-      const logDate = new Date(log.date);
-      const prevWeekStart = new Date(last7Days.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return logDate >= prevWeekStart && logDate < last7Days;
+      const d = new Date(log.date);
+      const prevStart = new Date(last7Days.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return d >= prevStart && d < last7Days;
     });
     const previousWeekHours = previousWeekLogs.reduce((sum, log) => sum + log.duration, 0) / 60;
-    
-    if (previousWeekHours > 0) {
-      const changePercent = ((weeklyHours - previousWeekHours) / previousWeekHours) * 100;
-      if (changePercent > 20) {
-        insightsList.push({
-          type: 'success',
-          icon: 'fas fa-chart-line',
-          title: localize('Productivity is rising', 'Productivité en hausse'),
-          message: localize(
-            `You worked ${changePercent.toFixed(0)}% more this week compared to last week.`,
-            `Vous avez travaillé ${changePercent.toFixed(0)}% de plus cette semaine par rapport à la semaine dernière.`
-          )
-        });
-      } else if (changePercent < -20) {
-        insightsList.push({
-          type: 'warning',
-          icon: 'fas fa-chart-line-down',
-          title: localize('Activity down', 'Activité réduite'),
-          message: localize(
-            `Your work time decreased by ${Math.abs(changePercent).toFixed(0)}% this week.`,
-            `Votre temps de travail a diminué de ${Math.abs(changePercent).toFixed(0)}% cette semaine.`
-          )
-        });
-      }
-    }
+    const changePercent = previousWeekHours > 0 ? ((weeklyHours - previousWeekHours) / previousWeekHours) * 100 : 0;
 
-    // Analyse financière
-    const paidInvoices = invoices.filter(inv => inv.status === 'Paid').reduce((sum, inv) => sum + inv.amount, 0);
-    const unpaidInvoices = invoices.filter(inv => inv.status !== 'Paid' && inv.status !== 'Draft')
-      .reduce((sum, inv) => sum + inv.amount, 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const netIncome = paidInvoices - totalExpenses;
-    
-    if (unpaidInvoices > paidInvoices * 0.5 && unpaidInvoices > 0) {
-      insightsList.push({
-        type: 'danger',
-        icon: 'fas fa-exclamation-circle',
-        title: localize('Pending invoices', 'Factures en attente'),
-        message: localize(
-          `You have $${unpaidInvoices.toFixed(2)} pending. Follow up on payments.`,
-          `Vous avez ${unpaidInvoices.toFixed(2)} $ de factures en attente. Suivez les paiements.`
-        )
-      });
-    }
-    
-    if (netIncome < 0) {
-      insightsList.push({
-        type: 'danger',
-        icon: 'fas fa-balance-scale',
-        title: localize('Watch your finances', 'Attention aux finances'),
-        message: localize(
-          `Your expenses exceed your revenue by $${Math.abs(netIncome).toFixed(2)}. Review your budget.`,
-          `Vos dépenses dépassent vos revenus de ${Math.abs(netIncome).toFixed(2)} $. Revoyez votre budget.`
-        )
-      });
-    } else if (netIncome > paidInvoices * 0.3 && paidInvoices > 0) {
-      insightsList.push({
-        type: 'success',
-        icon: 'fas fa-piggy-bank',
-        title: localize('Healthy finances', 'Finances saines'),
-        message: localize(
-          `Great! Your profit margin is ${((netIncome / paidInvoices) * 100).toFixed(0)}%.`,
-          `Excellent ! Votre marge bénéficiaire est de ${((netIncome / paidInvoices) * 100).toFixed(0)}%.`
-        )
+    if (canAccessModule === undefined || canAccessModule('time_tracking' as ModuleName)) {
+      const status: InsightStatus = weeklyHours > 40 ? 'warning' : changePercent > 20 ? 'success' : changePercent < -20 ? 'warning' : 'info';
+      const metric = localize(`${weeklyHours.toFixed(1)}h this week`, `${weeklyHours.toFixed(1)} h cette semaine`);
+      const summary = weeklyHours > 40
+        ? localize('High workload. Preserve balance.', 'Charge élevée. Préservez l\'équilibre.')
+        : changePercent > 20
+          ? localize(`+${changePercent.toFixed(0)}% vs last week.`, `+${changePercent.toFixed(0)} % vs semaine dernière.`)
+          : localize(`${recentTimeLogs.length} entries.`, `${recentTimeLogs.length} saisie(s).`);
+      list.push({
+        id: 'time',
+        view: 'time_tracking',
+        icon: 'fas fa-clock',
+        title: localize('Time', 'Temps'),
+        metric,
+        summary,
+        status,
+        detailTitle: localize('Time analysis', 'Analyse Temps'),
+        detailItems: [
+          localize(`This week: ${weeklyHours.toFixed(1)}h`, `Cette semaine : ${weeklyHours.toFixed(1)} h`),
+          localize(`Last week: ${previousWeekHours.toFixed(1)}h`, `Semaine dernière : ${previousWeekHours.toFixed(1)} h`),
+          localize(`Variation: ${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(0)}%`, `Variation : ${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(0)} %`),
+          localize(`Entries (7 days): ${recentTimeLogs.length}`, `Saisies (7 j) : ${recentTimeLogs.length}`),
+        ],
+        recommendation: weeklyHours > 40 ? localize('Delegate or postpone non-urgent tasks.', 'Déléguer ou reporter les tâches non urgentes.') : localize('Keep a steady pace.', 'Maintenez un rythme régulier.'),
       });
     }
 
-    // Prédictions
+    const pendingLeave = leaveRequests.filter(r => r.status === 'Pending').length;
+    if (canAccessModule === undefined || canAccessModule('rh' as ModuleName)) {
+      const status: InsightStatus = pendingLeave > 0 ? 'info' : 'success';
+      const metric = pendingLeave > 0 ? `${pendingLeave} ${localize('pending', 'en attente')}` : localize('Up to date', 'À jour');
+      list.push({
+        id: 'rh',
+        view: 'rh',
+        icon: 'fas fa-users-cog',
+        title: localize('HR / Leave', 'RH / Congés'),
+        metric,
+        summary: pendingLeave > 0 ? localize('Leave requests to process.', 'Demandes de congés à traiter.') : localize('No pending requests.', 'Aucune demande en attente.'),
+        status,
+        detailTitle: localize('Leave analysis', 'Analyse Congés'),
+        detailItems: [
+          localize(`Total requests: ${leaveRequests.length}`, `Demandes : ${leaveRequests.length}`),
+          localize(`Pending: ${pendingLeave}`, `En attente : ${pendingLeave}`),
+        ],
+        recommendation: pendingLeave > 0 ? localize('Review leave requests in RH.', 'Consulter les demandes dans RH.') : localize('All caught up.', 'Tout est à jour.'),
+      });
+    }
+
     if (activeProjects.length > 0) {
-      const avgCompletionTime = completedProjects.length > 0 ? 30 : 45; // Estimation en jours
-      insightsList.push({
-        type: 'info',
-        icon: 'fas fa-crystal-ball',
-        title: localize('Projection', 'Prédiction'),
-        message: localize(
-          `Based on your active projects, you should complete about ${Math.round(activeProjects.length * 0.3)} project(s) in the coming weeks.`,
-          `Basé sur vos projets actifs, vous devriez compléter ${Math.round(activeProjects.length * 0.3)} projet(s) dans les prochaines semaines.`
-        )
+      const estimated = Math.max(1, Math.round(activeProjects.length * 0.3));
+      list.push({
+        id: 'predictions',
+        view: 'projects',
+        icon: 'fas fa-chart-line',
+        title: localize('Predictions', 'Prédictions'),
+        metric: localize(`~${estimated} soon`, `~${estimated} sous peu`),
+        summary: localize(`About ${estimated} project(s) could be completed in the coming weeks.`, `Environ ${estimated} projet(s) complétable(s) dans les prochaines semaines.`),
+        status: 'info',
+        detailTitle: localize('Projections', 'Prédictions'),
+        detailItems: [
+          localize(`Active projects: ${activeProjects.length}`, `Projets actifs : ${activeProjects.length}`),
+          localize(`Estimated completions (weeks): ~${estimated}`, `Complétions estimées : ~${estimated}`),
+        ],
+        recommendation: localize('Focus on high-impact projects first.', 'Concentrez-vous d\'abord sur les projets à fort impact.'),
       });
     }
 
-    // Analyse de la productivité
-    if (weeklyHours > 40) {
-      insightsList.push({
-        type: 'warning',
-        icon: 'fas fa-battery-full',
-        title: localize('Heavy workload', 'Charge de travail élevée'),
-        message: localize(
-          `You worked ${weeklyHours.toFixed(1)}h this week. Make sure to keep balance.`,
-          `Vous avez travaillé ${weeklyHours.toFixed(1)}h cette semaine. Assurez-vous de préserver votre équilibre.`
-        )
-      });
-    }
+    return list;
+  }, [projects, courses, timeLogs, invoices, expenses, leaveRequests, language, canAccessModule]);
 
-    return insightsList.slice(0, 6); // Limiter à 6 insights
-  }, [projects, courses, timeLogs, invoices, expenses, leaveRequests, language]);
-  const translate = (en: string, fr: string) => (language === Language.FR ? fr : en);
-
-  const getTypeStyles = (type: string) => {
-    switch (type) {
-      case 'success':
-        return 'bg-emerald-50 border-emerald-200 text-emerald-800';
-      case 'warning':
-        return 'bg-amber-50 border-amber-200 text-amber-800';
-      case 'danger':
-        return 'bg-red-50 border-red-200 text-red-800';
-      default:
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+  const getStatusStyles = (status: InsightStatus) => {
+    switch (status) {
+      case 'success': return 'border-l-coya-primary bg-coya-primary/5 hover:bg-coya-primary/10';
+      case 'warning': return 'border-l-amber-500 bg-amber-50/80 hover:bg-amber-50';
+      case 'danger': return 'border-l-red-500 bg-red-50/80 hover:bg-red-50';
+      default: return 'border-l-blue-500 bg-blue-50/80 hover:bg-blue-50';
     }
   };
 
-  const getIconColor = (type: string) => {
-    switch (type) {
-      case 'success':
-        return 'text-emerald-600';
-      case 'warning':
-        return 'text-amber-600';
-      case 'danger':
-        return 'text-red-600';
-      default:
-        return 'text-blue-600';
-    }
-  };
-
-  if (insights.length === 0) {
-    return (
-      <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <i className="fas fa-brain text-emerald-600"></i>
-          {translate('Intelligent Insights', 'Analyse Intelligente')}
-        </h3>
-        <div className="text-center py-8">
-          <i className="fas fa-chart-line text-4xl text-gray-300 mb-4"></i>
-          <p className="text-gray-500">
-            {translate('Not enough data to generate insights yet. Keep using the platform!', 'Pas assez de données pour générer des insights. Continuez à utiliser la plateforme !')}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const selectedCard = detailCategory ? cards.find(c => c.id === detailCategory) : null;
 
   return (
-    <div className="bg-white rounded-lg p-6 shadow-md border border-gray-200">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          <i className="fas fa-brain text-emerald-600"></i>
-          {translate('Intelligent Insights & Predictions', 'Analyse Intelligente & Prédictions')}
-        </h3>
-        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-          <i className="fas fa-robot mr-1"></i>
-          {translate('AI Insights', 'IA Insights')}
-        </span>
+    <div className="rounded-2xl border border-coya-border bg-coya-card shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-coya-border bg-gradient-to-r from-coya-primary/5 to-transparent">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-lg font-semibold text-coya-text flex items-center gap-2">
+            <i className="fas fa-brain text-coya-primary" aria-hidden />
+            {localize('Intelligent analysis & predictions', 'Analyse intelligente et prédictions')}
+          </h3>
+          <span className="text-xs text-coya-text-muted bg-white/80 px-2.5 py-1 rounded-full border border-coya-border">
+            <i className="fas fa-robot mr-1" aria-hidden />
+            {localize('Synthesis by module', 'Synthèse par module')}
+          </span>
+        </div>
       </div>
-      <div className="space-y-3">
-        {insights.map((insight, index) => (
+      <div className="p-4">
+        <p className="text-sm text-coya-text-muted mb-4">
+          {localize('Algorithms analyze your modules to give you a clear overview. Click a card for full analysis or go directly to the module.', 'Les algorithmes analysent vos modules pour une synthèse claire. Cliquez sur une carte pour l\'analyse complète ou accédez au module.')}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {cards.map((card) => (
+            <div
+              key={card.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailCategory(card.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCategory(card.id); } }}
+              className={`rounded-xl border-l-4 p-4 text-left transition-all cursor-pointer ${getStatusStyles(card.status)} focus:outline-none focus:ring-2 focus:ring-coya-primary/40`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-white/80 p-2 shadow-sm">
+                  <i className={`${card.icon} text-coya-primary text-lg`} aria-hidden />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-coya-text">{card.title}</h4>
+                  <p className="text-sm font-medium text-coya-text-muted mt-0.5">{card.metric}</p>
+                  <p className="text-xs text-coya-text-muted mt-1 line-clamp-2">{card.summary}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setDetailCategory(card.id); }}
+                      className="text-xs font-medium text-coya-primary hover:underline focus:outline-none"
+                    >
+                      {localize('View analysis', 'Voir l\'analyse')} →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setView(card.view); }}
+                      className="text-xs font-medium text-coya-primary hover:underline focus:outline-none"
+                    >
+                      {localize('Go to module', 'Aller au module')} →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal détail : analyse complète */}
+      {selectedCard && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setDetailCategory(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="insight-detail-title"
+        >
           <div
-            key={index}
-            className={`border-l-4 rounded-r-lg p-4 ${getTypeStyles(insight.type)} transition-all hover:shadow-md`}
+            className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3">
-              <div className={`${getIconColor(insight.type)} text-xl mt-1`}>
-                <i className={insight.icon}></i>
-              </div>
-              <div className="flex-1">
-                <h4 className="font-semibold mb-1">{insight.title}</h4>
-                <p className="text-sm">{insight.message}</p>
-                {insight.action && (
-                  <button className="mt-2 text-xs font-medium underline hover:no-underline">
-                    {insight.action} →
-                  </button>
-                )}
-              </div>
+            <div className="p-5 border-b border-coya-border flex items-center justify-between bg-gradient-to-r from-coya-primary/10 to-transparent">
+              <h2 id="insight-detail-title" className="text-lg font-semibold text-coya-text flex items-center gap-2">
+                <i className={`${selectedCard.icon} text-coya-primary`} aria-hidden />
+                {selectedCard.detailTitle}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setDetailCategory(null)}
+                className="p-2 rounded-lg hover:bg-coya-border text-coya-text-muted focus:outline-none focus:ring-2 focus:ring-coya-primary"
+                aria-label={localize('Close', 'Fermer')}
+              >
+                <i className="fas fa-times" aria-hidden />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <ul className="space-y-2 text-sm text-coya-text">
+                {selectedCard.detailItems.map((item, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <i className="fas fa-check text-coya-primary text-xs" aria-hidden />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 pt-4 border-t border-coya-border text-xs text-coya-text-muted flex items-start gap-2">
+                <i className="fas fa-lightbulb mt-0.5 flex-shrink-0" aria-hidden />
+                {selectedCard.recommendation}
+              </p>
+            </div>
+            <div className="p-5 border-t border-coya-border flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setView(selectedCard.view); setDetailCategory(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-coya-primary text-white font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-coya-primary"
+              >
+                {localize('Go to module', 'Aller au module')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetailCategory(null)}
+                className="px-4 py-2.5 rounded-xl border border-coya-border text-coya-text hover:bg-coya-border/50 focus:outline-none"
+              >
+                {localize('Close', 'Fermer')}
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Section métriques intelligente style Power BI
-const MetricsDashboard: React.FC<{
-  projects: Project[];
-  courses: Course[];
-  timeLogs: TimeLog[];
-  invoices: Invoice[];
-  expenses: Expense[];
-  leaveRequests: LeaveRequest[];
-}> = ({ projects, courses, timeLogs, invoices, expenses, leaveRequests }) => {
-  const { t, language } = useLocalization();
-  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
-
-  // Calculs de métriques avancées
-  const metrics = useMemo(() => {
-    const now = new Date();
-    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    // Taux de complétion des projets
-    const completedProjects = projects.filter(p => p.status === 'Completed').length;
-    const completionRate = projects.length > 0 ? (completedProjects / projects.length) * 100 : 0;
-    
-    // Taux de complétion des cours
-    const avgCourseProgress = courses.length > 0 
-      ? courses.reduce((sum, c) => sum + c.progress, 0) / courses.length 
-      : 0;
-    
-    // Temps total travaillé (30 derniers jours)
-    const recentTimeLogs = timeLogs.filter(log => new Date(log.date) >= last30Days);
-    const totalHours = recentTimeLogs.reduce((sum, log) => sum + log.duration, 0) / 60;
-    
-    // Santé financière
-    const paidInvoices = invoices.filter(inv => inv.status === 'Paid').reduce((sum, inv) => sum + inv.amount, 0);
-    const unpaidInvoices = invoices.filter(inv => inv.status !== 'Paid' && inv.status !== 'Draft')
-      .reduce((sum, inv) => sum + inv.amount, 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const netIncome = paidInvoices - totalExpenses;
-    const financialHealth = paidInvoices > 0 ? ((netIncome / paidInvoices) * 100) : 0;
-    
-    // Activité de l'équipe
-    const pendingLeaves = leaveRequests.filter(req => req.status === 'Pending').length;
-    const approvedLeaves = leaveRequests.filter(req => req.status === 'Approved').length;
-    
-    return {
-      completionRate: Math.round(completionRate),
-      completedProjects,
-      avgCourseProgress: Math.round(avgCourseProgress),
-      totalHours: Math.round(totalHours * 10) / 10,
-      paidInvoices,
-      unpaidInvoices,
-      netIncome,
-      financialHealth: Math.round(financialHealth),
-      pendingLeaves,
-      approvedLeaves,
-      totalProjects: projects.length,
-      activeProjects: projects.filter(p => p.status === 'In Progress').length
-    };
-  }, [projects, courses, timeLogs, invoices, expenses, leaveRequests]);
-
-  return (
-    <div className="bg-gradient-to-br from-emerald-50 to-blue-50 rounded-xl p-6 shadow-lg border border-emerald-100">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <i className="fas fa-chart-line text-emerald-600"></i>
-          {localize('Analytical Dashboard', 'Tableau de Bord Analytique')}
-        </h2>
-        <span className="text-sm text-gray-500">
-          <i className="fas fa-clock mr-1"></i>
-          {localize('Real-time data', 'Données en temps réel')}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* KPI Card 1 */}
-        <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-emerald-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 font-medium">{localize('Completion rate', 'Taux de Complétion')}</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.completionRate}%</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {localize(
-                  `${metrics.completedProjects} / ${metrics.totalProjects} projects`,
-                  `${metrics.completedProjects} / ${metrics.totalProjects} projets`
-                )}
-              </p>
-            </div>
-            <div className="bg-emerald-100 rounded-full p-3">
-              <i className="fas fa-check-circle text-emerald-600 text-xl"></i>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${metrics.completionRate}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        {/* KPI Card 2 */}
-        <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 font-medium">{localize('Average course progress', 'Progression Moyenne')}</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.avgCourseProgress}%</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {localize(`${courses.length} courses`, `${courses.length} cours suivis`)}
-              </p>
-            </div>
-            <div className="bg-blue-100 rounded-full p-3">
-              <i className="fas fa-book-open text-blue-600 text-xl"></i>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${metrics.avgCourseProgress}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        {/* KPI Card 3 */}
-        <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-purple-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 font-medium">{localize('Hours worked', 'Heures Travaillées')}</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{metrics.totalHours}h</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {localize('Last 30 days', 'Derniers 30 jours')}
-              </p>
-            </div>
-            <div className="bg-purple-100 rounded-full p-3">
-              <i className="fas fa-clock text-purple-600 text-xl"></i>
-            </div>
-          </div>
-        </div>
-
-        {/* KPI Card 4 */}
-        <div className="bg-white rounded-lg p-5 shadow-md border-l-4 border-orange-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 font-medium">{localize('Financial health', 'Santé Financière')}</p>
-              <p className={`text-3xl font-bold mt-1 ${metrics.financialHealth >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {metrics.financialHealth >= 0 ? '+' : ''}{metrics.financialHealth}%
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {localize(`Net revenue: $${metrics.netIncome.toFixed(2)}`, `Revenu net: $${metrics.netIncome.toFixed(2)}`)}
-              </p>
-            </div>
-            <div className={`rounded-full p-3 ${metrics.financialHealth >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
-              <i className={`fas fa-chart-pie ${metrics.financialHealth >= 0 ? 'text-emerald-600' : 'text-red-600'} text-xl`}></i>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Graphiques de tendances */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Graphique de tendance des projets */}
-        <div className="bg-white rounded-lg p-5 shadow-md">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <i className="fas fa-project-diagram text-emerald-600"></i>
-            {localize('Project status', 'État des Projets')}
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{localize('In progress', 'En cours')}</span>
-              <div className="flex items-center gap-2">
-                <div className="w-32 bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-blue-500 h-3 rounded-full"
-                    style={{ width: `${projects.length > 0 ? (metrics.activeProjects / metrics.totalProjects) * 100 : 0}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-semibold text-gray-800">{metrics.activeProjects}</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{localize('Completed', 'Terminés')}</span>
-              <div className="flex items-center gap-2">
-                <div className="w-32 bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-emerald-500 h-3 rounded-full"
-                    style={{ width: `${metrics.completionRate}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-semibold text-gray-800">
-                  {projects.filter(p => p.status === 'Completed').length}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{localize('Not started', 'Non démarrés')}</span>
-              <div className="flex items-center gap-2">
-                <div className="w-32 bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-gray-400 h-3 rounded-full"
-                    style={{ width: `${projects.length > 0 ? (projects.filter(p => p.status === 'Not Started').length / metrics.totalProjects) * 100 : 0}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-semibold text-gray-800">
-                  {projects.filter(p => p.status === 'Not Started').length}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Graphique de tendance financière */}
-        <div className="bg-white rounded-lg p-5 shadow-md">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <i className="fas fa-dollar-sign text-emerald-600"></i>
-            {localize('Financial view', 'Vue Financière')}
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600">{localize('Paid invoices', 'Factures payées')}</span>
-                <span className="text-sm font-semibold text-emerald-600">${metrics.paidInvoices.toFixed(2)}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-emerald-500 h-2 rounded-full"
-                  style={{ width: `${metrics.paidInvoices > 0 ? Math.min((metrics.paidInvoices / (metrics.paidInvoices + metrics.unpaidInvoices)) * 100, 100) : 0}%` }}
-                ></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-600">{localize('Pending invoices', 'Factures en attente')}</span>
-                <span className="text-sm font-semibold text-orange-600">${metrics.unpaidInvoices.toFixed(2)}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-orange-500 h-2 rounded-full"
-                  style={{ width: `${metrics.paidInvoices + metrics.unpaidInvoices > 0 ? Math.min((metrics.unpaidInvoices / (metrics.paidInvoices + metrics.unpaidInvoices)) * 100, 100) : 0}%` }}
-                ></div>
-              </div>
-            </div>
-            <div className="pt-2 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">{localize('Net revenue', 'Revenu net')}</span>
-                <span className={`text-lg font-bold ${metrics.netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  ${metrics.netIncome.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Dashboard: React.FC<DashboardProps> = ({ setView, projects, courses, jobs, timeLogs, leaveRequests, invoices, expenses, isDataLoaded = true }) => {
+/**
+ * Tableau de bord personnalisé (Phase 1).
+ * Droits : lecture selon profil – données actuellement à périmètre utilisateur (soi-même) ;
+ * à étendre : équipe (manager), département (admin) selon plan.
+ */
+const Dashboard: React.FC<DashboardProps> = ({
+  setView,
+  projects = [],
+  courses = [],
+  jobs = [],
+  timeLogs = [],
+  leaveRequests = [],
+  invoices = [],
+  expenses = [],
+  objectives = [],
+  canAccessModule,
+  isDataLoaded = true,
+}) => {
   const { user } = useAuth();
   const { t, language } = useLocalization();
   const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
+  const showOKR = canAccessModule ? canAccessModule('goals_okrs' as ModuleName) : false;
+
+  const { daysWorkedThisWeek, objectivesToday, hoursThisWeek, loading: dashboardDataLoading } = useDashboardData(
+    user?.id,
+    objectives,
+    timeLogs
+  );
+  const metrics = useDashboardMetrics(
+    projects,
+    courses,
+    timeLogs,
+    invoices,
+    expenses,
+    leaveRequests,
+    user?.id
+  );
+  const { visibility: dashboardVisibility } = useDashboardSettings();
+  const visibility = dashboardVisibility ?? {};
+  const show = (key: string) => visibility[key] !== false;
+
+  const [chartPeriod, setChartPeriod] = useState<'weekly' | 'monthly'>('weekly');
+  const [activitiesPeriod, setActivitiesPeriod] = useState<'today' | 'weekly' | 'monthly'>('today');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  /** Filtre texte : une section est visible si la recherche est vide ou si un des mots-clés correspond */
+  const sectionMatchesSearch = (keywords: string[]) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return keywords.some((k) => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));
+  };
+
+  // Donut : répartition des projets par statut
+  const donutSlices = useMemo((): DonutSlice[] => {
+    const total = projects.length;
+    if (total === 0) {
+      return [
+        { id: 'completed', label: t('completed') || 'Terminés', value: 0, percentage: 0, color: '#22c55e' },
+        { id: 'in_progress', label: t('in_progress') || 'En cours', value: 0, percentage: 0, color: '#3b82f6' },
+        { id: 'not_started', label: t('not_started') || 'Non démarrés', value: 0, percentage: 0, color: '#9ca3af' },
+      ];
+    }
+    const completed = projects.filter((p) => p.status === 'Completed').length;
+    const inProgress = projects.filter((p) => p.status === 'In Progress').length;
+    const notStarted = projects.filter((p) => p.status === 'Not Started').length;
+    return [
+      { id: 'completed', label: t('completed') || 'Terminés', value: completed, percentage: Math.round((completed / total) * 100), color: 'var(--coya-emeraude)' },
+      { id: 'in_progress', label: t('in_progress') || 'En cours', value: inProgress, percentage: Math.round((inProgress / total) * 100), color: '#3b82f6' },
+      { id: 'not_started', label: t('not_started') || 'Non démarrés', value: notStarted, percentage: Math.round((notStarted / total) * 100), color: '#9ca3af' },
+    ];
+  }, [projects, t]);
+
+  // Courbe : heures par semaine ou par mois
+  const lineChartData = useMemo((): TimeSeriesPoint[] => {
+    const userId = user?.id;
+    const userLogs = userId ? timeLogs.filter((log) => log.userId === userId) : timeLogs;
+    if (chartPeriod === 'weekly') {
+      const weeks: TimeSeriesPoint[] = [];
+      const now = new Date();
+      for (let i = 9; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 7 * i);
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        d.setDate(d.getDate() + diff);
+        d.setHours(0, 0, 0, 0);
+        const weekStart = new Date(d);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        const hours = userLogs
+          .filter((log) => {
+            const date = new Date(log.date);
+            return date >= weekStart && date <= weekEnd;
+          })
+          .reduce((sum, log) => sum + log.duration, 0) / 60;
+        const weekNum = Math.ceil((weekStart.getDate() + 1) / 7) || 1;
+        weeks.push({ period: `Sem. ${weekNum}`, value: Math.round(hours * 10) / 10 });
+      }
+      return weeks;
+    }
+    const months: TimeSeriesPoint[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleDateString(language === Language.FR ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const hours = userLogs
+        .filter((log) => {
+          const date = new Date(log.date);
+          return date >= d && date <= monthEnd;
+        })
+        .reduce((sum, log) => sum + log.duration, 0) / 60;
+      months.push({ period: monthLabel, value: Math.round(hours * 10) / 10 });
+    }
+    return months;
+  }, [timeLogs, user?.id, chartPeriod, language]);
+
+  // Activités récentes (time logs)
+  const recentActivities = useMemo((): RecentActivityItem[] => {
+    const userId = user?.id;
+    const userLogs = userId ? timeLogs.filter((log) => log.userId === userId) : timeLogs;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const day = now.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    startOfWeek.setDate(now.getDate() + diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    let filtered = userLogs;
+    if (activitiesPeriod === 'today') {
+      filtered = userLogs.filter((log) => log.date === todayStr);
+    } else if (activitiesPeriod === 'weekly') {
+      filtered = userLogs.filter((log) => new Date(log.date) >= startOfWeek);
+    } else {
+      filtered = userLogs.filter((log) => new Date(log.date) >= startOfMonth);
+    }
+    const sorted = [...filtered].sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+    return sorted.slice(0, 8).map((log) => {
+      const hours = Math.floor(log.duration / 60);
+      const mins = log.duration % 60;
+      const amount = `+${hours}h${mins > 0 ? ` ${mins}m` : ''}`;
+      return {
+        id: log.id,
+        icon: 'fas fa-clock',
+        iconColorClass: 'text-coya-primary bg-coya-primary/10',
+        label: log.entityTitle || t('time_log') || 'Time log',
+        time: log.date,
+        amount,
+        status: 'completed' as const,
+        statusLabel: t('completed') || 'Complété',
+      };
+    });
+  }, [timeLogs, user?.id, activitiesPeriod, t]);
+
+  // Congés en attente
+  const pendingLeavesItems = useMemo((): PendingBlockItem[] => {
+    return leaveRequests
+      .filter((req) => String(req.status).toLowerCase() === 'pending')
+      .slice(0, 5)
+      .map((req) => ({
+        id: req.id,
+        primary: req.userName || req.reason || 'Congé',
+        secondary: `${new Date(req.startDate).toLocaleDateString()} - ${new Date(req.endDate).toLocaleDateString()}`,
+        status: 'En attente',
+      }));
+  }, [leaveRequests]);
+
+  // Factures en attente
+  const pendingInvoicesItems = useMemo((): PendingBlockItem[] => {
+    return invoices
+      .filter((inv) => inv.status === 'Sent' || inv.status === 'Overdue')
+      .slice(0, 5)
+      .map((inv) => ({
+        id: inv.id,
+        primary: inv.invoiceNumber || inv.clientName,
+        secondary: `$${inv.amount.toFixed(2)}`,
+        status: inv.status,
+      }));
+  }, [invoices]);
+
+  const formatMinutes = (minutes: number) => {
+    if (minutes < 60) return `${minutes} min`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+
+  const alertesCount = useMemo(() => {
+    const now = new Date();
+    const overdue = projects.filter((p) => p.status === 'In Progress' && new Date(p.dueDate) < now).length;
+    const unpaid = invoices.filter((inv) => inv.status === 'Sent' || inv.status === 'Overdue').length;
+    return overdue + unpaid;
+  }, [projects, invoices]);
+
+  /** Niveau de performance selon barème : 90%+ excellent, 70-89 bien, 50-69 moyen, <50 insuffisant. Sans objectif ni projet actif = 100%. */
+  const performanceLevelFromScore = (score: number): PerformanceLevel => {
+    if (score >= 90) return 'excellent';
+    if (score >= 70) return 'good';
+    if (score >= 50) return 'medium';
+    return 'insufficient';
+  };
+
+  const performanceCabanesItems = useMemo((): PerformanceCabaneItem[] => {
+    const now = new Date();
+    const overdueCount = projects.filter((p) => p.status === 'In Progress' && new Date(p.dueDate) < now).length;
+    const hasNoObjectivesOrTasks = objectivesToday.length === 0 && metrics.activeProjects === 0;
+    const userScore = hasNoObjectivesOrTasks ? 100 : metrics.completionRate;
+    const objectifsAvgProgress =
+      objectivesToday.length > 0
+        ? Math.round(
+            objectivesToday.reduce((s, o) => s + (o.progress ?? 0), 0) / objectivesToday.length
+          )
+        : 100;
+
+    return [
+      {
+        id: 'score',
+        title: localize('Performance score', 'Score de performance'),
+        value: `${userScore}%`,
+        subtitle: hasNoObjectivesOrTasks
+          ? localize('No objectives or tasks assigned', 'Aucun objectif ou tâche assigné')
+          : `${metrics.completedProjects}/${metrics.totalProjects} ${localize('projects', 'projets')}`,
+        level: performanceLevelFromScore(userScore),
+        icon: 'fas fa-trophy',
+        onAction: () => setView('projects'),
+        actionLabel: localize('View projects', 'Voir les projets'),
+      },
+      {
+        id: 'objectives',
+        title: localize('Objectives', 'Objectifs'),
+        value: objectivesToday.length,
+        subtitle: localize('Today', 'Aujourd\'hui') + ` · ${objectifsAvgProgress}% ${localize('avg', 'moy')}`,
+        level: performanceLevelFromScore(objectifsAvgProgress),
+        icon: 'fas fa-bullseye',
+        onAction: () => setView('goals_okrs'),
+        actionLabel: localize('View all', 'Voir tout'),
+      },
+      {
+        id: 'projects',
+        title: localize('Project completion', 'Complétion projets'),
+        value: `${metrics.completionRate}%`,
+        subtitle: `${metrics.completedProjects} / ${metrics.totalProjects}`,
+        level: performanceLevelFromScore(metrics.completionRate),
+        icon: 'fas fa-project-diagram',
+        onAction: () => setView('projects'),
+        actionLabel: localize('View projects', 'Voir les projets'),
+      },
+      {
+        id: 'risk',
+        title: localize('Delay risk', 'Risque de retard'),
+        value: overdueCount,
+        subtitle: localize('Overdue projects', 'Projets en retard'),
+        level:
+          overdueCount === 0
+            ? 'excellent'
+            : overdueCount <= 2
+              ? 'good'
+              : overdueCount <= 5
+                ? 'medium'
+                : 'insufficient',
+        icon: 'fas fa-exclamation-triangle',
+        onAction: () => setView('projects'),
+        actionLabel: localize('View projects', 'Voir les projets'),
+      },
+    ];
+  }, [
+    projects,
+    metrics,
+    objectivesToday,
+    localize,
+    setView,
+  ]);
 
   if (!user) return null;
 
-  // Utiliser fullName s'il existe, sinon name
   const userName = (user as any).fullName || (user as any).name || user.email || localize('User', 'Utilisateur');
+
+  if (!isDataLoaded) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div>
       {/* Header personnalisé */}
-      <div className="bg-white rounded-xl p-6 shadow-md mb-6 border border-gray-100">
+      <div className="bg-coya-card rounded-xl p-6 shadow-coya mb-6 border border-coya-border">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex-1">
             <WelcomeMessage userName={userName} />
             <div className="mt-3 flex items-center gap-3">
               <RoleBadge role={user.role} />
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-coya-text-muted">
                 <i className="fas fa-envelope mr-1"></i>
                 {user.email}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {user.avatar && (
-              <img 
-                src={user.avatar} 
-                alt={userName} 
-                className="w-12 h-12 rounded-full border-2 border-emerald-200"
-              />
-            )}
-            {!user.avatar && (
-              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-emerald-200">
-                <i className="fas fa-user text-emerald-600 text-xl"></i>
-              </div>
-            )}
+          <div className="flex items-center gap-4">
+            <PresenceCountdownWidget />
+            <DashboardAvatar />
           </div>
         </div>
       </div>
 
-      {/* Section métriques intelligente */}
-      <div className="mb-8">
-        <MetricsDashboard 
-          projects={projects}
-          courses={courses}
-          timeLogs={timeLogs}
-          invoices={invoices}
-          expenses={expenses}
-          leaveRequests={leaveRequests}
+      {/* Barre recherche : filtre les sections du dashboard */}
+      <DashboardHeaderBar
+        searchPlaceholder={localize('Search…', 'Rechercher…')}
+        onSearch={setSearchQuery}
+      />
+
+      <h1 className="text-2xl font-bold text-coya-text mb-6">{localize('Dashboard', 'Tableau de bord')}</h1>
+
+      {/* 4 cartes KPI */}
+      {sectionMatchesSearch([localize('Days worked', 'Jours travaillés'), localize('Projects', 'Projets'), localize('Hours', 'Heures'), localize('Completion', 'Complétion')]) && (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {show('days_worked') && (
+          <KPICard
+            label={localize('Days worked this week', 'Jours travaillés cette semaine')}
+            value={dashboardDataLoading ? '…' : daysWorkedThisWeek}
+            trendLabel={localize('Based on presence', 'Sur la base de la présence')}
+            trendDirection="neutral"
+            icon="fas fa-calendar-check"
+            iconColorClass="text-coya-emeraude"
+            iconBgClass="bg-coya-emeraude/10"
+          />
+        )}
+        <KPICard
+          label={localize('Projects in progress', 'Projets en cours')}
+          value={metrics.activeProjects}
+          trendLabel={`${metrics.completedProjects} / ${metrics.totalProjects} ${localize('projects', 'projets')}`}
+          trendDirection="neutral"
+          icon="fas fa-project-diagram"
+          iconColorClass="text-blue-600"
+          iconBgClass="bg-blue-100"
+          onAction={() => setView('projects')}
+          actionLabel={localize('View all', 'Voir tout')}
+        />
+        <KPICard
+          label={localize('Hours this week', 'Heures cette semaine')}
+          value={formatMinutes(Math.round(hoursThisWeek * 60))}
+          trendLabel={
+            metrics.hoursTrend !== 0
+              ? `${metrics.hoursTrend > 0 ? '↑' : '↓'} ${Math.abs(metrics.hoursTrend)}% ${localize('vs last week', 'vs sem. dernière')}`
+              : localize('This week', 'Cette semaine')
+          }
+          trendDirection={metrics.hoursTrend > 0 ? 'up' : metrics.hoursTrend < 0 ? 'down' : 'neutral'}
+          icon="fas fa-clock"
+          iconColorClass="text-purple-600"
+          iconBgClass="bg-purple-100"
+        />
+        <KPICard
+          label={localize('Completion rate', 'Taux de complétion')}
+          value={`${metrics.completionRate}%`}
+          trendLabel={`${metrics.completedProjects} / ${metrics.totalProjects} ${localize('projects', 'projets')}`}
+          trendDirection="neutral"
+          icon="fas fa-check-circle"
+          iconColorClass="text-coya-primary"
+          iconBgClass="bg-coya-primary/10"
+          onAction={() => setView('projects')}
+          actionLabel={localize('View all', 'Voir tout')}
         />
       </div>
+      )}
 
-      {/* Section d'analyse intelligente et prédictive */}
-      <div className="mb-8">
-        <IntelligentInsights
-          projects={projects}
-          courses={courses}
-          timeLogs={timeLogs}
-          invoices={invoices}
-          expenses={expenses}
-          leaveRequests={leaveRequests}
+      {/* Donut + Courbe (style Current Statistic / Market Overview) */}
+      {show('metrics') && sectionMatchesSearch([localize('Project status', 'Répartition projets'), localize('Hours', 'Heures'), localize('Trend', 'Tendance')]) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <ProjectRepartitionDonut
+            slices={donutSlices}
+            title={localize('Project status', 'Répartition des projets')}
+            centerLabel={projects.length}
+            setView={setView}
+            viewAllLabel={localize('View projects', 'Voir les projets')}
+          />
+          <HoursTrendLineChart
+            data={lineChartData}
+            title={localize('Hours / Trend', 'Heures / Tendance')}
+            description={localize('Hours worked over time', 'Heures travaillées dans le temps')}
+            period={chartPeriod}
+            onPeriodChange={setChartPeriod}
+            setView={setView}
+          />
+        </div>
+      )}
+
+      {/* 4 cartes type Main Balance (dégradés) */}
+      {sectionMatchesSearch([localize('My projects', 'Mes projets'), localize('Objectives', 'Objectifs'), localize('Time', 'Temps'), localize('Alerts', 'Alertes')]) && (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <MainBalanceStyleCard
+          title={localize('My projects', 'Mes projets')}
+          value={String(metrics.activeProjects)}
+          subtitle={localize('Active', 'Actifs')}
+          gradient="linear-gradient(135deg, var(--coya-primary) 0%, var(--coya-emeraude) 100%)"
+          icon="fas fa-project-diagram"
+          onClick={() => setView('projects')}
+          badgeIcon="fas fa-folder"
+        />
+        <MainBalanceStyleCard
+          title={localize('Objectives', 'Objectifs')}
+          value={String(objectivesToday.length)}
+          subtitle={localize('Today', 'Aujourd\'hui')}
+          gradient="linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)"
+          icon="fas fa-bullseye"
+          onClick={() => setView('goals_okrs')}
+          badgeIcon="fas fa-flag"
+        />
+        <MainBalanceStyleCard
+          title={localize('Time', 'Temps')}
+          value={formatMinutes(Math.round(hoursThisWeek * 60))}
+          subtitle={localize('This week', 'Cette semaine')}
+          gradient="linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)"
+          icon="fas fa-clock"
+          onClick={() => setView('time_tracking')}
+        />
+        <MainBalanceStyleCard
+          title={localize('Alerts', 'Alertes')}
+          value={String(alertesCount)}
+          subtitle={localize('To review', 'À traiter')}
+          gradient="linear-gradient(135deg, var(--coya-ambre) 0%, #ea580c 100%)"
+          icon="fas fa-bell"
+          onClick={() => setView(alertesCount > 0 ? 'projects' : 'dashboard')}
         />
       </div>
+      )}
 
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <TimeSummaryCard timeLogs={timeLogs} setView={setView} userId={user.id} />
-        <FinanceSummaryCard invoices={invoices} expenses={expenses} setView={setView} />
-        <ProjectStatusPieChart projects={projects} setView={setView} />
-        <TeamAvailabilityCard leaveRequests={leaveRequests} setView={setView} />
+      {/* Activités récentes */}
+      {sectionMatchesSearch([localize('Recent activities', 'Activités récentes')]) && (
+      <div className="mb-6">
+        <RecentActivitiesList
+          title={localize('Recent activities', 'Activités récentes')}
+          items={recentActivities}
+          period={activitiesPeriod}
+          onPeriodChange={setActivitiesPeriod}
+          setView={setView}
+          emptyMessage={localize('No recent activity', 'Aucune activité récente')}
+        />
       </div>
+      )}
 
+      {/* Deux blocs : Congés en attente + Factures en attente */}
+      {sectionMatchesSearch([localize('Pending leave', 'Congés'), localize('Pending invoices', 'Factures')]) && (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <PendingOrdersBlock
+          title={localize('Pending leave requests', 'Congés en attente')}
+          icon="fas fa-umbrella-beach"
+          items={pendingLeavesItems}
+          emptyMessage={localize('No pending requests', 'Aucune demande en attente')}
+          onSeeAll={() => setView('leave_management')}
+        />
+        <PendingOrdersBlock
+          title={localize('Pending invoices', 'Factures en attente')}
+          icon="fas fa-file-invoice-dollar"
+          items={pendingInvoicesItems}
+          emptyMessage={localize('No pending invoices', 'Aucune facture en attente')}
+          onSeeAll={() => setView('finance')}
+        />
+      </div>
+      )}
+
+      {/* Bloc Power BI / Business Analytics (cabanes colorées, scoring) – plan Phase 1 */}
+      {show('performance_cabanes') && sectionMatchesSearch([localize('Performance', 'Performance'), localize('scoring', 'scoring')]) && (
+        <PerformanceCabanes
+          title={localize('Performance indicators & scoring', 'Indicateurs de performance et scoring')}
+          items={performanceCabanesItems}
+          globalScoreLabel={localize(
+            'Perimeter: your activity. Without objectives or tasks assigned, score is 100%. Updated automatically.',
+            'Périmètre : votre activité. Sans objectif ou tâche assigné, le score est de 100 %. Mis à jour automatiquement.'
+          )}
+        />
+      )}
+
+      {/* Bloc Analytics prédictif (remplace Analyse intelligente) */}
+      {show('analytics_predictif') && sectionMatchesSearch([localize('Analytics', 'Analytics'), localize('Predictive', 'Prédictif')]) && (
+        <div className="mb-8">
+          <AnalyticsPredictif
+            setView={setView}
+            projects={projects}
+            courses={courses}
+            timeLogs={timeLogs}
+            invoices={invoices}
+            expenses={expenses}
+            leaveRequests={leaveRequests}
+            objectives={objectives}
+            daysWorkedThisWeek={daysWorkedThisWeek}
+            hoursThisWeek={hoursThisWeek}
+            userId={user?.id}
+          />
+        </div>
+      )}
+      {/* Section Analyse intelligente (legacy, optionnelle) */}
+      {show('intelligent_insights') && !show('analytics_predictif') && sectionMatchesSearch([localize('Intelligent analysis', 'Analyse intelligente')]) && (
+        <div className="mb-8">
+          <IntelligentInsights
+            setView={setView}
+            canAccessModule={canAccessModule}
+            projects={projects}
+            courses={courses}
+            timeLogs={timeLogs}
+            invoices={invoices}
+            expenses={expenses}
+            leaveRequests={leaveRequests}
+          />
+        </div>
+      )}
+
+      {sectionMatchesSearch([t('my_projects'), localize('Projects', 'Projets')]) && (
       <div className="mt-8">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-700">{t('my_projects')}</h2>
-          <a href="#" onClick={(e) => { e.preventDefault(); setView('projects'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('view_all_projects')}</a>
+          <h2 className="text-xl font-bold text-coya-text">{t('my_projects')}</h2>
+          <a href="#" onClick={(e) => { e.preventDefault(); setView('projects'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('view_all_projects')}</a>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           {projects.filter(p => p.status !== 'Completed').slice(0, 2).map(project => <ProjectCard key={project.id} project={project} />)}
         </div>
       </div>
-      
+      )}
+
+      {sectionMatchesSearch([t('my_courses'), localize('Courses', 'Formations')]) && (
       <div className="mt-10">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-700">{t('my_courses')}</h2>
-          <a href="#" onClick={(e) => { e.preventDefault(); setView('courses'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('view_all_courses')}</a>
+          <h2 className="text-xl font-bold text-coya-text">{t('my_courses')}</h2>
+          <a href="#" onClick={(e) => { e.preventDefault(); setView('courses'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('view_all_courses')}</a>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           {courses.slice(0, 2).map(course => <CourseCard key={course.id} course={course} />)}
         </div>
       </div>
+      )}
 
+      {sectionMatchesSearch([t('job_openings'), localize('Jobs', 'Emplois')]) && (
       <div className="mt-10">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-700">{t('job_openings')}</h2>
-          <a href="#" onClick={(e) => { e.preventDefault(); setView('jobs'); }} className="text-sm font-medium text-emerald-600 hover:text-emerald-800">{t('view_all_jobs')}</a>
+          <h2 className="text-xl font-bold text-coya-text">{t('job_openings')}</h2>
+          <a href="#" onClick={(e) => { e.preventDefault(); setView('jobs'); }} className="text-sm font-medium text-coya-primary hover:text-coya-primary-light">{t('view_all_jobs')}</a>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {jobs.slice(0, 2).map(job => <JobCard key={job.id} job={job} />)}
         </div>
       </div>
+      )}
+
     </div>
   );
 };

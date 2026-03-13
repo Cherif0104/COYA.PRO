@@ -86,11 +86,7 @@
    - Courses
    - Jobs
 
-3. **Tools**
-   - AI Coach
-   - Gen AI Lab
-
-4. **CRM & Sales** (Module indépendant)
+3. **CRM & Sales** (Module indépendant)
 
 5. **Settings**
 

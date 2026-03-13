@@ -2,7 +2,8 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { TimeLog, Project, Course, Meeting, User, RESOURCE_MANAGEMENT_ROLES } from '../types';
+import { TimeLog, Project, Course, Meeting, User, RESOURCE_MANAGEMENT_ROLES, PresenceSession, PresenceStatus } from '../types';
+import DataAdapter from '../services/dataAdapter';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import TimeTrackingAnalytics from './TimeTrackingAnalytics';
@@ -638,6 +639,165 @@ interface TimeTrackingProps {
   onNotificationHandled?: () => void;
 }
 
+/** Widget pointage / présence (Phase 4 Bloc 1) : En ligne, Pause, En réunion */
+const PresenceWidget: React.FC<{
+  currentSession: PresenceSession | null;
+  meetings: Meeting[];
+  userId: string;
+  onRefresh: () => void;
+  loading?: boolean;
+}> = ({ currentSession, meetings, userId, onRefresh, loading }) => {
+  const { t, language } = useLocalization();
+  const [updating, setUpdating] = useState(false);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  const fr = language === 'fr';
+
+  const setStatus = useCallback(async (status: PresenceStatus, meetingId?: string | null) => {
+    setUpdating(true);
+    try {
+      if (currentSession) {
+        await DataAdapter.updatePresenceSession(currentSession.id, {
+          status,
+          meetingId: meetingId ?? undefined
+        });
+      } else {
+        await DataAdapter.createPresenceSession({
+          status,
+          startedAt: new Date().toISOString(),
+          meetingId: meetingId ?? undefined
+        });
+      }
+      onRefresh();
+    } catch (e) {
+      console.error('Presence update error:', e);
+    } finally {
+      setUpdating(false);
+    }
+  }, [currentSession, onRefresh]);
+
+  const endSession = useCallback(async () => {
+    if (!currentSession) return;
+    setUpdating(true);
+    try {
+      await DataAdapter.updatePresenceSession(currentSession.id, {
+        endedAt: new Date().toISOString()
+      });
+      onRefresh();
+    } catch (e) {
+      console.error('End session error:', e);
+    } finally {
+      setUpdating(false);
+    }
+  }, [currentSession, onRefresh]);
+
+  const isDisabled = loading || updating;
+  const statusLabel = (s: PresenceStatus) => {
+    if (fr) return s === 'online' ? 'En ligne' : s === 'pause' ? 'Pause' : 'En réunion';
+    return s === 'online' ? 'Online' : s === 'pause' ? 'Break' : 'In meeting';
+  };
+
+  return (
+    <div className="bg-coya-card rounded-lg shadow-coya border border-coya-border p-4 mb-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-coya-text-muted">
+          {fr ? 'Présence' : 'Presence'}
+        </span>
+        {currentSession ? (
+          <>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${
+              currentSession.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-gray-700 dark:text-green-300' :
+              currentSession.status === 'pause' ? 'bg-amber-100 text-amber-800 dark:bg-gray-700 dark:text-amber-300' :
+              'bg-blue-100 text-blue-800 dark:bg-gray-700 dark:text-blue-300'
+            }`}>
+              <span className="w-2 h-2 rounded-full bg-current opacity-80" />
+              {statusLabel(currentSession.status)}
+            </span>
+            {currentSession.status === 'in_meeting' && (
+              <select
+                className="text-sm border border-coya-border rounded px-2 py-1 bg-coya-bg text-coya-text"
+                value={selectedMeetingId || currentSession.meetingId || ''}
+                onChange={(e) => {
+                  const id = e.target.value || null;
+                  setSelectedMeetingId(id);
+                  setStatus('in_meeting', id);
+                }}
+                disabled={isDisabled}
+              >
+                <option value="">{fr ? '— Aucune réunion (non rémunéré)' : '— No meeting (unpaid)'}</option>
+                {meetings.filter(m => new Date(m.endTime) >= new Date()).map(m => (
+                  <option key={String(m.id)} value={String(m.id)}>{m.title}</option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={() => setStatus('online')}
+              disabled={isDisabled || currentSession.status === 'online'}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-bg text-coya-text hover:bg-coya-primary hover:text-white disabled:opacity-50"
+            >
+              {fr ? 'En ligne' : 'Online'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('pause')}
+              disabled={isDisabled || currentSession.status === 'pause'}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-bg text-coya-text hover:bg-amber-600 hover:text-white disabled:opacity-50"
+            >
+              {fr ? 'Pause' : 'Break'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('in_meeting')}
+              disabled={isDisabled || currentSession.status === 'in_meeting'}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-bg text-coya-text hover:bg-blue-600 hover:text-white disabled:opacity-50"
+            >
+              {fr ? 'En réunion' : 'In meeting'}
+            </button>
+            <button
+              type="button"
+              onClick={endSession}
+              disabled={isDisabled}
+              className="text-sm px-3 py-1.5 rounded border border-red-200 bg-white text-red-700 hover:bg-red-600 hover:text-white disabled:opacity-50"
+            >
+              {fr ? 'Terminer la session' : 'End session'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setStatus('online')}
+              disabled={isDisabled}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-primary text-white hover:bg-coya-primary-light"
+            >
+              {fr ? 'Démarrer (en ligne)' : 'Start (online)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('pause')}
+              disabled={isDisabled}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-bg text-coya-text hover:bg-amber-600 hover:text-white"
+            >
+              {fr ? 'Démarrer (pause)' : 'Start (break)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('in_meeting')}
+              disabled={isDisabled}
+              className="text-sm px-3 py-1.5 rounded border border-coya-border bg-coya-bg text-coya-text hover:bg-blue-600 hover:text-white"
+            >
+              {fr ? 'Démarrer (en réunion)' : 'Start (in meeting)'}
+            </button>
+          </>
+        )}
+      </div>
+      <p className="text-xs text-coya-text-muted mt-2">
+        {fr ? 'Temps « En réunion » non lié à une réunion du planning = non rémunéré.' : 'Time "In meeting" not linked to a calendar meeting = unpaid.'}
+      </p>
+    </div>
+  );
+};
+
 const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, onAddTimeLog, onDeleteTimeLog, onAddMeeting, onUpdateMeeting, onDeleteMeeting, projects, courses, defaultTab, onNotificationHandled }) => {
   const { t, language } = useLocalization();
   const { user } = useAuth();
@@ -659,6 +819,22 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [meetingSearchQuery, setMeetingSearchQuery] = useState('');
   const [meetingViewMode, setMeetingViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [currentPresenceSession, setCurrentPresenceSession] = useState<PresenceSession | null>(null);
+  const [presenceLoading, setPresenceLoading] = useState(false);
+
+  const refreshPresence = useCallback(() => {
+    const uid = user?.id ? String(user.id) : null;
+    if (!uid) return;
+    setPresenceLoading(true);
+    DataAdapter.getCurrentPresenceSession(uid).then(session => {
+      setCurrentPresenceSession(session);
+      setPresenceLoading(false);
+    }).catch(() => setPresenceLoading(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    refreshPresence();
+  }, [refreshPresence]);
 
   useEffect(() => {
     if (!defaultTab) return;
@@ -937,6 +1113,15 @@ const TimeTracking: React.FC<TimeTrackingProps> = ({ timeLogs, meetings, users, 
         </button>
       </div>
       </div>
+
+      {/* Widget présence (Phase 4 Bloc 1) */}
+      <PresenceWidget
+        currentSession={currentPresenceSession}
+        meetings={meetings}
+        userId={String(user?.id ?? '')}
+        onRefresh={refreshPresence}
+        loading={presenceLoading}
+      />
 
       {/* Métriques Power BI style */}
       {activeTab === 'logs' && (

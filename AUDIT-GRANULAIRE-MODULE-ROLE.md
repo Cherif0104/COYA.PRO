@@ -5,6 +5,8 @@
 **Version** : MVP Production  
 **Score Global** : **94/100** ✅
 
+**Note (Phase 1 ERP 360°)** : Les modules **AI Coach** et **Gen AI Lab** ont été retirés de la plateforme. Les composants sont conservés dans `components/_deprecated/` pour réactivation éventuelle.
+
 ---
 
 ## 📋 TABLE DES MATIÈRES
@@ -19,9 +21,7 @@
 8. [Audit Module Knowledge Base](#7-module-knowledge-base)
 9. [Audit Module Courses](#8-module-courses)
 10. [Audit Module Jobs](#9-module-jobs)
-11. [Audit Module AI Coach](#10-module-ai-coach)
-12. [Audit Module Gen AI Lab](#11-module-gen-ai-lab)
-13. [Audit Module CRM & Sales](#12-module-crm--sales)
+11. [Audit Module CRM & Sales](#12-module-crm--sales)
 14. [Audit Management Modules](#management-modules)
 15. [Audit Module User Management](#13-module-user-management)
 16. [Audit Module Course Management](#14-module-course-management)
@@ -65,8 +65,6 @@
 | Knowledge Base | ✅ | ✅ | ✅ | Lecture publique, écriture isolée |
 | Courses | ✅ | ✅ Filtered | ✅ Filtered | Filtrage par `target_students` |
 | Jobs | ✅ | ✅ Filtered | ✅ Filtered | Tous peuvent consulter |
-| AI Coach | ✅ | ✅ | ✅ | Accès universel |
-| Gen AI Lab | ✅ | ✅ | ✅ | Accès universel |
 | CRM & Sales | ✅ | ✅ | ✅ | Isolation par `created_by` |
 | Management Panel | ❌ | ❌ | ❌ | **UNIQUEMENT SENEGEL Internal** (les EXTERNES, y compris `student`, n'y ont pas accès) |
 

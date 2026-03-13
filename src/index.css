@@ -1,80 +1,88 @@
+@import './design-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-  --bg-body: #f8fafc;
-  --bg-card: #ffffff;
-  --bg-muted: #f1f5f9;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --border-color: #e2e8f0;
-}
+/* Mode sombre supprimé : la plateforme utilise uniquement le thème clair. */
 
-[data-theme='dark'] {
-  color-scheme: dark;
-  --bg-body: #0f172a;
-  --bg-card: #1f2937;
-  --bg-muted: #111827;
-  --text-primary: #e2e8f0;
-  --text-secondary: #cbd5f5;
-  --border-color: #1e293b;
+html, body {
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  background-color: var(--bg-body);
-  color: var(--text-primary);
-  transition: background-color 0.25s ease, color 0.25s ease;
+  font-family: var(--coya-font);
+  background-color: var(--coya-bg);
 }
 
-[data-theme='dark'] .bg-white {
-  background-color: var(--bg-card) !important;
+#root {
+  height: 100%;
+  overflow: hidden;
 }
 
-[data-theme='dark'] .bg-gray-50,
-[data-theme='dark'] .bg-slate-50,
-[data-theme='dark'] .bg-emerald-50:not(.hover\\:bg-emerald-50) {
-  background-color: var(--bg-muted) !important;
+/* Overlay de chargement : rotation fluide (motion design) */
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-loading-spin {
+  animation: loading-spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-[data-theme='dark'] .text-gray-900,
-[data-theme='dark'] .text-gray-800,
-[data-theme='dark'] .text-gray-700 {
-  color: var(--text-primary) !important;
+/* Overlay branding : apparition et respiration */
+@keyframes loading-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-
-[data-theme='dark'] .text-gray-600,
-[data-theme='dark'] .text-gray-500,
-[data-theme='dark'] .text-gray-400 {
-  color: var(--text-secondary) !important;
+@keyframes loading-logo-soft-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
 }
-
-[data-theme='dark'] .border-gray-100,
-[data-theme='dark'] .border-gray-200,
-[data-theme='dark'] .border-gray-300 {
-  border-color: var(--border-color) !important;
+@keyframes loading-slogan-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
-[data-theme='dark'] .shadow-lg,
-[data-theme='dark'] .shadow-md,
-[data-theme='dark'] .shadow-sm {
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.45) !important;
+@keyframes loading-shape-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.18;
+  }
+  33% {
+    transform: translate(3%, -3%) scale(1.03) rotate(2deg);
+    opacity: 0.28;
+  }
+  66% {
+    transform: translate(-2%, 2%) scale(0.98) rotate(-1deg);
+    opacity: 0.22;
+  }
 }
-
-[data-theme='dark'] .text-emerald-600 {
-  color: #34d399 !important;
+.animate-loading-overlay-in {
+  animation: loading-overlay-fade-in 0.5s ease-out forwards;
 }
-
-[data-theme='dark'] .hover\\:bg-gray-100:hover {
-  background-color: rgba(148, 163, 184, 0.2) !important;
+.animate-loading-logo-pulse {
+  animation: loading-logo-soft-pulse 2.5s ease-in-out infinite;
 }
-
-[data-theme='dark'] .hover\\:bg-emerald-50:hover {
-  background-color: rgba(16, 185, 129, 0.15) !important;
+.animate-loading-slogan-in {
+  animation: loading-slogan-in 0.4s ease-out forwards;
 }
-
-[data-theme='dark'] .bg-white\\/70 {
-  background-color: rgba(31, 41, 55, 0.7) !important;
+.animate-loading-shape {
+  animation: loading-shape-float 8s ease-in-out infinite;
 }
-

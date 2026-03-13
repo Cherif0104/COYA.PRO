@@ -1,6 +1,10 @@
+/**
+ * @deprecated Module gen_ai_lab retiré de la plateforme (Phase 1 ERP 360°).
+ * Conservé pour réactivation future éventuelle.
+ */
 import React, { useState, useRef, useMemo } from 'react';
-import { useLocalization } from '../contexts/LocalizationContext';
-import { generateImage, editImage, runGenAILab } from '../services/geminiService';
+import { useLocalization } from '../../contexts/LocalizationContext';
+import { generateImage, editImage, runGenAILab } from '../../services/geminiService';
 
 interface ImageGeneration {
     id: string;
@@ -13,19 +17,16 @@ const GenAILab: React.FC = () => {
     const { t } = useLocalization();
     const [activeTab, setActiveTab] = useState<'generate' | 'edit' | 'text'>('generate');
 
-    // State for Image Generation
     const [prompt, setPrompt] = useState('');
     const [loadingGen, setLoadingGen] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
     const [generations, setGenerations] = useState<ImageGeneration[]>([]);
 
-    // State for Text Generation
     const [textPrompt, setTextPrompt] = useState('');
     const [loadingText, setLoadingText] = useState(false);
     const [textResponse, setTextResponse] = useState('');
     const [textError, setTextError] = useState<string | null>(null);
 
-    // State for Image Editing
     const [originalImage, setOriginalImage] = useState<{ data: string, mime: string, name: string } | null>(null);
     const [editPrompt, setEditPrompt] = useState('');
     const [loadingEdit, setLoadingEdit] = useState(false);
@@ -42,8 +43,6 @@ const GenAILab: React.FC = () => {
             if (result) {
                 const imageUrl = `data:image/png;base64,${result}`;
                 setGeneratedImage(imageUrl);
-                
-                // Ajouter à l'historique
                 const newGeneration: ImageGeneration = {
                     id: `gen-${Date.now()}`,
                     prompt,
@@ -52,9 +51,9 @@ const GenAILab: React.FC = () => {
                 };
                 setGenerations(prev => [newGeneration, ...prev]);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erreur génération d\'image:', error);
-            alert(`Erreur lors de la génération d'image: ${error.message || 'Erreur inconnue'}`);
+            alert(`Erreur lors de la génération d'image: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
         } finally {
             setLoadingGen(false);
         }
@@ -76,7 +75,7 @@ const GenAILab: React.FC = () => {
             } else if (cleaned.toLowerCase().includes('clé api')) {
                 setTextError("Les clés API IA (Gemini ou Groq) ne sont pas configurées. Ajoutez-les dans votre fichier .env pour activer la génération de texte.");
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('❌ Erreur génération de texte IA:', error);
             setTextError("Impossible de contacter l'IA créative. Vérifiez votre connexion et la configuration des clés API.");
         } finally {
@@ -94,9 +93,9 @@ const GenAILab: React.FC = () => {
             if (result && result.image) {
                 setEditedImage(`data:${originalImage.mime};base64,${result.image}`);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erreur édition d\'image:', error);
-            alert(`Erreur lors de l'édition d'image: ${error.message || 'Erreur inconnue'}`);
+            alert(`Erreur lors de l'édition d'image: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
         } finally {
             setLoadingEdit(false);
         }
@@ -113,7 +112,7 @@ const GenAILab: React.FC = () => {
                     mime: file.type,
                     name: file.name
                 });
-                setEditedImage(null); // Clear previous edit result
+                setEditedImage(null);
             };
             reader.readAsDataURL(file);
         }
@@ -146,22 +145,20 @@ const GenAILab: React.FC = () => {
 
     return (
         <div>
-            {/* Header avec gradient */}
             <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white rounded-t-lg overflow-hidden mb-6">
                 <div className="p-6 pb-4">
                     <div className="flex justify-between items-start">
                         <div>
                             <h1 className="text-3xl font-bold mb-2 flex items-center">
                                 <i className="fas fa-flask mr-3"></i>
-                                {t('gen_ai_lab_title')}
+                                Gen AI Lab (module déprécié)
                             </h1>
-                            <p className="text-emerald-100">{t('gen_ai_lab_subtitle')}</p>
+                            <p className="text-emerald-100">Ce module a été retiré de la plateforme.</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Métriques */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-emerald-500">
                     <div className="flex items-center justify-between">
@@ -228,7 +225,7 @@ const GenAILab: React.FC = () => {
                         </form>
                         {(loadingGen || generatedImage) && (
                             <div className="mt-8">
-                                <h3 className="text-lg font-bold text-gray-700 mb-4">{t('ai_coach_response_title')}</h3>
+                                <h3 className="text-lg font-bold text-gray-700 mb-4">Résultat</h3>
                                 <div className="bg-gray-100 p-4 rounded-lg aspect-square flex justify-center items-center">
                                     {loadingGen && <div className="flex flex-col items-center text-emerald-500"><i className="fas fa-spinner fa-spin text-4xl"></i><p className="mt-4">{t('generating')}</p></div>}
                                     {generatedImage && <img src={generatedImage} alt="Generated by AI" className="rounded-lg object-contain max-w-full max-h-full" />}
@@ -253,7 +250,7 @@ const GenAILab: React.FC = () => {
                 {activeTab === 'edit' && (
                     <div className="bg-white p-8 rounded-xl shadow-lg">
                          <h2 className="text-xl font-bold text-gray-800 mb-2">{t('image_editing')}</h2>
-                         <p className="text-sm text-gray-500 mb-6">Powered by Gemini ('Nano Banana')</p>
+                         <p className="text-sm text-gray-500 mb-6">Powered by Gemini (&apos;Nano Banana&apos;)</p>
                         
                         {!originalImage ? (
                             <div className="text-center border-2 border-dashed border-gray-300 p-12 rounded-lg">
@@ -307,7 +304,7 @@ const GenAILab: React.FC = () => {
                 {activeTab === 'text' && (
                     <div className="bg-white p-8 rounded-xl shadow-lg">
                         <h2 className="text-xl font-bold text-gray-800 mb-2">Génération de Texte Créatif</h2>
-                        <p className="text-sm text-gray-500 mb-6">Génère du contenu textuel créatif avec l'IA</p>
+                        <p className="text-sm text-gray-500 mb-6">Génère du contenu textuel créatif avec l&apos;IA</p>
                         <form onSubmit={handleTextSubmit}>
                             {textError && (
                                 <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

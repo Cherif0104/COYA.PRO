@@ -7,6 +7,8 @@ import OrganizationService from '../services/organizationService';
 import DataAdapter from '../services/dataAdapter';
 import UserModulePermissions from './UserModulePermissions';
 import UserProfileEdit from './UserProfileEdit';
+import DepartmentManagement from './DepartmentManagement';
+import PostesManagement from './PostesManagement';
 import ConfirmationModal from './common/ConfirmationModal';
 import { RealtimeService } from '../services/realtimeService';
 import { supabase } from '../services/supabaseService';
@@ -188,7 +190,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, inactive
-    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions' | 'departments' | 'postes'>('users');
     const [canAssignReservedRoles, setCanAssignReservedRoles] = useState(false);
     const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
     const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
@@ -594,6 +596,28 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                             <i className="fas fa-shield-alt mr-2"></i>
                             Permissions Module
                         </button>
+                        <button
+                            onClick={() => setActiveTab('departments')}
+                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                activeTab === 'departments'
+                                    ? 'bg-emerald-600 text-white shadow-md'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-sitemap mr-2"></i>
+                            Départements
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('postes')}
+                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                activeTab === 'postes'
+                                    ? 'bg-emerald-600 text-white shadow-md'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-user-tag mr-2"></i>
+                            Postes
+                        </button>
                         {currentUser?.role === 'super_administrator' && (
                             <button
                                 onClick={() => setActiveTab('super_admin')}
@@ -933,6 +957,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
 
                 {activeTab === 'permissions' && (
                     <UserModulePermissions users={users} canEdit={canWriteModule} />
+                )}
+                {activeTab === 'departments' && (
+                    <DepartmentManagement embeddedInUserManagement canRead={canReadModule} canWrite={canWriteModule} />
+                )}
+                {activeTab === 'postes' && (
+                    <PostesManagement embeddedInUserManagement />
                 )}
             </div>
 

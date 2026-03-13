@@ -1,8 +1,8 @@
 import { DataService } from './dataService';
 import { AuthService } from './authService';
-import { AuthService } from './authService';
+import * as programmeService from './programmeService';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
-import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode } from '../types';
+import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
@@ -101,54 +101,66 @@ export class DataAdapter {
         }
         
         console.log('📊 Données brutes Supabase:', data?.length || 0, 'projets');
-        
+        const orgId = (data && data[0]) ? (data[0] as any).organization_id : null;
+        const programmeIds = new Set<string>();
+        (data || []).forEach((p: any) => { if (p.programme_id) programmeIds.add(p.programme_id); });
+        let programmeMap: Record<string, { name: string; bailleurName?: string | null }> = {};
+        try {
+          const programmes = await programmeService.listProgrammes(orgId || undefined);
+          programmes.forEach(pr => {
+            if (programmeIds.has(pr.id)) programmeMap[pr.id] = { name: pr.name, bailleurName: pr.bailleurName ?? null };
+          });
+        } catch (_) { /* ignore */ }
+
         // Convertir les données Supabase vers le format attendu
         const projects = await Promise.all(
-          (data || []).map(async (project) => {
+          (data || []).map(async (project: any) => {
             // Récupérer les utilisateurs de l'équipe
             let team: any[] = [];
             if (project.team_members && project.team_members.length > 0) {
-              // Récupérer les profils correspondant aux IDs des membres de l'équipe
               const { data: teamProfiles } = await DataService.getUsersByIds(project.team_members);
-              
-              // Créer une équipe avec les profils correspondants
-              team = (teamProfiles || []).map(user => ({
-                id: user.user_id || user.id, // Utiliser user_id ou id du profil
-                name: user.full_name, // Utiliser name comme champ principal
-                fullName: user.full_name, // Alias pour compatibilité
+              team = (teamProfiles || []).map((user: any) => ({
+                id: user.user_id || user.id,
+                name: user.full_name,
+                fullName: user.full_name,
                 email: user.email,
                 role: user.role,
                 avatar: user.avatar_url || '',
                 phone: user.phone_number || '',
-                phoneNumber: user.phone_number || '', // Alias pour compatibilité
+                phoneNumber: user.phone_number || '',
                 skills: user.skills || [],
                 location: user.location || '',
                 isActive: user.is_active !== false
               }));
             }
-            
+            const prog = project.programme_id ? programmeMap[project.programme_id] : null;
+            const rawStatus = (project.status || 'not_started').toLowerCase();
+            const statusDisplay = rawStatus === 'completed' ? 'Completed' : rawStatus === 'cancelled' ? 'Cancelled' : rawStatus === 'on_hold' ? 'On Hold' : rawStatus === 'in_progress' || rawStatus === 'active' ? 'In Progress' : 'Not Started';
             return {
               id: project.id,
               title: project.name,
               description: project.description || '',
-              status: project.status || 'not_started',
+              status: statusDisplay,
               priority: project.priority || 'medium',
               dueDate: project.end_date,
               startDate: project.start_date,
               budget: project.budget,
               clientName: project.client || '',
-              team: team,
+              team,
               teamMemberIds: Array.isArray(project.team_members) ? project.team_members.map((memberId: any) => String(memberId)) : [],
               tasks: project.tasks || [],
               risks: project.risks || [],
               createdById: project.created_by_id || project.owner_id || null,
               createdByName: project.created_by_name || null,
               createdAt: project.created_at || new Date().toISOString(),
-              updatedAt: project.updated_at || new Date().toISOString()
+              updatedAt: project.updated_at || new Date().toISOString(),
+              programmeId: project.programme_id || null,
+              programmeName: prog?.name ?? null,
+              programmeBailleurName: prog?.bailleurName ?? null
             };
           })
         );
-        
+
         console.log('✅ DataAdapter.getProjects - Projets convertis:', projects.length);
         return projects;
       } catch (error) {
@@ -200,17 +212,17 @@ export class DataAdapter {
             startDate: data.start_date,
             budget: data.budget,
             clientName: data.client || '',
-            team: team,
+            team,
             teamMemberIds: Array.isArray(data.team_members) ? data.team_members.map((memberId: any) => String(memberId)) : [],
             tasks: data.tasks || [],
             risks: data.risks || [],
             createdById: data.created_by_id || data.owner_id || null,
             createdByName: data.created_by_name || null,
             createdAt: data.created_at || new Date().toISOString(),
-            updatedAt: data.updated_at || new Date().toISOString()
+            updatedAt: data.updated_at || new Date().toISOString(),
+            programmeId: (data as any).programme_id ?? null
           };
         }
-        
         return null;
       } catch (error) {
         console.warn('Erreur Supabase création projet:', error);
@@ -276,9 +288,10 @@ export class DataAdapter {
           dueDate: project.dueDate,
           budget: project.budget,
           clientName: project.clientName,
-          team: project.team, // Passer les membres de l'équipe
+          team: project.team,
           tasks: project.tasks || [],
-          risks: project.risks || []
+          risks: project.risks || [],
+          programmeId: project.programmeId ?? null
         });
         if (error) throw error;
         
@@ -1051,6 +1064,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           mobilePhone: contact.phone || undefined,
           whatsappNumber: contact.phone || undefined,
           personalEmail: undefined,
+          categoryId: contact.category_id || undefined,
+          categoryName: undefined,
           createdById: contact.created_by || undefined,
           createdByName: contact.created_by_name || undefined
         })) || [];
@@ -1069,18 +1084,15 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
         if (error) throw error;
         return data ? {
           id: data.id,
-          firstName: data.first_name,
-          lastName: data.last_name,
-          email: data.email,
-          phone: data.phone,
-          company: data.company,
-          position: data.position,
-          status: data.status || 'lead',
-          source: data.source,
-          notes: data.notes,
-          tags: data.tags || [],
-          createdAt: data.created_at || new Date().toISOString(),
-          updatedAt: data.updated_at || new Date().toISOString(),
+          name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Contact',
+          workEmail: data.email || '',
+          company: data.company || '',
+          status: this.mapContactStatus(data.status),
+          avatar: `https://picsum.photos/seed/${data.id}/100/100`,
+          officePhone: data.phone || undefined,
+          mobilePhone: data.phone || undefined,
+          whatsappNumber: data.phone || undefined,
+          categoryId: data.category_id || undefined,
           createdById: data.created_by || undefined,
           createdByName: data.created_by_name || undefined
         } : null;
@@ -1665,6 +1677,82 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
   }
 
+  // ===== PRESENCE SESSIONS (Phase 4 Bloc 1) =====
+  static async getPresenceSessions(params?: { userId?: string; organizationId?: string; from?: string; to?: string }): Promise<PresenceSession[]> {
+    try {
+      const { data, error } = await DataService.getPresenceSessions(params);
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('❌ DataAdapter.getPresenceSessions:', e);
+      return [];
+    }
+  }
+
+  static async getCurrentPresenceSession(userId: string): Promise<PresenceSession | null> {
+    try {
+      const { data, error } = await DataService.getCurrentPresenceSession(userId);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      console.error('❌ DataAdapter.getCurrentPresenceSession:', e);
+      return null;
+    }
+  }
+
+  static async createPresenceSession(session: Partial<PresenceSession>): Promise<PresenceSession | null> {
+    try {
+      const { data, error } = await DataService.createPresenceSession(session);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      console.error('❌ DataAdapter.createPresenceSession:', e);
+      return null;
+    }
+  }
+
+  static async updatePresenceSession(id: string, updates: Partial<PresenceSession>): Promise<PresenceSession | null> {
+    try {
+      const { data, error } = await DataService.updatePresenceSession(id, updates);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      console.error('❌ DataAdapter.updatePresenceSession:', e);
+      return null;
+    }
+  }
+
+  static async listEmployees(organizationId?: string | null): Promise<Employee[]> {
+    try {
+      return await DataService.listEmployees(organizationId);
+    } catch (e) {
+      console.error('❌ DataAdapter.listEmployees:', e);
+      return [];
+    }
+  }
+
+  static async getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
+    try {
+      const { data, error } = await DataService.getEmployeeByProfileId(profileId);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      console.error('❌ DataAdapter.getEmployeeByProfileId:', e);
+      return null;
+    }
+  }
+
+  static async upsertEmployee(employee: Partial<Employee>): Promise<Employee | null> {
+    try {
+      const { data, error } = await DataService.upsertEmployee(employee);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      console.error('❌ DataAdapter.upsertEmployee:', e);
+      return null;
+    }
+  }
+
   static async createTimeLog(timeLog: Omit<TimeLog, 'id' | 'userId'>): Promise<TimeLog> {
     console.log('🔄 DataAdapter.createTimeLog - Création log:', timeLog.entityTitle);
     try {
@@ -2157,6 +2245,138 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
     console.log('✅ DataAdapter.getProjectReports - Rapports récupérés:', result.data.length);
     return result.data;
+  }
+
+  static async getProjectAttachments(projectId: string): Promise<ProjectAttachment[]> {
+    const { data, error } = await DataService.getProjectAttachments(projectId);
+    if (error) return [];
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      projectId: row.project_id,
+      fileName: row.file_name,
+      filePath: row.file_path,
+      fileSize: row.file_size || 0,
+      mimeType: row.mime_type,
+      uploadedById: row.uploaded_by_id,
+      createdAt: row.created_at
+    }));
+  }
+
+  static async uploadProjectAttachment(projectId: string, file: File): Promise<ProjectAttachment | null> {
+    const { data, error } = await DataService.uploadProjectAttachment(projectId, file);
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      projectId: data.project_id,
+      fileName: data.file_name,
+      filePath: data.file_path,
+      fileSize: data.file_size || 0,
+      mimeType: data.mime_type,
+      uploadedById: data.uploaded_by_id,
+      createdAt: data.created_at
+    };
+  }
+
+  static async deleteProjectAttachment(attachmentId: string): Promise<void> {
+    const result = await DataService.deleteProjectAttachment(attachmentId);
+    if (result.error) throw result.error;
+  }
+
+  static async getProjectAttachmentDownloadUrl(filePath: string): Promise<string | null> {
+    return await DataService.getProjectAttachmentUrl(filePath, 60);
+  }
+
+  static async getProjectModuleSettings(): Promise<ProjectModuleSettings | null> {
+    const { data, error } = await DataService.getProjectModuleSettings();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      organizationId: data.organization_id,
+      projectTypes: Array.isArray(data.project_types) ? data.project_types : [],
+      statuses: Array.isArray(data.statuses) ? data.statuses : [],
+      alertDelayDays: data.alert_delay_days ?? 3,
+      taskTemplates: Array.isArray(data.task_templates) ? data.task_templates : [],
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  static async upsertProjectModuleSettings(settings: {
+    projectTypes?: string[];
+    statuses?: string[];
+    alertDelayDays?: number;
+    taskTemplates?: Array<{ title: string; defaultPriority?: string }>;
+  }): Promise<ProjectModuleSettings | null> {
+    const { data, error } = await DataService.upsertProjectModuleSettings(settings);
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      organizationId: data.organization_id,
+      projectTypes: Array.isArray(data.project_types) ? data.project_types : [],
+      statuses: Array.isArray(data.statuses) ? data.statuses : [],
+      alertDelayDays: data.alert_delay_days ?? 3,
+      taskTemplates: Array.isArray(data.task_templates) ? data.task_templates : [],
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  // ===== PLANNING SLOTS (Phase 3) =====
+  private static mapPlanningSlotRow(row: any): PlanningSlot {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      slotDate: row.slot_date,
+      slotType: row.slot_type,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      meetingId: row.meeting_id,
+      title: row.title,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdById: row.created_by_id
+    };
+  }
+
+  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string }): Promise<PlanningSlot[]> {
+    const { data, error } = await DataService.getPlanningSlots(params);
+    if (error) return [];
+    return (data || []).map((row: any) => this.mapPlanningSlotRow(row));
+  }
+
+  static async createPlanningSlot(slot: {
+    userId: string;
+    slotDate: string;
+    slotType: string;
+    startTime?: string;
+    endTime?: string;
+    meetingId?: string;
+    title?: string;
+    notes?: string;
+  }): Promise<PlanningSlot | null> {
+    const { data, error } = await DataService.createPlanningSlot(slot);
+    if (error || !data) return null;
+    return this.mapPlanningSlotRow(data);
+  }
+
+  static async updatePlanningSlot(id: string, updates: Partial<PlanningSlot>): Promise<PlanningSlot | null> {
+    const payload: Record<string, unknown> = {};
+    if (updates.slotDate !== undefined) payload.slotDate = updates.slotDate;
+    if (updates.slotType !== undefined) payload.slotType = updates.slotType;
+    if (updates.startTime !== undefined) payload.startTime = updates.startTime;
+    if (updates.endTime !== undefined) payload.endTime = updates.endTime;
+    if (updates.meetingId !== undefined) payload.meetingId = updates.meetingId;
+    if (updates.title !== undefined) payload.title = updates.title;
+    if (updates.notes !== undefined) payload.notes = updates.notes;
+    const { data, error } = await DataService.updatePlanningSlot(id, payload as any);
+    if (error || !data) return null;
+    return this.mapPlanningSlotRow(data);
+  }
+
+  static async deletePlanningSlot(id: string): Promise<void> {
+    const result = await DataService.deletePlanningSlot(id);
+    if (result.error) throw result.error;
   }
 
   static async deleteProjectReport(reportId: string) {

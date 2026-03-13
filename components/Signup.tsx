@@ -385,7 +385,7 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
 
               <div>
                 <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                  {t('user_role')}
+                  {t('signup_role_label')}
                 </label>
                 <select
                   id="role"
@@ -411,6 +411,9 @@ const Signup: React.FC<SignupProps> = ({ onSwitchToLogin, onSignupSuccess }) => 
                     );
                   })}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {t('signup_poste_note')}
+                </p>
                 {ROLES_REQUIRING_APPROVAL.includes(role) && (
                   <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex gap-2">
                     <i className="fas fa-shield-alt mt-0.5"></i>

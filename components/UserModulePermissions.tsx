@@ -1,83 +1,222 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { DataService } from '../services/dataService';
-import { User, ModuleName, Role } from '../types';
+import OrganizationService from '../services/organizationService';
+import DepartmentService from '../services/departmentService';
+import { User, ModuleName, Role, Department } from '../types';
 import { getDefaultPermissionsForRole, PermissionState } from '../utils/modulePermissionDefaults';
 import AccessDenied from './common/AccessDenied';
+import { useModuleLabels } from '../hooks/useModuleLabels';
 
 interface UserModulePermissionsProps {
   users: User[];
   canEdit?: boolean;
 }
 
-const moduleDisplayNames: Record<ModuleName, string> = {
+export const moduleDisplayNames: Record<ModuleName, string> = {
   'dashboard': 'Dashboard',
   'projects': 'Projets',
   'goals_okrs': 'Objectifs OKR',
   'time_tracking': 'Suivi du Temps',
+  'planning': 'Planning',
   'leave_management': 'Demandes de Congés',
   'finance': 'Finance',
+  'comptabilite': 'Comptabilité',
   'knowledge_base': 'Base de Connaissances',
   'courses': 'Cours',
   'jobs': 'Offres d\'Emploi',
-  'ai_coach': 'Coach IA',
-  'gen_ai_lab': 'Génération IA',
   'crm_sales': 'CRM & Ventes',
+  'partenariat': 'Partenariat',
   'analytics': 'Analytics',
   'talent_analytics': 'Talent Analytics',
-  'user_management': 'Gestion des Utilisateurs',
+  'qualite': 'Qualité',
+  'rh': 'Ressources humaines',
+  'trinite': 'Trinité',
+  'programme': 'Programme / Budget',
+  'juridique': 'Juridique',
+  'studio': 'Studio',
+  'tech': 'Tech',
+  'collecte': 'Collecte',
+  'conseil': 'Conseil',
+  'user_management': 'Droits d\'accès / Utilisateurs',
   'course_management': 'Gestion des Cours',
   'job_management': 'Gestion des Jobs',
-  'leave_management_admin': 'Gestion des Demandes de Congés',
-  'settings': 'Paramètres'
+  'leave_management_admin': 'Gestion des Congés',
+  'organization_management': 'Gestion des Organisations',
+  'department_management': 'Départements',
+  'postes_management': 'Postes',
+  'settings': 'Paramètres',
+  'logistique': 'Logistique',
+  'parc_auto': 'Parc automobile',
+  'ticket_it': 'Ticket IT',
+  'alerte_anonyme': 'Alerte anonyme',
+  'messagerie': 'Messagerie / Discuss',
 };
 
-// Catégories de modules pour une meilleure organisation
+// Catégories (10 départements + administration)
 const moduleCategories: Record<string, { label: string; icon: string; modules: ModuleName[] }> = {
   workspace: {
     label: 'Workspace',
     icon: 'fas fa-briefcase',
-    modules: ['dashboard', 'projects', 'goals_okrs', 'time_tracking', 'leave_management', 'finance', 'knowledge_base']
+    modules: ['dashboard', 'projects', 'goals_okrs', 'time_tracking', 'planning', 'leave_management', 'finance', 'knowledge_base'],
   },
-  development: {
-    label: 'Development',
-    icon: 'fas fa-code',
-    modules: ['courses', 'jobs']
+  rh: {
+    label: 'RH',
+    icon: 'fas fa-users-cog',
+    modules: ['rh'],
   },
-  tools: {
-    label: 'Tools',
-    icon: 'fas fa-tools',
-    modules: ['ai_coach', 'gen_ai_lab']
+  admin_financier: {
+    label: 'Administratif & Financier',
+    icon: 'fas fa-file-invoice-dollar',
+    modules: ['finance', 'programme', 'comptabilite'],
   },
-  management: {
-    label: 'Management Panel',
-    icon: 'fas fa-crown',
-    modules: ['course_management', 'job_management', 'leave_management_admin', 'user_management', 'analytics', 'talent_analytics']
+  formation: {
+    label: 'Formation & Bootcamp',
+    icon: 'fas fa-book-open',
+    modules: ['courses'],
   },
-  sales: {
-    label: 'CRM & Sales',
+  emploi: {
+    label: 'Emploi',
+    icon: 'fas fa-briefcase',
+    modules: ['jobs'],
+  },
+  partenariat: {
+    label: 'Prospection & Partenariat',
     icon: 'fas fa-handshake',
-    modules: ['crm_sales']
+    modules: ['crm_sales', 'partenariat'],
+  },
+  conseil_qualite: {
+    label: 'Conseil & Qualité',
+    icon: 'fas fa-chart-pie',
+    modules: ['conseil', 'analytics', 'qualite', 'talent_analytics'],
+  },
+  juridique: {
+    label: 'Juridique',
+    icon: 'fas fa-gavel',
+    modules: ['juridique'],
+  },
+  studio: {
+    label: 'Audiovisuel / Studio',
+    icon: 'fas fa-video',
+    modules: ['studio'],
+  },
+  tech: {
+    label: 'IT & Tech',
+    icon: 'fas fa-laptop-code',
+    modules: ['tech'],
+  },
+  collecte: {
+    label: 'Collecte',
+    icon: 'fas fa-clipboard-list',
+    modules: ['collecte'],
+  },
+  trinite: {
+    label: 'Trinité',
+    icon: 'fas fa-gem',
+    modules: ['trinite'],
+  },
+  logistique_ops: {
+    label: 'Logistique & Opérations',
+    icon: 'fas fa-boxes',
+    modules: ['logistique', 'parc_auto', 'ticket_it'],
+  },
+  communication_conformite: {
+    label: 'Communication & Conformité',
+    icon: 'fas fa-envelope',
+    modules: ['messagerie', 'alerte_anonyme'],
+  },
+  administration: {
+    label: 'Administration (Paramètres)',
+    icon: 'fas fa-cog',
+    modules: ['organization_management', 'department_management', 'postes_management', 'user_management', 'course_management', 'job_management', 'leave_management_admin'],
   },
   settings: {
-    label: 'Settings',
+    label: 'Paramètres',
     icon: 'fas fa-cog',
-    modules: ['settings']
-  }
+    modules: ['settings'],
+  },
 };
 
 const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, canEdit = true }) => {
   const { t } = useLocalization();
   const { user: currentUser } = useAuth();
+  const { getDisplayName } = useModuleLabels();
   const [selectedUserId, setSelectedUserId] = useState<string | number>('');
   const [permissions, setPermissions] = useState<Record<ModuleName, PermissionState>>({} as Record<ModuleName, PermissionState>);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
   const [isSaving, setIsSaving] = useState(false);
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [userDepartmentIds, setUserDepartmentIds] = useState<string[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
+  // Attribution en masse (Phase 0.3)
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkRefUserId, setBulkRefUserId] = useState<string | number>('');
+  const [bulkDeptId, setBulkDeptId] = useState('');
+  const [bulkDeptList, setBulkDeptList] = useState<Department[]>([]);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  // Sélection multi-utilisateurs pour attribution de droits
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string | number>>(new Set());
+  const [bulkApplyToSelected, setBulkApplyToSelected] = useState(false);
 
   const selectedUser = users.find(u => u.id === selectedUserId);
+
+  // Charger départements de l'org et assignations de l'utilisateur sélectionné
+  useEffect(() => {
+    if (!selectedUser) {
+      setDepartments([]);
+      setUserDepartmentIds([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDepartments(true);
+    (async () => {
+      try {
+        const orgId = await OrganizationService.getCurrentUserOrganizationId();
+        if (cancelled) return;
+        if (!orgId) {
+          setDepartments([]);
+          setUserDepartmentIds([]);
+          return;
+        }
+        const [deptList, links] = await Promise.all([
+          DepartmentService.getDepartmentsByOrganizationId(orgId),
+          DepartmentService.getUserDepartmentLinks(String(selectedUser.id))
+        ]);
+        if (cancelled) return;
+        setDepartments(deptList);
+        setUserDepartmentIds(links.map(l => l.departmentId));
+      } catch (e) {
+        if (!cancelled) {
+          console.error('Erreur chargement départements:', e);
+          setDepartments([]);
+          setUserDepartmentIds([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingDepartments(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedUser?.id]);
+
+  // Charger départements pour le modal d'attribution en masse
+  useEffect(() => {
+    if (!showBulkModal) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgId = await OrganizationService.getCurrentUserOrganizationId();
+        if (cancelled || !orgId) return;
+        const deptList = await DepartmentService.getDepartmentsByOrganizationId(orgId);
+        if (!cancelled) setBulkDeptList(deptList);
+      } catch (e) {
+        if (!cancelled) setBulkDeptList([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showBulkModal]);
 
   // Filtrer les utilisateurs selon la recherche et le rôle
   const filteredUsers = useMemo(() => {
@@ -185,6 +324,120 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
     }
   };
 
+  const handleSaveDepartments = async () => {
+    if (!canEdit || !selectedUser) return;
+    try {
+      const ok = await DepartmentService.setUserDepartments(String(selectedUser.id), userDepartmentIds);
+      if (!ok) throw new Error('Échec sauvegarde');
+      window.dispatchEvent(new Event('permissions-reload'));
+      alert('Départements enregistrés avec succès.');
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde départements:', error);
+      alert('Erreur lors de l\'enregistrement des départements.');
+    }
+  };
+
+  /** Appliquer les droits d'un utilisateur de référence à tout un département (surcharge, sans écraser les autres permissions). */
+  const handleBulkApply = async () => {
+    if (!canEdit || !bulkRefUserId || !bulkDeptId) return;
+    const refUser = users.find(u => u.id === bulkRefUserId);
+    if (!refUser || !refUser.profileId) {
+      alert('Veuillez sélectionner un utilisateur de référence ayant un profil.');
+      return;
+    }
+    setBulkApplying(true);
+    try {
+      let effectivePermissions = getDefaultPermissionsForRole(refUser.role as Role);
+      const { data } = await DataService.getUserModulePermissions(String(refUser.profileId));
+      if (Array.isArray(data) && data.length > 0) {
+        data.forEach((row: any) => {
+          const m = row.module_name as ModuleName;
+          effectivePermissions[m] = {
+            canRead: !!row.can_read,
+            canWrite: !!row.can_write,
+            canDelete: !!row.can_delete,
+            canApprove: !!row.can_approve
+          };
+        });
+      }
+      const payload = Object.entries(effectivePermissions).map(([moduleName, perms]) => ({
+        moduleName,
+        canRead: perms.canRead,
+        canWrite: perms.canWrite,
+        canDelete: perms.canDelete,
+        canApprove: perms.canApprove
+      }));
+
+      const userIds = await DepartmentService.getUserIdsInDepartment(bulkDeptId);
+      const targetUsers = users.filter(u => userIds.includes(String(u.id)));
+      let applied = 0;
+      for (const u of targetUsers) {
+        const profileId = (u as any).profileId || u.id;
+        const { error } = await DataService.upsertUserModulePermissions(String(profileId), payload);
+        if (!error) applied++;
+      }
+      window.dispatchEvent(new Event('permissions-reload'));
+      alert(`Droits appliqués à ${applied} utilisateur(s) du département.`);
+      setShowBulkModal(false);
+      setBulkRefUserId('');
+      setBulkDeptId('');
+    } catch (error) {
+      console.error('❌ Erreur attribution en masse:', error);
+      alert('Erreur lors de l\'attribution en masse.');
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
+  /** Appliquer les permissions actuelles (utilisateur sélectionné) aux utilisateurs cochés. */
+  const handleApplyToSelectedUsers = async () => {
+    if (!canEdit || !selectedUser || !selectedUser.profileId || selectedUserIds.size === 0) return;
+    setBulkApplyToSelected(true);
+    try {
+      const payload = Object.entries(permissions).map(([moduleName, perms]) => ({
+        moduleName,
+        canRead: perms.canRead,
+        canWrite: perms.canWrite,
+        canDelete: perms.canDelete,
+        canApprove: perms.canApprove
+      }));
+      let applied = 0;
+      for (const uid of selectedUserIds) {
+        if (String(uid) === String(selectedUser.id)) continue;
+        const u = users.find(us => us.id === uid);
+        const profileId = u ? ((u as any).profileId || u.id) : null;
+        if (!profileId) continue;
+        const { error } = await DataService.upsertUserModulePermissions(String(profileId), payload);
+        if (!error) applied++;
+      }
+      window.dispatchEvent(new Event('permissions-reload'));
+      alert(`Droits appliqués à ${applied} utilisateur(s) sélectionné(s).`);
+      setSelectedUserIds(new Set());
+    } catch (error) {
+      console.error('❌ Erreur attribution aux sélectionnés:', error);
+      alert('Erreur lors de l\'attribution.');
+    } finally {
+      setBulkApplyToSelected(false);
+    }
+  };
+
+  const toggleUserSelection = (userId: string | number) => {
+    setSelectedUserIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    if (selectedUserIds.size === filteredUsers.length) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(filteredUsers.map(u => u.id)));
+    }
+  };
+
   if (!currentUser) return null;
 
   if (currentUser.role !== 'super_administrator') {
@@ -215,14 +468,39 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
             </span>
           </p>
         </div>
+        {canEdit && (
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowBulkModal(true)}
+              className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg border border-white border-opacity-40 font-medium"
+            >
+              <i className="fas fa-users-cog mr-2"></i>
+              Appliquer en masse (département)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Barre de recherche et filtres */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <i className="fas fa-user-check text-emerald-600"></i>
-          Sélectionner un utilisateur
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+            <i className="fas fa-user-check text-emerald-600"></i>
+            Sélectionner un utilisateur
+          </h3>
+          {canEdit && filteredUsers.length > 0 && (
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={filteredUsers.every(u => selectedUserIds.has(u.id))}
+                onChange={selectAllFiltered}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Tout sélectionner
+            </label>
+          )}
+        </div>
         
         {/* Recherche */}
         <div className="mb-4">
@@ -266,13 +544,22 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
               <div
                 key={user.id}
                 onClick={() => handleUserSelect(user.id)}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                className={`p-4 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${
                   selectedUserId === user.id
                     ? 'bg-emerald-50 border-emerald-500 shadow-md'
                     : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-sm'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                {canEdit && (
+                  <input
+                    type="checkbox"
+                    checked={selectedUserIds.has(user.id)}
+                    onChange={(e) => { e.stopPropagation(); toggleUserSelection(user.id); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                )}
+                <div className="flex items-center gap-3 flex-1">
                   {user.avatar && !user.avatar.startsWith('data:image') ? (
                     <img 
                       src={user.avatar} 
@@ -301,6 +588,26 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
 
       {selectedUser && (
         <>
+          {/* Bouton appliquer aux sélectionnés */}
+          {canEdit && selectedUserIds.size > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-amber-800">
+                  <i className="fas fa-users mr-2"></i>
+                  {selectedUserIds.size} utilisateur(s) sélectionné(s). Les permissions ci-dessous seront appliquées à tous.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleApplyToSelectedUsers}
+                  disabled={bulkApplyToSelected}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium"
+                >
+                  {bulkApplyToSelected ? <><i className="fas fa-spinner fa-spin mr-2"></i>Application…</> : <>Appliquer aux {selectedUserIds.size} sélectionnés</>}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* En-tête avec informations utilisateur */}
           <div className="bg-gradient-to-r from-emerald-50 to-blue-50 rounded-lg shadow-sm border border-emerald-200 p-6">
             <div className="flex items-center justify-between">
@@ -329,6 +636,58 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
             </div>
           </div>
 
+          {/* Départements de l'utilisateur */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <i className="fas fa-sitemap text-emerald-600"></i>
+              Départements de l'utilisateur
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Les modules accessibles pour cet utilisateur sont l'union des modules autorisés sur les départements cochés. Cochez les départements auxquels il appartient.
+            </p>
+            {loadingDepartments ? (
+              <div className="flex items-center gap-2 py-4">
+                <i className="fas fa-spinner fa-spin text-emerald-600"></i>
+                <span className="text-sm text-gray-600">Chargement des départements...</span>
+              </div>
+            ) : departments.length === 0 ? (
+              <p className="text-gray-500 py-2">Aucun département dans votre organisation. Créez-en depuis l'écran Départements (menu Management).</p>
+            ) : (
+              <>
+                <div className="space-y-2 mb-4 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                  {departments.map(dept => (
+                    <label key={dept.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                      <input
+                        type="checkbox"
+                        checked={userDepartmentIds.includes(dept.id)}
+                        onChange={() => {
+                          if (!canEdit) return;
+                          setUserDepartmentIds(prev =>
+                            prev.includes(dept.id)
+                              ? prev.filter(id => id !== dept.id)
+                              : [...prev, dept.id]
+                          );
+                        }}
+                        disabled={!canEdit}
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-sm font-medium text-gray-800">{dept.name}</span>
+                      {dept.slug && <span className="text-xs text-gray-500">({dept.slug})</span>}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDepartments}
+                  disabled={!canEdit}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Enregistrer les départements
+                </button>
+              </>
+            )}
+          </div>
+
           {/* Permissions par module */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -355,7 +714,7 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
                   {/* Modules de la catégorie */}
                   {category.modules.map(moduleName => {
                     const module = moduleName as ModuleName;
-                    const displayName = moduleDisplayNames[module];
+                    const displayName = getDisplayName(module) || moduleDisplayNames[module];
                     const modulePerms = permissions[module] || { canRead: false, canWrite: false, canDelete: false, canApprove: false };
                     
                     return (
@@ -492,6 +851,67 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
           <i className="fas fa-hand-pointer text-6xl text-gray-300 mb-4"></i>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Sélectionnez un utilisateur</h3>
           <p className="text-gray-500">Choisissez un utilisateur dans la liste ci-dessus pour gérer ses permissions.</p>
+        </div>
+      )}
+
+      {/* Modal attribution en masse (Phase 0.3) */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <i className="fas fa-users-cog text-emerald-600"></i>
+              Appliquer les droits à un département
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Les droits de l’utilisateur de référence seront appliqués à tous les utilisateurs du département choisi (surcharge des permissions existantes, sans les supprimer).
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Utilisateur de référence</label>
+                <select
+                  value={String(bulkRefUserId)}
+                  onChange={(e) => setBulkRefUserId(e.target.value === '' ? '' : e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">— Choisir —</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Département cible</label>
+                <select
+                  value={bulkDeptId}
+                  onChange={(e) => setBulkDeptId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">— Choisir —</option>
+                  {bulkDeptList.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowBulkModal(false); setBulkRefUserId(''); setBulkDeptId(''); }}
+                disabled={bulkApplying}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkApply}
+                disabled={bulkApplying || !bulkRefUserId || !bulkDeptId}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {bulkApplying ? <><i className="fas fa-spinner fa-spin mr-2"></i>Application…</> : <>Appliquer</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

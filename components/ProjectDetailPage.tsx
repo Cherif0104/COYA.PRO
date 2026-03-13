@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, TimeLog, MANAGEMENT_ROLES, Role } from '../types';
+import { Project, TimeLog, Objective, ProjectAttachment, MANAGEMENT_ROLES, Role, ProjectBudgetLine, Task, SUPPORTED_CURRENCIES, TASK_SCORE_PERCENT_EMPLOYEE, TASK_SCORE_PERCENT_MANAGER } from '../types';
 import LogTimeModal from './LogTimeModal';
+import ObjectivesBlock from './ObjectivesBlock';
 import ConfirmationModal from './common/ConfirmationModal';
 import ActivityHistory from './common/ActivityHistory';
 import DataAdapter from '../services/dataAdapter';
+import { useProjectModuleSettings } from '../hooks/useProjectModuleSettings';
 import jsPDF from 'jspdf';
 
 const PROJECT_MANAGEMENT_ROLES: Role[] = [
@@ -23,6 +25,8 @@ interface ProjectDetailPageProps {
     onDeleteProject: (projectId: string) => void;
     onAddTimeLog: (log: Omit<TimeLog, 'id' | 'userId'>) => void;
     timeLogs: TimeLog[];
+    objectives?: Objective[];
+    setView?: (view: string) => void;
 }
 
 const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
@@ -31,12 +35,14 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     onUpdateProject,
     onDeleteProject,
     onAddTimeLog,
-    timeLogs
+    timeLogs,
+    objectives = [],
+    setView
 }) => {
     const { t } = useLocalization();
     const { user: currentUser } = useAuth();
     const [currentProject, setCurrentProject] = useState(project);
-    const [activeTab, setActiveTab] = useState<'tasks' | 'risks' | 'report' | 'history'>('tasks');
+    const [activeTab, setActiveTab] = useState<'tasks' | 'risks' | 'report' | 'history' | 'objectives' | 'attachments' | 'budget'>('tasks');
     const [isLogTimeModalOpen, setLogTimeModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -55,12 +61,21 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const [taskSummary, setTaskSummary] = useState<string>('');
     const [savedReports, setSavedReports] = useState<any[]>([]);
     const [savedTaskSummaries, setSavedTaskSummaries] = useState<any[]>([]);
+    const { settings: projectSettings } = useProjectModuleSettings();
+    const requireJustification = projectSettings?.requireJustificationForCompletion !== false;
 
     // États pour la gestion des tâches
     const [newTaskText, setNewTaskText] = useState('');
     const [newTaskDueDate, setNewTaskDueDate] = useState('');
     const [newTaskPriority, setNewTaskPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
     const [newTaskAssignee, setNewTaskAssignee] = useState<string>('');
+    const [newTaskScheduledDate, setNewTaskScheduledDate] = useState('');
+    const [newTaskScheduledTime, setNewTaskScheduledTime] = useState('');
+    const [newTaskScheduledDuration, setNewTaskScheduledDuration] = useState<number>(60);
+    const [newTaskSmartCriteria, setNewTaskSmartCriteria] = useState<{ specific?: string; measurable?: string; achievable?: string; relevant?: string; timeBound?: string }>({});
+    const [attachments, setAttachments] = useState<ProjectAttachment[]>([]);
+    const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
     // Fonction utilitaire pour convertir une date ISO en format yyyy-MM-dd pour les champs input date
     const formatDateForInput = (dateString?: string): string => {
@@ -83,6 +98,23 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         setCurrentProject(project);
         loadProjectReports();
     }, [project]);
+
+    const loadAttachments = async () => {
+        if (!currentProject?.id) return;
+        setAttachmentsLoading(true);
+        try {
+            const list = await DataAdapter.getProjectAttachments(currentProject.id);
+            setAttachments(list);
+        } catch (e) {
+            console.error('Erreur chargement pièces jointes:', e);
+        } finally {
+            setAttachmentsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'attachments' || activeTab === 'tasks') loadAttachments();
+    }, [activeTab, currentProject?.id]);
 
     const loadProjectReports = async () => {
         try {
@@ -113,6 +145,41 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const handleSaveTimeLog = (log: Omit<TimeLog, 'id' | 'userId'>) => {
         onAddTimeLog(log);
         setLogTimeModalOpen(false);
+    };
+
+    const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !currentProject?.id) return;
+        e.target.value = '';
+        setUploadingAttachment(true);
+        try {
+            const created = await DataAdapter.uploadProjectAttachment(currentProject.id, file);
+            if (created) setAttachments(prev => [created, ...prev]);
+        } catch (err) {
+            console.error('Erreur upload pièce jointe:', err);
+            alert('Impossible d’ajouter le fichier. Vérifiez que le bucket Supabase "project-attachments" existe.');
+        } finally {
+            setUploadingAttachment(false);
+        }
+    };
+
+    const handleDeleteAttachment = async (attachmentId: string) => {
+        if (!confirm('Supprimer cette pièce jointe ?')) return;
+        try {
+            await DataAdapter.deleteProjectAttachment(attachmentId);
+            setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+        } catch (err) {
+            console.error('Erreur suppression pièce jointe:', err);
+        }
+    };
+
+    const handleDownloadAttachment = async (a: ProjectAttachment) => {
+        try {
+            const url = await DataAdapter.getProjectAttachmentDownloadUrl(a.filePath);
+            if (url) window.open(url, '_blank');
+        } catch (err) {
+            console.error('Erreur téléchargement:', err);
+        }
     };
 
     const projectTimeLogs = timeLogs.filter(log => 
@@ -206,7 +273,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const handleAddTask = () => {
         if (!newTaskText.trim()) return;
         
-        const newTask = {
+        const newTask: Task = {
             id: `task-${Date.now()}`,
             text: newTaskText,
             status: 'To Do' as const,
@@ -214,7 +281,11 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             dueDate: newTaskDueDate || undefined,
             assignee: newTaskAssignee ? currentProject.team?.find(m => m.id === newTaskAssignee) : undefined,
             estimatedHours: 8,
-            loggedHours: 0
+            loggedHours: 0,
+            scheduledDate: newTaskScheduledDate || undefined,
+            scheduledTime: newTaskScheduledTime || undefined,
+            scheduledDurationMinutes: newTaskScheduledDuration || undefined,
+            smartCriteria: Object.keys(newTaskSmartCriteria).some(k => (newTaskSmartCriteria as any)[k]) ? newTaskSmartCriteria : undefined,
         };
 
         const updatedProject = {
@@ -225,11 +296,13 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         setCurrentProject(updatedProject);
         onUpdateProject(updatedProject);
         
-        // Reset form
         setNewTaskText('');
         setNewTaskDueDate('');
         setNewTaskPriority('Medium');
         setNewTaskAssignee('');
+        setNewTaskScheduledDate('');
+        setNewTaskScheduledTime('');
+        setNewTaskScheduledDuration(60);
     };
 
     const handleDeleteTask = (taskId: string) => {
@@ -264,6 +337,50 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         if (likelihood === 'High' && impact === 'High') return 'High';
         if (likelihood === 'High' || impact === 'High') return 'Medium';
         return 'Low';
+    };
+
+    /** Phase 2 : tâche gelée si date/heure planifiée dépassée sans "Réalisé" */
+    const isTaskFrozen = (task: Task): boolean => {
+        if (task.status === 'Completed') return false;
+        if (task.isFrozen) return true;
+        if (!task.scheduledDate) return false;
+        const scheduled = new Date(task.scheduledDate);
+        if (task.scheduledTime) {
+            const [h, m] = task.scheduledTime.split(':').map(Number);
+            scheduled.setHours(h, m || 0, 0, 0);
+        }
+        const end = task.scheduledDurationMinutes
+            ? new Date(scheduled.getTime() + task.scheduledDurationMinutes * 60 * 1000)
+            : scheduled;
+        return new Date() > end;
+    };
+
+    const handleUpdateBudget = (updates: { budgetPlanned?: number; budgetCurrency?: string; budgetLines?: ProjectBudgetLine[] }) => {
+        const updated = { ...currentProject, ...updates };
+        setCurrentProject(updated);
+        onUpdateProject(updated);
+    };
+
+    const handleAddBudgetLine = () => {
+        const lines = currentProject.budgetLines || [];
+        const newLine: ProjectBudgetLine = {
+            id: `bl-${Date.now()}`,
+            label: '',
+            plannedAmount: 0,
+            realAmount: 0,
+            currency: (currentProject.budgetCurrency as any) || 'XOF',
+        };
+        handleUpdateBudget({ budgetLines: [...lines, newLine] });
+    };
+
+    const handleUpdateBudgetLine = (id: string, patch: Partial<ProjectBudgetLine>) => {
+        const lines = (currentProject.budgetLines || []).map((l) => (l.id === id ? { ...l, ...patch } : l));
+        handleUpdateBudget({ budgetLines: lines });
+    };
+
+    const handleRemoveBudgetLine = (id: string) => {
+        const lines = (currentProject.budgetLines || []).filter((l) => l.id !== id);
+        handleUpdateBudget({ budgetLines: lines });
     };
 
     const handleIdentifyRisksWithAI = async () => {
@@ -904,6 +1021,39 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                 <i className={`fas fa-history mr-2 ${activeTab === 'history' ? 'text-purple-600' : ''}`}></i>
                                 Historique
                             </button>
+                            <button
+                                onClick={() => setActiveTab('objectives')}
+                                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${
+                                    activeTab === 'objectives'
+                                        ? 'bg-white text-emerald-600 border-b-2 border-emerald-600 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className={`fas fa-bullseye mr-2 ${activeTab === 'objectives' ? 'text-emerald-600' : ''}`}></i>
+                                Objectifs
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('attachments')}
+                                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${
+                                    activeTab === 'attachments'
+                                        ? 'bg-white text-amber-600 border-b-2 border-amber-600 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className={`fas fa-paperclip mr-2 ${activeTab === 'attachments' ? 'text-amber-600' : ''}`}></i>
+                                Pièces jointes
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('budget')}
+                                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${
+                                    activeTab === 'budget'
+                                        ? 'bg-white text-teal-600 border-b-2 border-teal-600 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className={`fas fa-coins mr-2 ${activeTab === 'budget' ? 'text-teal-600' : ''}`}></i>
+                                Budget
+                            </button>
                         </nav>
                     </div>
 
@@ -1078,6 +1228,42 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                 <option value="High">Haut</option>
                                             </select>
                                         </div>
+                                        <details className="mt-2">
+                                            <summary className="text-xs text-gray-600 cursor-pointer hover:text-emerald-600">Critères SMART (optionnel)</summary>
+                                            <div className="mt-2 grid grid-cols-1 gap-2 text-sm">
+                                                <input type="text" placeholder="Spécifique" value={newTaskSmartCriteria.specific ?? ''} onChange={(e) => setNewTaskSmartCriteria(p => ({ ...p, specific: e.target.value || undefined }))} className="px-2 py-1 border rounded" />
+                                                <input type="text" placeholder="Mesurable" value={newTaskSmartCriteria.measurable ?? ''} onChange={(e) => setNewTaskSmartCriteria(p => ({ ...p, measurable: e.target.value || undefined }))} className="px-2 py-1 border rounded" />
+                                                <input type="text" placeholder="Atteignable" value={newTaskSmartCriteria.achievable ?? ''} onChange={(e) => setNewTaskSmartCriteria(p => ({ ...p, achievable: e.target.value || undefined }))} className="px-2 py-1 border rounded" />
+                                                <input type="text" placeholder="Pertinent" value={newTaskSmartCriteria.relevant ?? ''} onChange={(e) => setNewTaskSmartCriteria(p => ({ ...p, relevant: e.target.value || undefined }))} className="px-2 py-1 border rounded" />
+                                                <input type="text" placeholder="Temporel" value={newTaskSmartCriteria.timeBound ?? ''} onChange={(e) => setNewTaskSmartCriteria(p => ({ ...p, timeBound: e.target.value || undefined }))} className="px-2 py-1 border rounded" />
+                                            </div>
+                                        </details>
+                                        <p className="text-xs text-gray-500 mt-2 mb-1">Objectif jour/heure (optionnel) : si dépassé sans « Réalisé », la tâche se fige ; le manager peut débloquer.</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <input
+                                                type="date"
+                                                value={newTaskScheduledDate}
+                                                onChange={(e) => setNewTaskScheduledDate(e.target.value)}
+                                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                                placeholder="Date prévue"
+                                            />
+                                            <input
+                                                type="time"
+                                                value={newTaskScheduledTime}
+                                                onChange={(e) => setNewTaskScheduledTime(e.target.value)}
+                                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={newTaskScheduledDuration}
+                                                    onChange={(e) => setNewTaskScheduledDuration(Number(e.target.value) || 60)}
+                                                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                                />
+                                                <span className="text-sm text-gray-500">min</span>
+                                            </div>
+                                        </div>
                                     <button
                                             onClick={handleAddTask}
                                             disabled={!newTaskText.trim()}
@@ -1127,21 +1313,38 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                         {/* Afficher les tâches existantes */}
                                                         {(currentProject.tasks || []).map(task => {
                                                             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'Completed';
+                                                            const frozen = isTaskFrozen(task);
+                                                            const canSetCompleted = !frozen || canManageProject;
                                                             return (
-                                                            <tr key={task.id} className="hover:bg-gray-50">
+                                                            <tr key={task.id} className={`hover:bg-gray-50 ${frozen ? 'bg-amber-50 border-l-2 border-amber-500' : ''}`}>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={task.status === 'Completed'}
+                                                                        disabled={!canSetCompleted && task.status !== 'Completed'}
                                                                         onChange={(e) => {
                                                                             const newStatus = e.target.checked ? 'Completed' : 'To Do';
-                                                                            handleUpdateTask(task.id, { status: newStatus });
+                                                                            if (newStatus === 'Completed' && requireJustification) {
+                                                                                const hasJustif = (task.justificationAttachmentIds?.length ?? 0) > 0;
+                                                                                if (!hasJustif) {
+                                                                                    alert('Justificatif obligatoire : liez au moins une pièce jointe avant de marquer comme Réalisé.');
+                                                                                    return;
+                                                                                }
+                                                                            }
+                                                                            const updates: Partial<Task> = { status: newStatus };
+                                                                            if (newStatus === 'Completed') {
+                                                                                updates.completedAt = new Date().toISOString();
+                                                                                updates.completedById = currentUser?.id;
+                                                                                updates.isFrozen = false;
+                                                                            }
+                                                                            handleUpdateTask(task.id, updates);
                                                                         }}
                                                                         className="rounded"
+                                                                        title={frozen && !canManageProject ? 'Tâche gelée : seul le manager peut clôturer' : ''}
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                                    <div className="flex items-center">
+                                                                    <div className="flex items-center gap-2">
                                                         <input
                                                             type="text"
                                                             value={task.text}
@@ -1149,18 +1352,69 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                             className="w-full min-w-64 text-sm border border-gray-300 rounded px-3 py-2"
                                                             placeholder="Nom de la tâche"
                                                         />
-                                                    </div>
+                                                                        {frozen && <span className="shrink-0 px-2 py-0.5 text-xs font-medium bg-amber-200 text-amber-900 rounded" title="Date/heure dépassée sans Réalisé">Gel</span>}
+                                                                        {task.status === 'Completed' && (!task.justificationAttachmentIds || task.justificationAttachmentIds.length === 0) && (
+                                                                            <span className="shrink-0 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded" title="Justificatif recommandé">Justificatif à fournir</span>
+                                                                        )}
+                                                                        {requireJustification && task.status !== 'Completed' && (
+                                                                            <span className="shrink-0 text-xs text-gray-500">Liez une pièce jointe avant de marquer Réalisé</span>
+                                                                        )}
+                                                                        {(task.justificationAttachmentIds?.length ?? 0) > 0 && (
+                                                                            <span className="shrink-0 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded">
+                                                                                <i className="fas fa-paperclip mr-1"></i>
+                                                                                {task.justificationAttachmentIds!.length} justificatif(s)
+                                                                            </span>
+                                                                        )}
+                                                                        {requireJustification && task.status !== 'Completed' && attachments.length > 0 && (
+                                                                            <select
+                                                                                className="text-xs border border-gray-300 rounded px-2 py-1"
+                                                                                value=""
+                                                                                onChange={(e) => {
+                                                                                    const aid = e.target.value;
+                                                                                    if (!aid) return;
+                                                                                    const ids = task.justificationAttachmentIds ?? [];
+                                                                                    if (!ids.includes(aid)) {
+                                                                                        handleUpdateTask(task.id, { justificationAttachmentIds: [...ids, aid] });
+                                                                                    }
+                                                                                    e.target.value = '';
+                                                                                }}
+                                                                                title="Lier une pièce jointe comme justificatif"
+                                                                            >
+                                                                                <option value="">— Lier justificatif —</option>
+                                                                                {attachments.filter(a => !(task.justificationAttachmentIds ?? []).includes(a.id)).map(a => (
+                                                                                    <option key={a.id} value={a.id}>{a.fileName}</option>
+                                                                                ))}
+                                                                            </select>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center space-x-2">
                                                                         <select
                                                                             value={task.status}
-                                                                            onChange={(e) => handleUpdateTask(task.id, { status: e.target.value })}
+                                                                            onChange={(e) => {
+                                                                                const newStatus = e.target.value as Task['status'];
+                                                                                if (newStatus === 'Completed' && requireJustification) {
+                                                                                    const hasJustif = (task.justificationAttachmentIds?.length ?? 0) > 0;
+                                                                                    if (!hasJustif) {
+                                                                                        alert('Justificatif obligatoire : liez au moins une pièce jointe avant de marquer comme Réalisé.');
+                                                                                        return;
+                                                                                    }
+                                                                                }
+                                                                                const updates: Partial<Task> = { status: newStatus };
+                                                                                if (newStatus === 'Completed') {
+                                                                                    updates.completedAt = new Date().toISOString();
+                                                                                    updates.completedById = currentUser?.id;
+                                                                                    updates.isFrozen = false;
+                                                                                }
+                                                                                handleUpdateTask(task.id, updates);
+                                                                            }}
+                                                                            disabled={task.status !== 'Completed' && !canSetCompleted}
                                                                             className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                         >
                                                                             <option value="To Do">À faire</option>
                                                                             <option value="In Progress">En cours</option>
-                                                                            <option value="Completed">Terminé</option>
+                                                                            <option value="Completed">Réalisé</option>
                                                                         </select>
                                                                     </div>
                                                                 </td>
@@ -1172,6 +1426,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                             onChange={(e) => handleUpdateTask(task.id, { dueDate: e.target.value })}
                                                                             className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                         />
+                                                                        {task.scheduledDate && <span className="text-xs text-gray-500" title={`Prévu: ${task.scheduledDate} ${task.scheduledTime || ''}`}><i className="fas fa-clock"></i></span>}
                                                                         {isOverdue && <span className="ml-2 text-xs text-red-600">En retard</span>}
                                                                     </div>
                                                                 </td>
@@ -1857,6 +2112,170 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                 showCreator={true}
                                             />
                                         </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'objectives' && (
+                                    <div className="space-y-6">
+                                        <ObjectivesBlock
+                                            objectives={objectives}
+                                            entityType="project"
+                                            entityId={String(currentProject.id)}
+                                            setView={setView}
+                                            maxItems={10}
+                                        />
+                                    </div>
+                                )}
+
+                                {activeTab === 'attachments' && (
+                                    <div className="space-y-6">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-lg font-semibold text-gray-900">Pièces jointes</h3>
+                                            <label className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg cursor-pointer text-sm font-medium disabled:opacity-50">
+                                                <i className="fas fa-upload"></i>
+                                                {uploadingAttachment ? 'Envoi…' : 'Ajouter un fichier'}
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    onChange={handleUploadAttachment}
+                                                    disabled={uploadingAttachment}
+                                                />
+                                            </label>
+                                        </div>
+                                        {attachmentsLoading ? (
+                                            <p className="text-gray-500">Chargement…</p>
+                                        ) : attachments.length === 0 ? (
+                                            <p className="text-gray-500">Aucune pièce jointe. Utilisez « Ajouter un fichier » pour en déposer.</p>
+                                        ) : (
+                                            <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+                                                {attachments.map((a) => (
+                                                    <li key={a.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <i className="fas fa-file text-amber-600"></i>
+                                                            <div className="min-w-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDownloadAttachment(a)}
+                                                                    className="text-sm font-medium text-emerald-600 hover:underline truncate block text-left"
+                                                                >
+                                                                    {a.fileName}
+                                                                </button>
+                                                                <span className="text-xs text-gray-500">
+                                                                    {(a.fileSize / 1024).toFixed(1)} Ko · {new Date(a.createdAt).toLocaleDateString('fr-FR')}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        {canManageProject && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteAttachment(a.id)}
+                                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                                title="Supprimer"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Onglet Budget (Phase 2) : prévu vs réel */}
+                                {activeTab === 'budget' && (
+                                    <div className="space-y-6">
+                                        <h3 className="text-lg font-semibold text-gray-900">Budget du projet</h3>
+                                        <p className="text-sm text-gray-500">Budget prévisionnel et lignes par poste de dépense ; suivi prévu vs réel.</p>
+                                        <div className="flex flex-wrap items-center gap-4 mb-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Budget prévisionnel total</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step={1}
+                                                        value={currentProject.budgetPlanned ?? ''}
+                                                        onChange={(e) => handleUpdateBudget({ budgetPlanned: e.target.value === '' ? undefined : Number(e.target.value) })}
+                                                        className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                                    />
+                                                    <select
+                                                        value={currentProject.budgetCurrency || 'XOF'}
+                                                        onChange={(e) => handleUpdateBudget({ budgetCurrency: e.target.value as any })}
+                                                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                                    >
+                                                        {SUPPORTED_CURRENCIES.map((c) => (
+                                                            <option key={c} value={c}>{c}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleAddBudgetLine}
+                                                className="mt-6 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700"
+                                            >
+                                                <i className="fas fa-plus mr-2"></i>Ligne budgétaire
+                                            </button>
+                                        </div>
+                                        {(currentProject.budgetLines || []).length === 0 ? (
+                                            <p className="text-gray-500 text-sm">Aucune ligne. Cliquez sur « Ligne budgétaire » pour ajouter un poste de dépense.</p>
+                                        ) : (
+                                            <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Poste</th>
+                                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Prévu</th>
+                                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Réel</th>
+                                                            <th className="px-4 py-2 w-10"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {(currentProject.budgetLines || []).map((line) => (
+                                                            <tr key={line.id}>
+                                                                <td className="px-4 py-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={line.label}
+                                                                        onChange={(e) => handleUpdateBudgetLine(line.id, { label: e.target.value })}
+                                                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                                                        placeholder="Libellé"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-2 text-right">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        value={line.plannedAmount}
+                                                                        onChange={(e) => handleUpdateBudgetLine(line.id, { plannedAmount: Number(e.target.value) })}
+                                                                        className="w-28 px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-2 text-right">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        value={line.realAmount ?? ''}
+                                                                        onChange={(e) => handleUpdateBudgetLine(line.id, { realAmount: e.target.value === '' ? undefined : Number(e.target.value) })}
+                                                                        className="w-28 px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-2">
+                                                                    <button type="button" onClick={() => handleRemoveBudgetLine(line.id)} className="text-red-600 hover:text-red-800 p-1" title="Supprimer"><i className="fas fa-trash"></i></button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                        {(currentProject.budgetLines || []).length > 0 && (
+                                            <p className="text-xs text-gray-500">
+                                                Total prévu : {(currentProject.budgetLines || []).reduce((s, l) => s + (l.plannedAmount || 0), 0).toLocaleString()} {currentProject.budgetCurrency || 'XOF'} · 
+                                                Total réel : {(currentProject.budgetLines || []).reduce((s, l) => s + (l.realAmount || 0), 0).toLocaleString()} {currentProject.budgetCurrency || 'XOF'}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>

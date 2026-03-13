@@ -1,0 +1,302 @@
+import { supabase } from './supabaseService';
+import { Department, UserDepartment, ModuleName } from '../types';
+
+function mapRowToDepartment(row: any): Department {
+  const slugs = row.module_slugs;
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    name: row.name,
+    slug: row.slug,
+    moduleSlugs: Array.isArray(slugs) ? (slugs as ModuleName[]) : [],
+    sequence: row.sequence ?? 0,
+    isActive: row.is_active ?? true,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapRowToUserDepartment(row: any): UserDepartment {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    departmentId: row.department_id,
+    roleInDepartment: row.role_in_department,
+    createdAt: row.created_at
+  };
+}
+
+export class DepartmentService {
+  /**
+   * Liste des départements d'une organisation
+   */
+  static async getDepartmentsByOrganizationId(organizationId: string): Promise<Department[]> {
+    try {
+      const { data, error } = await supabase
+        .from('departments')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('sequence', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('❌ Erreur getDepartmentsByOrganizationId:', error);
+        return [];
+      }
+      return (data || []).map(mapRowToDepartment);
+    } catch (error) {
+      console.error('❌ Erreur getDepartmentsByOrganizationId:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Départements de l'utilisateur connecté (via user_departments)
+   * userId = auth user id (profiles.user_id)
+   */
+  static async getUserDepartments(userId: string): Promise<Department[]> {
+    try {
+      const { data: links, error: linkError } = await supabase
+        .from('user_departments')
+        .select('department_id')
+        .eq('user_id', userId);
+
+      if (linkError || !links?.length) {
+        return [];
+      }
+
+      const ids = links.map((l) => l.department_id);
+      const { data: depts, error } = await supabase
+        .from('departments')
+        .select('*')
+        .in('id', ids)
+        .eq('is_active', true)
+        .order('sequence', { ascending: true });
+
+      if (error) {
+        console.error('❌ Erreur getUserDepartments (fetch departments):', error);
+        return [];
+      }
+      return (depts || []).map(mapRowToDepartment);
+    } catch (error) {
+      console.error('❌ Erreur getUserDepartments:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Union des module_slugs des départements d'un utilisateur (pour calcul des droits)
+   */
+  static async getAllowedModuleSlugsForUser(userId: string): Promise<ModuleName[]> {
+    const departments = await this.getUserDepartments(userId);
+    const set = new Set<ModuleName>();
+    departments.forEach((d) => d.moduleSlugs.forEach((m) => set.add(m)));
+    return Array.from(set);
+  }
+
+  /**
+   * Liaisons user_departments pour un utilisateur (liste des départements assignés)
+   */
+  static async getUserDepartmentLinks(userId: string): Promise<UserDepartment[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_departments')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ Erreur getUserDepartmentLinks:', error);
+        return [];
+      }
+      return (data || []).map(mapRowToUserDepartment);
+    } catch (error) {
+      console.error('❌ Erreur getUserDepartmentLinks:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Assigner un utilisateur à un département
+   */
+  static async assignUserToDepartment(userId: string, departmentId: string, roleInDepartment?: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('user_departments').upsert(
+        {
+          user_id: userId,
+          department_id: departmentId,
+          role_in_department: roleInDepartment ?? null
+        },
+        { onConflict: 'user_id,department_id' }
+      );
+      if (error) {
+        console.error('❌ Erreur assignUserToDepartment:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur assignUserToDepartment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Retirer un utilisateur d'un département
+   */
+  static async removeUserFromDepartment(userId: string, departmentId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('user_departments')
+        .delete()
+        .eq('user_id', userId)
+        .eq('department_id', departmentId);
+      if (error) {
+        console.error('❌ Erreur removeUserFromDepartment:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur removeUserFromDepartment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mettre à jour les départements assignés à un utilisateur (liste complète)
+   */
+  static async setUserDepartments(userId: string, departmentIds: string[]): Promise<boolean> {
+    try {
+      const existing = await this.getUserDepartmentLinks(userId);
+      const existingIds = new Set(existing.map((l) => l.departmentId));
+      const targetIds = new Set(departmentIds);
+
+      const toAdd = departmentIds.filter((id) => !existingIds.has(id));
+      const toRemove = existing.filter((l) => !targetIds.has(l.departmentId));
+
+      for (const id of toAdd) {
+        await this.assignUserToDepartment(userId, id);
+      }
+      for (const link of toRemove) {
+        await this.removeUserFromDepartment(userId, link.departmentId);
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur setUserDepartments:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Créer un département
+   */
+  static async createDepartment(
+    organizationId: string,
+    payload: { name: string; slug: string; moduleSlugs?: ModuleName[]; sequence?: number }
+  ): Promise<Department | null> {
+    try {
+      const { data, error } = await supabase
+        .from('departments')
+        .insert({
+          organization_id: organizationId,
+          name: payload.name,
+          slug: payload.slug.toLowerCase().trim(),
+          module_slugs: payload.moduleSlugs ?? [],
+          sequence: payload.sequence ?? 0,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur createDepartment:', error);
+        throw error;
+      }
+      return mapRowToDepartment(data);
+    } catch (error) {
+      console.error('❌ Erreur createDepartment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Mettre à jour un département
+   */
+  static async updateDepartment(
+    id: string,
+    payload: Partial<{ name: string; slug: string; moduleSlugs: ModuleName[]; sequence: number; isActive: boolean }>
+  ): Promise<Department | null> {
+    try {
+      const row: any = {};
+      if (payload.name !== undefined) row.name = payload.name;
+      if (payload.slug !== undefined) row.slug = payload.slug.toLowerCase().trim();
+      if (payload.moduleSlugs !== undefined) row.module_slugs = payload.moduleSlugs;
+      if (payload.sequence !== undefined) row.sequence = payload.sequence;
+      if (payload.isActive !== undefined) row.is_active = payload.isActive;
+
+      const { data, error } = await supabase
+        .from('departments')
+        .update(row)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur updateDepartment:', error);
+        throw error;
+      }
+      return data ? mapRowToDepartment(data) : null;
+    } catch (error) {
+      console.error('❌ Erreur updateDepartment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Supprimer un département (cascade sur user_departments)
+   */
+  static async deleteDepartment(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('departments').delete().eq('id', id);
+      if (error) {
+        console.error('❌ Erreur deleteDepartment:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur deleteDepartment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Récupérer un département par id
+   */
+  static async getDepartmentById(id: string): Promise<Department | null> {
+    try {
+      const { data, error } = await supabase.from('departments').select('*').eq('id', id).maybeSingle();
+      if (error || !data) return null;
+      return mapRowToDepartment(data);
+    } catch (error) {
+      console.error('❌ Erreur getDepartmentById:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Liste des user_id (auth) appartenant à un département (pour attribution en masse des droits)
+   */
+  static async getUserIdsInDepartment(departmentId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_departments')
+        .select('user_id')
+        .eq('department_id', departmentId);
+      if (error) return [];
+      return (data || []).map((r) => r.user_id);
+    } catch (error) {
+      console.error('❌ Erreur getUserIdsInDepartment:', error);
+      return [];
+    }
+  }
+}
+
+export default DepartmentService;

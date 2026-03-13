@@ -2,41 +2,41 @@
 
 ## Vue d'ensemble rapide
 
-| Rôle | Workspace (7) | Development (2) | Tools (2) | CRM (1) | Management Panel (6) | Settings (1) | TOTAL |
-|------|---------------|-----------------|-----------|---------|---------------------|--------------|-------|
+| Rôle | Workspace (7) | Development (2) | CRM (1) | Management Panel (6) | Settings (1) | TOTAL |
+|------|---------------|-----------------|---------|---------------------|--------------|-------|
 | **🔵 Rôles de Gestion** |
-| Administrator | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 19 |
-| Manager | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 19 |
-| Supervisor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 19 |
-| Intern | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 19 |
+| Administrator | ✅ | ✅ | ✅ | ✅ | ✅ | 17 |
+| Manager | ✅ | ✅ | ✅ | ✅ | ✅ | 17 |
+| Supervisor | ✅ | ✅ | ✅ | ✅ | ✅ | 17 |
+| Intern | ✅ | ✅ | ✅ | ✅ | ✅ | 17 |
 | **🟢 Formation** |
-| Trainer | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Professor | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Facilitator | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Coach | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Mentor | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| Trainer | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Professor | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Facilitator | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Coach | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Mentor | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 | **🟡 Académiques** |
-| Student | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Learner | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Alumni | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| Student | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Learner | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Alumni | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 | **🟠 Professionnels** |
-| Entrepreneur | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Employer | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Implementer | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Funder | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| Entrepreneur | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Employer | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Implementer | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Funder | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 | **🟣 Créatifs** |
-| Artist | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Producer | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Editor | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Publisher | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| Artist | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Producer | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Editor | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Publisher | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 | **🔴 Techno** |
-| AI Coach | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| AI Developer | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| AI Analyst | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| AI Coach | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| AI Developer | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| AI Analyst | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 | **🟤 Partenaires** |
-| Partner | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Supplier | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
-| Service Provider | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | 13 |
+| Partner | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Supplier | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
+| Service Provider | ✅ | ✅ | ✅ | ❌ | ✅ | 11 |
 
 ---
 
@@ -55,23 +55,21 @@
 8. Courses
 9. Jobs
 
-### Tools (2 modules)
-10. AI Coach
-11. Gen AI Lab
-
 ### CRM & Sales (1 module)
-12. CRM & Sales
+10. CRM & Sales
 
 ### Management Panel (6 modules) - Réservé aux rôles de gestion
-13. Gestion des Cours
-14. Gestion des Jobs
-15. Demandes de Congés
-16. Gestion des Utilisateurs
-17. Analytics
-18. Talent Analytics
+11. Gestion des Cours
+12. Gestion des Jobs
+13. Demandes de Congés
+14. Gestion des Utilisateurs
+15. Analytics
+16. Talent Analytics
 
 ### Settings (1 module)
-19. Settings
+17. Settings
+
+*Modules retirés (Phase 1 ERP 360°) : AI Coach, Gen AI Lab.*
 
 ---
 

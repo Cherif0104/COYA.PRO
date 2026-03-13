@@ -24,30 +24,48 @@ const clone = (state: PermissionState): PermissionState => ({ ...state });
 const STANDARD_ALLOW = createState(true, true, true, true);
 const DISABLED = createState(false, false, false, false);
 
+/** Modules métier : accès possible selon département / droits */
 const STANDARD_MODULES: ModuleName[] = [
   'dashboard',
   'projects',
   'goals_okrs',
   'time_tracking',
+  'planning',
   'leave_management',
   'finance',
+  'comptabilite',
   'knowledge_base',
   'courses',
   'jobs',
-  'ai_coach',
-  'gen_ai_lab',
   'crm_sales',
+  'partenariat',
+  'analytics',
+  'talent_analytics',
+  'qualite',
+  'rh',
+  'trinite',
+  'programme',
+  'juridique',
+  'studio',
+  'tech',
+  'collecte',
+  'conseil',
   'settings',
+  'logistique',
+  'parc_auto',
+  'ticket_it',
+  'alerte_anonyme',
+  'messagerie',
 ];
 
+/** Administration : paramétrage / droits (Paramètres) ; désactivé par défaut */
 export const MANAGEMENT_MODULES: ModuleName[] = [
   'organization_management',
+  'department_management',
   'course_management',
   'job_management',
   'leave_management_admin',
   'user_management',
-  'analytics',
-  'talent_analytics',
 ];
 
 const applyState = (

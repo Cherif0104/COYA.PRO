@@ -1,9 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { Contact, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import { draftSalesEmail } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
+import ExtensibleSelect from './common/ExtensibleSelect';
+import OrganizationService from '../services/organizationService';
+import * as referentialsService from '../services/referentialsService';
 
 const statusStyles = {
     'Lead': 'bg-blue-100 text-blue-800',
@@ -19,6 +22,8 @@ const ContactFormModal: React.FC<{
 }> = ({ contact, onClose, onSave }) => {
     const { t } = useLocalization();
     const isEditMode = contact !== null;
+    const [organizationId, setOrganizationId] = useState<string | null>(null);
+    const [categoryId, setCategoryId] = useState(contact?.categoryId ?? '');
     const [formData, setFormData] = useState({
         name: contact?.name || '',
         company: contact?.company || '',
@@ -31,6 +36,10 @@ const ContactFormModal: React.FC<{
         personalEmail: contact?.personalEmail || ''
     });
 
+    useEffect(() => {
+        OrganizationService.getCurrentUserOrganizationId().then(setOrganizationId).catch(() => setOrganizationId(null));
+    }, []);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData(prev => ({...prev, [e.target.name]: e.target.value }));
     };
@@ -39,7 +48,8 @@ const ContactFormModal: React.FC<{
         e.preventDefault();
         const dataToSave = {
             ...(isEditMode && { id: contact.id }),
-            ...formData
+            ...formData,
+            categoryId: categoryId || undefined
         };
         onSave(dataToSave as Contact);
     };
@@ -84,6 +94,16 @@ const ContactFormModal: React.FC<{
                             <label className="block text-sm font-medium text-gray-700">{t('whatsapp_number')}</label>
                             <input type="tel" name="whatsappNumber" value={formData.whatsappNumber} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
                         </div>
+                        <ExtensibleSelect
+                            entityType="contact_category"
+                            value={categoryId}
+                            onChange={(id) => setCategoryId(id)}
+                            organizationId={organizationId}
+                            canCreate={true}
+                            canEdit={true}
+                            label={t('contact_category') || 'Catégorie'}
+                            placeholder={t('choose_category') || '— Choisir —'}
+                        />
                         <div>
                             <label className="block text-sm font-medium text-gray-700">{t('contact_status')}</label>
                             <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
@@ -148,6 +168,8 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
     const [view, setView] = useState<'list' | 'pipeline'>('list');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [categoryFilter, setCategoryFilter] = useState<string>('');
+    const [categoryOptions, setCategoryOptions] = useState<referentialsService.ReferentialValue[]>([]);
     
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
     const [emailBody, setEmailBody] = useState('');
@@ -184,6 +206,17 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
     
     const pipelineStatuses: Contact['status'][] = ['Lead', 'Contacted', 'Prospect', 'Customer'];
 
+    useEffect(() => {
+        let cancelled = false;
+        OrganizationService.getCurrentUserOrganizationId().then((orgId) => {
+            if (cancelled || !orgId) return;
+            return referentialsService.listValues('contact_category', orgId);
+        }).then((list) => {
+            if (list && !cancelled) setCategoryOptions(list);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
     // Métriques calculées
     const metrics = useMemo(() => {
         const totalContacts = contacts.length;
@@ -216,9 +249,11 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
         if (statusFilter !== 'all') {
             filtered = filtered.filter(contact => contact.status === statusFilter);
         }
-        
+        if (categoryFilter) {
+            filtered = filtered.filter(contact => contact.categoryId === categoryFilter);
+        }
         return filtered;
-    }, [contacts, searchTerm, statusFilter]);
+    }, [contacts, searchTerm, statusFilter, categoryFilter]);
 
     const handleDraftEmail = async (contact: Contact) => {
         if (!user) return;
@@ -478,6 +513,16 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                 <option value="Contacted">Contacté</option>
                                 <option value="Prospect">Prospect</option>
                                 <option value="Customer">Client</option>
+                            </select>
+                            <select
+                                value={categoryFilter}
+                                onChange={(e) => setCategoryFilter(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            >
+                                <option value="">Toutes catégories</option>
+                                {categoryOptions.map((opt) => (
+                                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                ))}
                             </select>
                         </div>
                 </div>

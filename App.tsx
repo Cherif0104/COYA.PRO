@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from './contexts/AuthContextSupabase';
 import { authGuard } from './middleware/authGuard';
 import { mockProjects, mockGoals } from './constants/data';
@@ -12,16 +12,17 @@ import AuditLogService from './services/auditLogService';
 import { Notification } from './services/notificationService';
 
 import Login from './components/Login';
-import Signup from './components/Signup';
+// Inscription désactivée : seuls les super admins créent les utilisateurs et organisations depuis la plateforme.
+import StatusSelectorModal from './components/StatusSelectorModal';
+import { getSkipStatusSelector } from './components/StatusSelector';
 import Header from './components/Header';
+import { PresenceProvider } from './contexts/PresenceContext';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Courses from './components/Courses';
 import Jobs from './components/Jobs';
-import AICoach from './components/AICoach';
 import Settings from './components/Settings';
 import Projects from './components/Projects';
-import GenAILab from './components/GenAILab';
 import CourseDetail from './components/CourseDetail';
 import CourseManagement from './components/CourseManagement';
 import JobManagement from './components/JobManagement';
@@ -41,9 +42,14 @@ import RealtimeService from './services/realtimeService';
 import OrganizationService from './services/organizationService';
 import { supabase } from './services/supabaseService';
 import OrganizationManagement from './components/OrganizationManagement';
+import DepartmentManagement from './components/DepartmentManagement';
 import { useModulePermissions } from './hooks/useModulePermissions';
 import NotificationsPage from './components/NotificationsPage';
 import ActivityLogsPage from './components/ActivityLogsPage';
+import RhModule from './components/RhModule';
+import Planning from './components/Planning';
+import LoadingOverlay from './components/common/LoadingOverlay';
+import { getModuleViewComponent } from './viewRegistry';
 
 
 const App: React.FC = () => {
@@ -79,7 +85,7 @@ const App: React.FC = () => {
   // Récupérer la vue précédente depuis localStorage (pour éviter le flash au refresh)
   const savedView = typeof window !== 'undefined' ? localStorage.getItem('lastView') : null;
   // Valider que la vue sauvegardée est valide (pas login/signup)
-  const validInitialView = savedView && savedView !== 'login' && savedView !== 'signup' && savedView !== 'no_access' ? savedView : 'dashboard';
+  const validInitialView = savedView && savedView !== 'login' && savedView !== 'signup' && savedView !== 'no_access' && savedView !== 'status_selector' ? savedView : 'dashboard';
   const [currentView, setCurrentView] = useState(validInitialView);
   
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -113,6 +119,17 @@ const App: React.FC = () => {
   const [showNewPasswordModal, setShowNewPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordMsg, setNewPasswordMsg] = useState<string | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const mainScrollRef = useRef<HTMLElement>(null);
+
+  const handleMainScroll = useCallback(() => {
+    const el = mainScrollRef.current;
+    setShowBackToTop(!!el && el.scrollTop > 400);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const isPartnerFacilitator = user?.role === 'partner_facilitator';
 
@@ -1005,29 +1022,26 @@ const App: React.FC = () => {
 
   }, [invoices, expenses, reminderDays, t]);
 
-  // Afficher Login uniquement si l'app est initialisée ET l'utilisateur n'est pas connecté
-  // Cela évite de montrer Login pendant le chargement de la session
-  if (!isInitialized) {
-    return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>;
-  }
-
-  // Attendre que l'authentification soit chargée avant de décider quoi afficher
-  if (authLoading) {
-    return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>;
+  // Overlay de chargement unique : initialisation et vérification auth
+  if (!isInitialized || (authLoading && !user)) {
+    return (
+      <LoadingOverlay
+        message={t('loading')}
+        variant="gradient"
+      />
+    );
   }
 
   if (!user) {
-    if (authView === 'signup') {
-        return <Signup onSwitchToLogin={() => setAuthView('login')} onSignupSuccess={() => {
-          logger.debug('state', 'onSignupSuccess called - waiting for user state update');
-          logger.logNavigation('signup', 'waiting for auth', 'Signup success callback');
-          // Attendre que le user soit mis à jour automatiquement - ne pas rediriger ici
-        }} />;
-    }
-    return <Login onSwitchToSignup={() => setAuthView('signup')} onLoginSuccess={() => {
-      logger.debug('state', 'onLoginSuccess called - redirecting to dashboard');
-      logger.logNavigation('login', 'dashboard', 'Login success callback');
-      handleSetView('dashboard');
+    return <Login onLoginSuccess={() => {
+      logger.debug('state', 'onLoginSuccess called - status selector or dashboard');
+      if (getSkipStatusSelector()) {
+        logger.logNavigation('login', 'dashboard', 'Login success (skip status)');
+        handleSetView('dashboard');
+      } else {
+        logger.logNavigation('login', 'status_selector', 'Login success');
+        handleSetView('status_selector');
+      }
     }} />;
   }
 
@@ -1092,6 +1106,17 @@ const App: React.FC = () => {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // Overlay de chargement : données en cours de chargement après login
+  if (user && !isDataLoaded) {
+    return (
+      <LoadingOverlay
+        message={t('loading')}
+        progress={loadingProgress.total > 0 ? { current: loadingProgress.current, total: loadingProgress.total } : undefined}
+        variant="gradient"
+      />
     );
   }
 
@@ -1868,6 +1893,11 @@ const App: React.FC = () => {
         hasProfileChanges = true;
         console.log('📋 Avatar modifié:', { old: currentUser.avatar, new: updatedUser.avatar });
       }
+      if (currentUser.posteId !== updatedUser.posteId) {
+        profileUpdates.poste_id = updatedUser.posteId || null;
+        hasProfileChanges = true;
+        console.log('📋 Poste modifié:', { old: currentUser.posteId, new: updatedUser.posteId });
+      }
       
       if (hasProfileChanges) {
         console.log('🔄 Profil modifié, mise à jour dans Supabase:', { userId: updatedUser.id, updates: profileUpdates });
@@ -2575,28 +2605,35 @@ const App: React.FC = () => {
   // handleSetView est déjà défini en haut du composant
 
   const renderView = () => {
+    const ModuleComponent = getModuleViewComponent(currentView);
+    if (ModuleComponent) return <ModuleComponent />;
+
     switch (currentView) {
+      case 'status_selector':
+        return (
+          <>
+            <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses} objectives={objectives} canAccessModule={canAccessModule} isDataLoaded={isDataLoaded} />
+            <StatusSelectorModal onConfirm={() => handleSetView('dashboard')} />
+          </>
+        );
       case 'dashboard':
-        return <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses} isDataLoaded={isDataLoaded} />;
+        return <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses} objectives={objectives} canAccessModule={canAccessModule} isDataLoaded={isDataLoaded} />;
       case 'time_tracking':
-        return <TimeTracking 
-                    timeLogs={timeLogs} 
-                    onAddTimeLog={handleAddTimeLog} 
-                    onDeleteTimeLog={handleDeleteTimeLog}
-                    projects={projects} 
-                    courses={courses}
-                    meetings={meetings}
-                    users={users}
-                    onAddMeeting={handleAddMeeting}
-                    onUpdateMeeting={handleUpdateMeeting}
-                    onDeleteMeeting={handleDeleteMeeting}
-                    defaultTab={
-                      pendingNotification?.entityType === 'time_tracking'
-                        ? (pendingNotification.metadata?.tab as 'logs' | 'calendar' | 'analytics' | undefined)
-                        : undefined
-                    }
-                    onNotificationHandled={handleNotificationHandled}
-                />;
+        return (
+          <TimeTracking
+            timeLogs={timeLogs}
+            meetings={meetings}
+            users={users}
+            onAddTimeLog={handleAddTimeLog}
+            onDeleteTimeLog={handleDeleteTimeLog}
+            onAddMeeting={handleAddMeeting}
+            onUpdateMeeting={handleUpdateMeeting}
+            onDeleteMeeting={handleDeleteMeeting}
+            projects={projects}
+            courses={courses}
+            onNotificationHandled={handleNotificationHandled}
+          />
+        );
       case 'projects':
         return <Projects 
                     projects={projects} 
@@ -2606,6 +2643,8 @@ const App: React.FC = () => {
                     onAddProject={handleAddProject}
                     onDeleteProject={handleDeleteProject}
                     onAddTimeLog={handleAddTimeLog}
+                    objectives={objectives}
+                    setView={handleSetView}
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                     isDataLoaded={isDataLoaded}
@@ -2617,23 +2656,7 @@ const App: React.FC = () => {
                     onNotificationHandled={handleNotificationHandled}
                 />;
       case 'goals_okrs':
-        return <Goals 
-                    projects={projects} 
-                    objectives={objectives} 
-                    setObjectives={handleSetObjectives} 
-                    onAddObjective={handleAddObjective}
-                    onUpdateObjective={handleUpdateObjective}
-                    onDeleteObjective={handleDeleteObjective}
-                    isLoading={isLoading}
-                    loadingOperation={loadingOperation}
-                    isDataLoaded={isDataLoaded}
-                    defaultSection={
-                      pendingNotification?.entityType === 'goal'
-                        ? (pendingNotification.metadata?.section as 'overview' | 'analytics' | undefined)
-                        : undefined
-                    }
-                    onNotificationHandled={handleNotificationHandled}
-                />;
+        return <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses} objectives={objectives} canAccessModule={canAccessModule} isDataLoaded={isDataLoaded} />;
       case 'courses':
         return <Courses 
           courses={courses}
@@ -2690,6 +2713,8 @@ const App: React.FC = () => {
         return <UserManagement users={users} onUpdateUser={handleUpdateUser} onToggleActive={handleToggleActive} onDeleteUser={handleDeleteUser} />;
       case 'organization_management':
         return <OrganizationManagement />;
+      case 'department_management':
+        return <DepartmentManagement />;
       case 'crm_sales':
         return <CRM 
                     contacts={contacts} 
@@ -2752,18 +2777,52 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                 />;
-      case 'ai_coach':
-        return <AICoach />;
-      case 'gen_ai_lab':
-        return <GenAILab />;
       case 'analytics':
         return <Analytics setView={handleSetView} users={users} projects={projects} courses={courses} jobs={jobs} />;
       case 'talent_analytics':
         return <TalentAnalytics setView={handleSetView} users={users} jobs={jobs} />;
+      case 'rh':
+        return (
+          <RhModule
+            leaveRequests={leaveRequests}
+            users={users}
+            jobs={jobs}
+            setView={handleSetView}
+            onAddLeaveRequest={handleAddLeaveRequest}
+            onUpdateLeaveRequest={handleUpdateLeaveRequest}
+            onUpdateLeaveDates={handleUpdateLeaveDates}
+            onDeleteLeaveRequest={handleDeleteLeaveRequest}
+            isLoading={isLoading}
+            loadingOperation={loadingOperation}
+          />
+        );
+      case 'planning':
+        return <Planning meetings={meetings} setView={handleSetView} />;
       case 'settings':
-        return <Settings reminderDays={reminderDays} onSetReminderDays={setReminderDays} />;
+        return (
+          <Settings
+            reminderDays={reminderDays}
+            onSetReminderDays={setReminderDays}
+            users={users}
+            setView={handleSetView}
+            leaveRequests={leaveRequests}
+            courses={courses}
+            jobs={jobs}
+            onUpdateLeaveRequest={handleUpdateLeaveRequest}
+            onUpdateLeaveDates={handleUpdateLeaveDates}
+            onDeleteLeaveRequest={handleDeleteLeaveRequest}
+            onAddCourse={handleAddCourse}
+            onUpdateCourse={handleUpdateCourse}
+            onDeleteCourse={handleDeleteCourse}
+            onAddJob={handleAddJob}
+            onUpdateJob={handleUpdateJob}
+            onDeleteJob={handleDeleteJob}
+            isLoading={isLoading}
+            loadingOperation={loadingOperation}
+          />
+        );
       default:
-        return <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses}/>;
+        return <Dashboard setView={handleSetView} projects={projects} courses={courses} jobs={jobs} timeLogs={timeLogs} leaveRequests={leaveRequests} invoices={invoices} expenses={expenses} objectives={objectives} canAccessModule={canAccessModule} />;
     }
   };
   
@@ -2772,7 +2831,8 @@ const App: React.FC = () => {
   };
   
   return (
-    <div className="flex h-screen bg-gray-100">
+    <PresenceProvider>
+    <div className="flex h-screen overflow-hidden bg-coya-bg">
       <Sidebar
         currentView={currentView}
         setView={handleSetView}
@@ -2788,83 +2848,56 @@ const App: React.FC = () => {
             onShowAllNotifications={() => handleSetView('notifications_center')}
             onShowActivityLogs={() => handleSetView('activity_logs')}
         />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
-          <div className="container mx-auto px-6 py-8">
-            {!isDataLoaded ? (
-              <div className="fixed inset-0 bg-white bg-opacity-98 flex items-center justify-center z-[9999] backdrop-blur-sm">
-                <div className="text-center max-w-md px-6">
-                  <div className="animate-spin rounded-full h-24 w-24 border-4 border-emerald-200 border-t-emerald-600 mx-auto mb-6 shadow-lg"></div>
-                  <h2 className="text-3xl font-bold text-gray-800 mb-3">
-                    Chargement des données...
-                  </h2>
-                  <p className="text-gray-600 text-lg mb-4">
-                    Veuillez patienter pendant que nous chargeons vos informations
-                  </p>
-                  
-                  {/* Compteur de progression */}
-                  <div className="mb-4">
-                    <p className="text-sm font-semibold text-emerald-600 mb-2">
-                      {loadingProgress.current} / {loadingProgress.total} modules chargés
-                    </p>
-                    {loadingProgress.loaded.length > 0 && (
-                      <p className="text-xs text-gray-500 italic">
-                        {loadingProgress.loaded[loadingProgress.loaded.length - 1]}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {/* Points animés */}
-                  <div className="flex items-center justify-center space-x-2 mb-4">
-                    <div className="w-3 h-3 bg-emerald-600 rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
-                    <div className="w-3 h-3 bg-emerald-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    <div className="w-3 h-3 bg-emerald-600 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
-                  </div>
-                  
-                  {/* Barre de progression dynamique */}
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-2">
-                    <div 
-                      className="bg-emerald-600 h-2 rounded-full transition-all duration-300 ease-out" 
-                      style={{
-                        width: `${(loadingProgress.current / loadingProgress.total) * 100}%`,
-                        minWidth: loadingProgress.current > 0 ? '2%' : '0%'
-                      }}
-                    ></div>
-                  </div>
-                  
-                  {/* Pourcentage */}
-                  <p className="text-xs text-gray-500">
-                    {Math.round((loadingProgress.current / loadingProgress.total) * 100)}%
-                  </p>
-                </div>
-              </div>
-            ) : (
-              renderView()
-            )}
+        <main
+          ref={mainScrollRef}
+          onScroll={handleMainScroll}
+          className="flex-1 overflow-x-hidden overflow-y-auto bg-coya-bg"
+        >
+          <div className="container mx-auto px-6 py-8 relative min-h-full">
+            {renderView()}
           </div>
         </main>
       </div>
-       {isSidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black opacity-50 z-40 lg:hidden"></div>}
-       <AIAgent currentView={currentView} />
-      {/* Modal nouveau mot de passe (flux recovery Supabase) */}
+      {isSidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black opacity-50 z-40 lg:hidden"></div>}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-30 w-12 h-12 rounded-full bg-coya-primary text-white shadow-lg hover:bg-coya-primary-light focus:outline-none focus:ring-2 focus:ring-coya-primary focus:ring-offset-2 flex items-center justify-center"
+          aria-label="Retour en haut"
+        >
+          <i className="fas fa-arrow-up" />
+        </button>
+      )}
+      <AIAgent currentView={currentView} />
+      {/* Modal nouveau mot de passe — style COYA */}
       {showNewPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-coya"
+          style={{
+            background: 'linear-gradient(180deg, var(--coya-primary-dark) 0%, var(--coya-primary) 22%, var(--coya-bg-gradient-start) 58%, var(--coya-bg-gradient-end) 100%)',
+          }}
+        >
+          <div className="relative w-full max-w-md bg-coya-card rounded-2xl shadow-coya border border-coya-border overflow-hidden" style={{ boxShadow: 'var(--coya-shadow-lg)' }}>
             <form onSubmit={handleUpdatePassword}>
-              <div className="p-6 border-b"><h2 className="text-xl font-bold text-gray-900">Définir un nouveau mot de passe</h2></div>
-              <div className="p-6 space-y-3">
-                {newPasswordMsg && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-3">{newPasswordMsg}</div>}
-                <label className="block text-sm font-medium text-gray-700">Nouveau mot de passe</label>
-                <input type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500" required/>
+              <div className="p-5 border-b border-coya-border">
+                <h2 className="text-lg font-bold text-coya-text">Définir un nouveau mot de passe</h2>
               </div>
-              <div className="p-4 bg-gray-50 border-t flex justify-end gap-2">
-                <button type="button" onClick={()=>setShowNewPasswordModal(false)} className="px-4 py-2 bg-gray-200 rounded-lg font-semibold">Fermer</button>
-                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700">Mettre à jour</button>
+              <div className="p-5 space-y-3">
+                {newPasswordMsg && <div className="text-sm text-coya-primary bg-coya-primary/10 border border-coya-primary/30 rounded-xl p-3">{newPasswordMsg}</div>}
+                <label className="block text-sm font-medium text-coya-text">Nouveau mot de passe</label>
+                <input type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} className="mt-1 block w-full px-3 py-2.5 border border-coya-border rounded-xl bg-coya-card text-coya-text focus:ring-2 focus:ring-coya-primary focus:border-coya-primary" required/>
+              </div>
+              <div className="p-4 bg-coya-bg/50 border-t border-coya-border flex justify-end gap-2">
+                <button type="button" onClick={()=>setShowNewPasswordModal(false)} className="px-4 py-2 rounded-xl border border-coya-border text-coya-text font-medium hover:bg-coya-bg">Fermer</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-coya-primary text-white font-semibold hover:bg-coya-primary-light">Mettre à jour</button>
               </div>
             </form>
           </div>
         </div>
       )}
     </div>
+    </PresenceProvider>
   );
 };
 

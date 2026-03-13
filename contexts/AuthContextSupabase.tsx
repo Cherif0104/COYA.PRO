@@ -35,7 +35,9 @@ const buildUserFromProfile = (profile: any): User => {
     pendingRole,
     reviewComment: profile?.review_comment || null,
     reviewedAt: profile?.reviewed_at || null,
-    reviewedBy: profile?.reviewed_by || null
+    reviewedBy: profile?.reviewed_by || null,
+    posteId: profile?.poste_id ?? undefined,
+    posteName: profile?.poste_name ?? undefined,
   };
 };
 
@@ -137,11 +139,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             role: AuthService.mapStoredRoleToUi(profile.role),
             avatar_url: profile.avatar_url || '',
             phone_number: profile.phone_number || '',
+            organization_id: profile.organization_id || undefined,
             status: (profile.status as ProfileStatus) || 'active',
             pending_role: profile.pending_role || null,
             review_comment: profile.review_comment || null,
             reviewed_at: profile.reviewed_at || null,
-            reviewed_by: profile.reviewed_by || null
+            reviewed_by: profile.reviewed_by || null,
+            poste_id: profile.poste_id ?? undefined,
+            poste_name: profile.poste_name ?? undefined,
           };
           
           // Mettre à jour l'état de manière synchrone
@@ -329,11 +334,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateProfile = async (updates: Partial<AuthUser>) => {
     try {
-      if (!profile) {
+      if (!profile || !user) {
         return { success: false, error: 'Aucun profil trouvé' };
       }
-
-      const { error } = await AuthService.updateProfile(profile.id, updates);
+      const userId = (profile as any).user_id ?? user.id;
+      const { error } = await AuthService.updateProfile(userId, updates);
       
       if (error) {
         return { success: false, error };
@@ -348,6 +353,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ...user!,
         fullName: updatedProfile.full_name,
         avatar: updatedProfile.avatar_url || '',
+        posteId: updatedProfile.poste_id ?? undefined,
+        posteName: updatedProfile.poste_name ?? undefined,
         updatedAt: new Date().toISOString()
       };
       setUser(updatedUser);

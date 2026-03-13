@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { DataService } from '../services/dataService';
+import { DepartmentService } from '../services/departmentService';
 import { ModuleName, Role } from '../types';
 import {
   getDefaultPermissionsForRole,
@@ -8,6 +9,8 @@ import {
 } from '../utils/modulePermissionDefaults';
 
 type ModulePermissions = Record<ModuleName, PermissionState>;
+
+const NO_ACCESS: PermissionState = { canRead: false, canWrite: false, canDelete: false, canApprove: false };
 
 export const useModulePermissions = () => {
   const { user } = useAuth();
@@ -25,13 +28,10 @@ export const useModulePermissions = () => {
       // Charger d'abord les permissions par défaut
       let effective = getDefaultPermissionsForRole(role);
       // Puis surcharger avec les permissions Supabase si existantes
-      // Utiliser profileId si disponible, sinon user.id (fallback pour compatibilité)
       const userIdToUse = (user as any).profileId || user.id;
-      console.log('🔄 useModulePermissions - Loading permissions for userId:', userIdToUse, 'profileId:', (user as any).profileId);
       if (!isSuperAdmin) {
         const { data, error } = await DataService.getUserModulePermissions(String(userIdToUse));
         if (!error && Array.isArray(data) && data.length > 0) {
-          console.log('✅ useModulePermissions - Loaded', data.length, 'custom permissions from Supabase');
           data.forEach((row: any) => {
             const moduleName = row.module_name as ModuleName;
             effective[moduleName] = {
@@ -41,17 +41,31 @@ export const useModulePermissions = () => {
               canApprove: !!row.can_approve,
             };
           });
-        } else {
-          console.log('ℹ️ useModulePermissions - No custom permissions, using role defaults');
         }
       }
+      // Phase 2 : restreindre par départements (super admin hors règle)
+      // Plan : Super admin = tous les modules ; sans département = fallback rôle + user_module_permissions ; avec département = union des module_slugs puis granularité user_module_permissions
+      const authUserId = user.id;
+      const allowedSlugs = await DepartmentService.getAllowedModuleSlugsForUser(String(authUserId));
+      if (isSuperAdmin) {
+        // Super admin : pas de filtre par département, accès total conservé
+      } else if (allowedSlugs.length > 0) {
+        // Utilisateur avec au moins un département : restreindre aux modules autorisés sur ces départements
+        const allowedSet = new Set<ModuleName>(allowedSlugs);
+        (Object.keys(effective) as ModuleName[]).forEach((moduleName) => {
+          if (!allowedSet.has(moduleName)) {
+            effective[moduleName] = NO_ACCESS;
+          }
+        });
+      }
+      // Si allowedSlugs.length === 0 : fallback sur le comportement actuel (effective = défauts rôle + user_module_permissions déjà chargés)
       const normalizedPermissions = Object.entries(effective).reduce((acc, [moduleName, perms]) => {
         const canRead = !!perms.canRead;
         acc[moduleName as ModuleName] = {
           canRead,
-          canWrite: canRead,
-          canDelete: canRead,
-          canApprove: canRead,
+          canWrite: canRead ? perms.canWrite : false,
+          canDelete: canRead ? perms.canDelete : false,
+          canApprove: canRead ? perms.canApprove : false,
         };
         return acc;
       }, {} as Record<ModuleName, PermissionState>);

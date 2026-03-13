@@ -8,8 +8,12 @@ interface ConfirmationModalProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
   confirmButtonClass?: string;
   isLoading?: boolean;
+  variant?: 'danger' | 'primary';
+  children?: React.ReactNode;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -19,10 +23,17 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   onCancel,
   confirmText,
   cancelText,
-  confirmButtonClass = 'bg-red-600 hover:bg-red-700',
+  confirmLabel,
+  cancelLabel,
+  confirmButtonClass,
   isLoading = false,
+  variant = 'danger',
+  children,
 }) => {
   const { t } = useLocalization();
+  const effectiveConfirmClass = confirmButtonClass ?? (variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-coya-primary hover:opacity-90');
+  const effectiveConfirmText = confirmLabel ?? confirmText ?? t('confirm_delete');
+  const effectiveCancelText = cancelLabel ?? cancelText ?? t('cancel');
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-[70] p-4">
@@ -36,9 +47,10 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 <i className="fas fa-exclamation-triangle text-red-600"></i>
               )}
             </div>
-            <div className="ml-4 text-left">
+            <div className="ml-4 text-left flex-1">
               <h3 className="text-lg leading-6 font-medium text-gray-900">{title}</h3>
               <p className="text-sm text-gray-500 mt-2">{isLoading ? 'Suppression en cours...' : message}</p>
+              {children}
             </div>
           </div>
         </div>
@@ -46,10 +58,10 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className={`w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${confirmButtonClass} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${effectiveConfirmClass} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>}
-            {confirmText || t('confirm_delete')}
+            {effectiveConfirmText}
           </button>
           <button
             onClick={onCancel}
@@ -57,7 +69,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             type="button"
             className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {cancelText || t('cancel')}
+            {effectiveCancelText}
           </button>
         </div>
       </div>

@@ -5,8 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
-    host: true
+    port: 5174,
+    host: true,
+    strictPort: false
   },
   // SUPPRIMÉ : Configuration dangereuse qui exposait toutes les variables d'environnement
   // Les variables VITE_* sont automatiquement disponibles via import.meta.env

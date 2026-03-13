@@ -1,6 +1,6 @@
 import { supabase } from './supabaseService';
 import { ApiHelper } from './apiHelper';
-import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode } from '../types';
+import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee } from '../types';
 import OrganizationService from './organizationService';
 import { CurrencyService } from './currencyService';
 
@@ -691,9 +691,9 @@ export class DataService {
     }
   }
   static async getProjects() {
-    return await ApiHelper.get('projects', { 
-      select: '*', 
-      order: 'created_at.desc' 
+    return await ApiHelper.get('projects', {
+      select: '*',
+      order: 'created_at.desc'
     });
   }
 
@@ -797,7 +797,8 @@ export class DataService {
         created_by_id: currentUser?.id || null,
         created_by_name: creatorName,
         tasks: project.tasks || [],
-        risks: project.risks || []
+        risks: project.risks || [],
+        programme_id: project.programmeId || null
       });
     } catch (error) {
       console.error('Erreur création projet:', error);
@@ -873,15 +874,138 @@ export class DataService {
       end_date: updates.dueDate,
       budget: updates.budget,
       client: updates.clientName,
-      team_members: teamMemberIds.length > 0 ? teamMemberIds : null, // Inclure les membres de l'équipe
+      team_members: teamMemberIds.length > 0 ? teamMemberIds : null,
       tasks: updates.tasks || [],
       risks: updates.risks || [],
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      programme_id: updates.programmeId !== undefined ? updates.programmeId : undefined
     });
   }
 
   static async deleteProject(id: string) {
     return await ApiHelper.delete('projects', id);
+  }
+
+  // ===== PROJECT ATTACHMENTS (Phase 2.4) =====
+  static async getProjectAttachments(projectId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('project_attachments')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return { data: data || [], error: null };
+    } catch (error) {
+      return { data: [], error };
+    }
+  }
+
+  static async uploadProjectAttachment(projectId: string, file: File) {
+    try {
+      const organizationId = await this.getCurrentUserOrganizationId();
+      if (!organizationId) throw new Error('Organization not found');
+      const { data: { user } } = await supabase.auth.getUser();
+      const bucket = 'project-attachments';
+      const ext = file.name.split('.').pop() || 'bin';
+      const path = `${organizationId}/${projectId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+      if (uploadError) throw uploadError;
+
+      const { data: row, error: insertError } = await supabase
+        .from('project_attachments')
+        .insert({
+          organization_id: organizationId,
+          project_id: projectId,
+          file_name: file.name,
+          file_path: path,
+          file_size: file.size,
+          mime_type: file.type || null,
+          uploaded_by_id: user?.id || null
+        })
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+      return { data: row, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  static async deleteProjectAttachment(attachmentId: string) {
+    try {
+      const { data: row, error: fetchError } = await supabase
+        .from('project_attachments')
+        .select('file_path')
+        .eq('id', attachmentId)
+        .single();
+      if (fetchError || !row) throw fetchError || new Error('Attachment not found');
+      await supabase.storage.from('project-attachments').remove([row.file_path]);
+      const { error: deleteError } = await supabase
+        .from('project_attachments')
+        .delete()
+        .eq('id', attachmentId);
+      if (deleteError) throw deleteError;
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  }
+
+  static async getProjectAttachmentUrl(filePath: string, expiresIn = 3600) {
+    const { data } = await supabase.storage.from('project-attachments').createSignedUrl(filePath, expiresIn);
+    return data?.signedUrl || null;
+  }
+
+  // ===== PROJECT MODULE SETTINGS (Phase 2.4) =====
+  static async getProjectModuleSettings() {
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) return { data: null, error: null };
+      const { data, error } = await supabase
+        .from('project_module_settings')
+        .select('*')
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  static async upsertProjectModuleSettings(settings: {
+    projectTypes?: string[];
+    statuses?: string[];
+    alertDelayDays?: number;
+    taskTemplates?: Array<{ title: string; defaultPriority?: string }>;
+  }) {
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) throw new Error('Organization not found');
+      const payload: Record<string, unknown> = {
+        organization_id: orgId,
+        updated_at: new Date().toISOString()
+      };
+      if (settings.projectTypes !== undefined) payload.project_types = settings.projectTypes;
+      if (settings.statuses !== undefined) payload.statuses = settings.statuses;
+      if (settings.alertDelayDays !== undefined) payload.alert_delay_days = settings.alertDelayDays;
+      if (settings.taskTemplates !== undefined) payload.task_templates = settings.taskTemplates;
+
+      const { data, error } = await supabase
+        .from('project_module_settings')
+        .upsert({ ...payload, organization_id: orgId }, { onConflict: 'organization_id' })
+        .select('*')
+        .single();
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
   }
 
   // ===== INVOICES =====
@@ -1866,6 +1990,7 @@ export class DataService {
           source: contact.source,
           notes: contact.notes,
           tags: contact.tags || [],
+          category_id: contact.categoryId || null,
           created_by: ownerId || currentUser.id,
           created_by_name: creatorName,
           created_at: new Date().toISOString(),
@@ -1884,21 +2009,23 @@ export class DataService {
 
   static async updateContact(id: string, updates: Partial<Contact>) {
     try {
+      const row: Record<string, unknown> = {
+        first_name: updates.firstName,
+        last_name: updates.lastName,
+        email: updates.email,
+        phone: updates.phone,
+        company: updates.company,
+        position: updates.position,
+        status: updates.status,
+        source: updates.source,
+        notes: updates.notes,
+        tags: updates.tags,
+        updated_at: new Date().toISOString()
+      };
+      if (updates.categoryId !== undefined) row.category_id = updates.categoryId;
       const { data, error } = await supabase
         .from('contacts')
-        .update({
-          first_name: updates.firstName,
-          last_name: updates.lastName,
-          email: updates.email,
-          phone: updates.phone,
-          company: updates.company,
-          position: updates.position,
-          status: updates.status,
-          source: updates.source,
-          notes: updates.notes,
-          tags: updates.tags,
-          updated_at: new Date().toISOString()
-        })
+        .update(row)
         .eq('id', id)
         .select()
         .single();
@@ -2084,6 +2211,195 @@ export class DataService {
     }
   }
 
+  // ===== PRESENCE SESSIONS (Phase 4 Bloc 1) =====
+  private static mapPresenceRow(row: any): PresenceSession {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      organizationId: row.organization_id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at ?? undefined,
+      status: row.status as PresenceStatus,
+      meetingId: row.meeting_id ?? undefined,
+      pauseMinutes: row.pause_minutes ?? 0,
+      notes: row.notes ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  static async getPresenceSessions(params?: { userId?: string; organizationId?: string; from?: string; to?: string }): Promise<{ data: PresenceSession[] | null; error: any }> {
+    try {
+      let query = supabase.from('presence_sessions').select('*').order('started_at', { ascending: false });
+      if (params?.userId) query = query.eq('user_id', params.userId);
+      if (params?.organizationId) query = query.eq('organization_id', params.organizationId);
+      if (params?.from) query = query.gte('started_at', params.from);
+      if (params?.to) query = query.lte('started_at', params.to);
+      const { data, error } = await query;
+      if (error) return { data: null, error };
+      return { data: (data || []).map(this.mapPresenceRow), error: null };
+    } catch (e) {
+      console.error('getPresenceSessions error:', e);
+      return { data: null, error: e };
+    }
+  }
+
+  static async getCurrentPresenceSession(userId: string): Promise<{ data: PresenceSession | null; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('presence_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return { data: null, error };
+      return { data: data ? this.mapPresenceRow(data) : null, error: null };
+    } catch (e) {
+      console.error('getCurrentPresenceSession error:', e);
+      return { data: null, error: e };
+    }
+  }
+
+  static async createPresenceSession(session: Partial<PresenceSession>): Promise<{ data: PresenceSession | null; error: any }> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return { data: null, error: new Error('Non authentifié') };
+      const { data: profile } = await supabase.from('profiles').select('organization_id').eq('user_id', currentUser.id).single();
+      const organizationId = session.organizationId || (profile as any)?.organization_id;
+      if (!organizationId) return { data: null, error: new Error('Organisation inconnue') };
+      const row = {
+        user_id: currentUser.id,
+        organization_id: organizationId,
+        started_at: session.startedAt || new Date().toISOString(),
+        ended_at: session.endedAt ?? null,
+        status: session.status || 'online',
+        meeting_id: session.meetingId ?? null,
+        pause_minutes: session.pauseMinutes ?? 0,
+        notes: session.notes ?? null
+      };
+      const { data, error } = await supabase.from('presence_sessions').insert(row).select().single();
+      if (error) return { data: null, error };
+      return { data: this.mapPresenceRow(data), error: null };
+    } catch (e) {
+      console.error('createPresenceSession error:', e);
+      return { data: null, error: e };
+    }
+  }
+
+  static async updatePresenceSession(id: string, updates: Partial<PresenceSession>): Promise<{ data: PresenceSession | null; error: any }> {
+    try {
+      const row: any = {};
+      if (updates.endedAt !== undefined) row.ended_at = updates.endedAt;
+      if (updates.startedAt !== undefined) row.started_at = updates.startedAt;
+      if (updates.status !== undefined) row.status = updates.status;
+      if (updates.meetingId !== undefined) row.meeting_id = updates.meetingId;
+      if (updates.pauseMinutes !== undefined) row.pause_minutes = updates.pauseMinutes;
+      if (updates.notes !== undefined) row.notes = updates.notes;
+      row.updated_at = new Date().toISOString();
+      const { data, error } = await supabase.from('presence_sessions').update(row).eq('id', id).select().single();
+      if (error) return { data: null, error };
+      return { data: this.mapPresenceRow(data), error: null };
+    } catch (e) {
+      console.error('updatePresenceSession error:', e);
+      return { data: null, error: e };
+    }
+  }
+
+  // ===== EMPLOYEES (Phase 4 Bloc 1.5 – Fiche salarié) =====
+  private static mapEmployeeRow(row: any): Employee {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      profileId: row.profile_id,
+      position: row.position ?? undefined,
+      managerId: row.manager_id ?? undefined,
+      mentorId: row.mentor_id ?? undefined,
+      cnss: row.cnss ?? undefined,
+      amo: row.amo ?? undefined,
+      indemnities: row.indemnities ?? undefined,
+      leaveRate: row.leave_rate ?? undefined,
+      tenureDate: row.tenure_date ?? undefined,
+      familySituation: row.family_situation ?? undefined,
+      photoUrl: row.photo_url ?? undefined,
+      cvUrl: row.cv_url ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  static async listEmployees(organizationId?: string | null): Promise<Employee[]> {
+    try {
+      const orgId = organizationId || (await this.getCurrentUserOrganizationId());
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return (data || []).map((r: any) => this.mapEmployeeRow(r));
+    } catch (e) {
+      console.error('listEmployees error:', e);
+      return [];
+    }
+  }
+
+  static async getEmployeeByProfileId(profileId: string): Promise<{ data: Employee | null; error: any }> {
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) return { data: null, error: new Error('Organisation inconnue') };
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('profile_id', profileId)
+        .maybeSingle();
+      if (error) return { data: null, error };
+      return { data: data ? this.mapEmployeeRow(data) : null, error: null };
+    } catch (e) {
+      console.error('getEmployeeByProfileId error:', e);
+      return { data: null, error: e };
+    }
+  }
+
+  static async upsertEmployee(employee: Partial<Employee>): Promise<{ data: Employee | null; error: any }> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return { data: null, error: new Error('Non authentifié') };
+      const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('user_id', currentUser.id).single();
+      const organizationId = employee.organizationId || (profile as any)?.organization_id;
+      const profileId = employee.profileId || (profile as any)?.id;
+      if (!organizationId || !profileId) return { data: null, error: new Error('Organisation ou profil manquant') };
+      const row = {
+        organization_id: organizationId,
+        profile_id: profileId,
+        position: employee.position ?? null,
+        manager_id: employee.managerId ?? null,
+        mentor_id: employee.mentorId ?? null,
+        cnss: employee.cnss ?? null,
+        amo: employee.amo ?? null,
+        indemnities: employee.indemnities ?? null,
+        leave_rate: employee.leaveRate ?? null,
+        tenure_date: employee.tenureDate ?? null,
+        family_situation: employee.familySituation ?? null,
+        photo_url: employee.photoUrl ?? null,
+        cv_url: employee.cvUrl ?? null,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabase.from('employees').upsert(row, {
+        onConflict: 'organization_id,profile_id',
+        ignoreDuplicates: false
+      }).select().single();
+      if (error) return { data: null, error };
+      return { data: this.mapEmployeeRow(data), error: null };
+    } catch (e) {
+      console.error('upsertEmployee error:', e);
+      return { data: null, error: e };
+    }
+  }
+
   // ===== MEETINGS =====
   static async getMeetings() {
     return await ApiHelper.get('meetings', { 
@@ -2198,6 +2514,106 @@ export class DataService {
       return { error: null };
     } catch (error) {
       console.error('Erreur suppression réunion:', error);
+      return { error };
+    }
+  }
+
+  // ===== PLANNING SLOTS (Phase 3) =====
+  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string }) {
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) return { data: [], error: null };
+      let query = supabase
+        .from('planning_slots')
+        .select('*')
+        .eq('organization_id', orgId)
+        .gte('slot_date', params.dateFrom)
+        .lte('slot_date', params.dateTo)
+        .order('slot_date', { ascending: true })
+        .order('start_time', { ascending: true, nullsFirst: false });
+      if (params.userId) query = query.eq('user_id', params.userId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: data || [], error: null };
+    } catch (error) {
+      return { data: [], error };
+    }
+  }
+
+  static async createPlanningSlot(slot: {
+    userId: string;
+    slotDate: string;
+    slotType: string;
+    startTime?: string;
+    endTime?: string;
+    meetingId?: string;
+    title?: string;
+    notes?: string;
+  }) {
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) throw new Error('Organization not found');
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('planning_slots')
+        .insert({
+          organization_id: orgId,
+          user_id: slot.userId,
+          slot_date: slot.slotDate,
+          slot_type: slot.slotType,
+          start_time: slot.startTime || null,
+          end_time: slot.endTime || null,
+          meeting_id: slot.meetingId || null,
+          title: slot.title || null,
+          notes: slot.notes || null,
+          created_by_id: user?.id || null
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  static async updatePlanningSlot(id: string, updates: Partial<{
+    slotDate: string;
+    slotType: string;
+    startTime: string | null;
+    endTime: string | null;
+    meetingId: string | null;
+    title: string | null;
+    notes: string | null;
+  }>) {
+    try {
+      const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.slotDate !== undefined) row.slot_date = updates.slotDate;
+      if (updates.slotType !== undefined) row.slot_type = updates.slotType;
+      if (updates.startTime !== undefined) row.start_time = updates.startTime;
+      if (updates.endTime !== undefined) row.end_time = updates.endTime;
+      if (updates.meetingId !== undefined) row.meeting_id = updates.meetingId;
+      if (updates.title !== undefined) row.title = updates.title;
+      if (updates.notes !== undefined) row.notes = updates.notes;
+      const { data, error } = await supabase
+        .from('planning_slots')
+        .update(row)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  static async deletePlanningSlot(id: string) {
+    try {
+      const { error } = await supabase.from('planning_slots').delete().eq('id', id);
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
       return { error };
     }
   }

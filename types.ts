@@ -13,9 +13,58 @@ export type Role =
   // Rôles créatifs et médias
   'publisher' | 'editor' | 'producer' | 'artist';
 
-export type ModuleName = 'dashboard' | 'projects' | 'goals_okrs' | 'time_tracking' | 'leave_management' | 'finance' | 'knowledge_base' | 'courses' | 'jobs' | 'ai_coach' | 'gen_ai_lab' | 'crm_sales' | 'analytics' | 'talent_analytics' | 'user_management' | 'course_management' | 'job_management' | 'leave_management_admin' | 'organization_management' | 'settings';
+/** 22 modules métier + administration (alignés Odoo / 10 départements) */
+export type ModuleName =
+  | 'dashboard'
+  | 'projects'
+  | 'goals_okrs'
+  | 'time_tracking'
+  | 'planning'
+  | 'leave_management'
+  | 'finance'
+  | 'comptabilite'
+  | 'knowledge_base'
+  | 'courses'
+  | 'jobs'
+  | 'crm_sales'
+  | 'partenariat'
+  | 'analytics'
+  | 'talent_analytics'
+  | 'qualite'
+  | 'rh'
+  | 'trinite'
+  | 'programme'
+  | 'juridique'
+  | 'studio'
+  | 'tech'
+  | 'collecte'
+  | 'conseil'
+  | 'user_management'
+  | 'course_management'
+  | 'job_management'
+  | 'leave_management_admin'
+  | 'organization_management'
+  | 'department_management'
+  | 'postes_management'
+  | 'settings'
+  | 'logistique'
+  | 'parc_auto'
+  | 'ticket_it'
+  | 'alerte_anonyme'
+  | 'messagerie';
 
 export type ProfileStatus = 'pending' | 'active' | 'rejected';
+
+/** Poste (fonction / intitulé du poste) – distinct du rôle, extensible comme Odoo */
+export interface Poste {
+  id: string;
+  organizationId?: string | null;
+  name: string;
+  slug?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 // Organisation pour architecture multi-tenant
 export interface Organization {
@@ -30,6 +79,28 @@ export interface Organization {
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
+}
+
+/** Département (Phase 2) : rattaché à une organisation, liste de modules autorisés */
+export interface Department {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  moduleSlugs: ModuleName[];
+  sequence: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Liaison utilisateur (auth user id) ↔ département */
+export interface UserDepartment {
+  id: string;
+  userId: string;
+  departmentId: string;
+  roleInDepartment?: string;
+  createdAt?: string;
 }
 
 // Rôles ayant accès au Management Ecosysteia (seule restriction)
@@ -118,6 +189,9 @@ export interface User {
   isActive?: boolean; // Statut d'activation de l'utilisateur (true par défaut)
   status?: ProfileStatus;
   pendingRole?: Role | null;
+  /** Poste (ex. Directeur Général) – distinct du rôle */
+  posteId?: string | null;
+  posteName?: string | null;
   reviewComment?: string | null;
   reviewedAt?: string | null;
   reviewedBy?: string | null;
@@ -247,15 +321,46 @@ export interface Job {
   applications?: JobApplication[]; // Liste détaillée des candidatures avec source
 }
 
+/** Critères SMART optionnels (Phase 2 – Projets) */
+export interface TaskSmartCriteria {
+  specific?: string;
+  measurable?: string;
+  achievable?: string;
+  relevant?: string;
+  timeBound?: string;
+}
+/** Notes SWOT optionnelles pour une tâche */
+export interface TaskSwotNotes {
+  strengths?: string;
+  weaknesses?: string;
+  opportunities?: string;
+  threats?: string;
+}
+
 export interface Task {
   id: string;
   text: string;
   status: 'To Do' | 'In Progress' | 'Completed';
   priority: 'High' | 'Medium' | 'Low';
   assignee?: User;
+  assigneeIds?: string[];
+  departmentId?: string | null;
   estimatedHours?: number;
   loggedHours?: number;
   dueDate?: string;
+  /** Objectif hebdo/jour : date et heure précises (Phase 2) */
+  scheduledDate?: string;
+  scheduledTime?: string;
+  scheduledDurationMinutes?: number;
+  /** Critères SMART (optionnel) */
+  smartCriteria?: TaskSmartCriteria;
+  swotNotes?: TaskSwotNotes;
+  /** Gel : dépassement date/heure sans "Réalisé" (Phase 2) */
+  isFrozen?: boolean;
+  completedAt?: string;
+  completedById?: string;
+  /** Justificatif obligatoire : au moins une pièce jointe pour "Réalisé" (Phase 2) */
+  justificationAttachmentIds?: string[];
 }
 
 export interface Risk {
@@ -270,18 +375,403 @@ export type CurrencyCode = 'USD' | 'EUR' | 'XOF';
 
 export const SUPPORTED_CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'XOF'];
 
+/** Ligne budgétaire par poste de dépense (Phase 2) */
+export interface ProjectBudgetLine {
+  id: string;
+  label: string;
+  plannedAmount: number;
+  realAmount?: number;
+  currency?: CurrencyCode;
+}
+
 export interface Project {
   id: string;
   title: string;
   description: string;
   status: 'Not Started' | 'In Progress' | 'Completed';
   dueDate: string;
+  startDate?: string;
   team: User[];
   tasks: Task[];
   risks: Risk[];
   teamMemberIds?: string[];
   createdById?: string;
   createdByName?: string;
+  /** Budget prévisionnel et lignes (Phase 2) */
+  budgetPlanned?: number;
+  budgetCurrency?: CurrencyCode;
+  budgetLines?: ProjectBudgetLine[];
+  /** Lien programme (Phase 3 – Programme & Bailleur) */
+  programmeId?: string | null;
+  programmeName?: string | null;
+  programmeBailleurName?: string | null;
+}
+
+/** Bailleur (Phase 3 – Programme & Bailleur) */
+export interface Bailleur {
+  id: string;
+  organizationId?: string | null;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  contact?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Programme (Phase 3) : financé par un bailleur, regroupe projets et lignes budgétaires */
+export interface Programme {
+  id: string;
+  organizationId?: string | null;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  bailleurId?: string | null;
+  bailleurName?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Ligne budgétaire au niveau programme (poste de dépense) */
+export interface ProgrammeBudgetLine {
+  id: string;
+  programmeId: string;
+  label: string;
+  plannedAmount: number;
+  spentAmount?: number;
+  currency?: CurrencyCode;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Demande de dépense (Phase 2 – circuit dépense) */
+export type ExpenseRequestStatus = 'draft' | 'submitted' | 'quoted' | 'validated' | 'rejected' | 'justified';
+
+export interface ExpenseRequest {
+  id: string;
+  programmeId?: string | null;
+  organizationId?: string | null;
+  title: string;
+  amount: number;
+  currency: string;
+  status: ExpenseRequestStatus;
+  requestedById?: string | null;
+  validatedById?: string | null;
+  rejectedReason?: string | null;
+  justificationComment?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Comptabilité SYSCOHADA (Phase 4) – Plan comptable */
+export type ChartAccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+
+/** Cadre d'usage du compte (both = SYSCOHADA et SYCEBNL) */
+export type ChartAccountFramework = 'both' | 'syscohada' | 'sycebnl';
+
+export interface ChartOfAccount {
+  id: string;
+  organizationId: string;
+  code: string;
+  label: string;
+  accountType: ChartAccountType;
+  parentId?: string | null;
+  framework?: ChartAccountFramework | null;
+  isCashFlowRegister?: boolean;
+  isActive: boolean;
+  sequence?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Journaux comptables */
+export type AccountingJournalType = 'general' | 'bank' | 'cash' | 'sales' | 'purchase' | 'various';
+
+export interface AccountingJournal {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  journalType: AccountingJournalType;
+  currency?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Cadre comptable (SYSCOHADA vs SYCEBNL / EBNL) */
+export type AccountingFramework = 'syscohada' | 'sycebnl';
+
+/** Statut d'une écriture (audit P2) : brouillon, validée, verrouillée */
+export type JournalEntryStatus = 'draft' | 'validated' | 'locked';
+
+/** Type de pièce justificative */
+export type AttachmentType = 'file' | 'link' | 'resource';
+
+/** Écriture (pièce) – avec traçabilité / pièces justificatives et statut */
+export interface JournalEntry {
+  id: string;
+  organizationId: string;
+  journalId: string;
+  entryDate: string;
+  reference?: string | null;
+  description?: string | null;
+  documentNumber?: string | null;
+  attachmentType?: AttachmentType | null;
+  attachmentUrl?: string | null;
+  attachmentStoragePath?: string | null;
+  resourceName?: string | null;
+  resourceDatabaseUrl?: string | null;
+  status?: JournalEntryStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  createdById?: string | null;
+  lines?: JournalEntryLine[];
+}
+
+/** Rôle métier Comptabilité (audit P2) : viewer, editor, validator, admin */
+export type AccountingPermissionRole = 'viewer' | 'editor' | 'validator' | 'admin';
+
+/** Droits Comptabilité par utilisateur (audit P2) */
+export interface AccountingPermission {
+  id: string;
+  organizationId: string;
+  userId: string;
+  role: AccountingPermissionRole;
+  allowedJournalIds?: string[] | null;
+  allowedCostCenterIds?: string[] | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Exercice comptable (audit P2) */
+export interface FiscalYear {
+  id: string;
+  organizationId: string;
+  label: string;
+  dateStart: string;
+  dateEnd: string;
+  isClosed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Options Comptabilité par organisation (audit P2) : activer/désactiver sous-modules */
+export interface OrganizationAccountingFeatures {
+  id: string;
+  organizationId: string;
+  enableAnalytical: boolean;
+  enableBudget: boolean;
+  enableFiscal: boolean;
+  enableCashFlowReport: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Pièce jointe binaire sur une écriture */
+export interface JournalEntryAttachment {
+  id: string;
+  entryId: string;
+  filePath: string;
+  name: string;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  createdAt?: string;
+}
+
+/** Ligne d'écriture (débit/crédit) – analytique et fiscal */
+export interface JournalEntryLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  label?: string | null;
+  debit: number;
+  credit: number;
+  sequence?: number;
+  costCenterId?: string | null;
+  fiscalCode?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  accountCode?: string;
+  accountLabel?: string;
+}
+
+/** Centre de coûts (comptabilité analytique) */
+export interface CostCenter {
+  id: string;
+  organizationId: string;
+  code: string;
+  label: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Règle fiscale (taux, code) */
+export interface FiscalRule {
+  id: string;
+  organizationId: string;
+  code: string;
+  label: string;
+  rate: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Budget (prévisionnel par exercice) */
+export interface Budget {
+  id: string;
+  organizationId: string;
+  name: string;
+  fiscalYear: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Ligne de budget (compte + centre optionnel + montant) */
+export interface BudgetLine {
+  id: string;
+  budgetId: string;
+  accountId: string;
+  costCenterId?: string | null;
+  amount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Paramètres comptables organisation (cadre SYSCOHADA/SYCEBNL) */
+export interface OrganizationAccountingSettings {
+  id: string;
+  organizationId: string;
+  accountingFramework: AccountingFramework;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Bénéficiaire (Phase 3) : thème, cible, secteur, lien programme/projet, optionnellement Collecte */
+export interface Beneficiaire {
+  id: string;
+  organizationId?: string | null;
+  programmeId?: string | null;
+  projectId?: string | null;
+  theme?: string | null;
+  target?: string | null;
+  gender?: string | null;
+  sector?: string | null;
+  country?: string | null;
+  region?: string | null;
+  contact?: string | null;
+  age?: string | null;
+  education?: string | null;
+  profession?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Ticket IT (Phase 6) : création → validation manager → envoi IT */
+export type TicketITStatus =
+  | 'draft'             // brouillon
+  | 'pending_validation' // en attente validation manager
+  | 'validated'         // validé par manager
+  | 'sent_to_it'       // envoyé au département IT
+  | 'in_progress'      // en cours de traitement
+  | 'resolved'         // résolu
+  | 'rejected';        // refusé par manager
+
+export interface TicketIT {
+  id: string;
+  organizationId?: string | null;
+  title: string;
+  description: string;
+  status: TicketITStatus;
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+  issueTypeId?: string | null;
+  issueTypeName?: string | null;
+  createdById: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+  /** Validation manager */
+  validatedById?: string | null;
+  validatedByName?: string | null;
+  validatedAt?: string | null;
+  rejectionReason?: string | null;
+  /** Assignation IT */
+  assignedToId?: string | null;
+  assignedToName?: string | null;
+  sentToItAt?: string | null;
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+}
+
+/** Pièce jointe projet (Phase 2.4) : fichier dans Storage + métadonnées en BDD */
+export interface ProjectAttachment {
+  id: string;
+  projectId: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType?: string;
+  uploadedById?: string;
+  createdAt: string;
+  /** URL signée ou publique pour affichage (remplie par le service) */
+  url?: string;
+}
+
+/** Barème scoring (Phase 2) : +5 % salarié, +7 % manager qui clôture */
+export const TASK_SCORE_PERCENT_EMPLOYEE = 5;
+export const TASK_SCORE_PERCENT_MANAGER = 7;
+/** Seuils d'évaluation (Phase 2) */
+export const SCORING_THRESHOLDS = {
+  excellent: 100,
+  veryGood: 90,
+  good: 80,
+  toEncourage: 70,
+  insufficient: 60,
+  veryInsufficient: 50,
+  veryLow: 40,
+} as const;
+
+/** Paramètres d'administration du module Projets (Phase 2.4 + Phase 2 scoring) */
+export interface ProjectModuleSettings {
+  id: string;
+  organizationId: string;
+  projectTypes: string[];
+  statuses: string[];
+  alertDelayDays: number;
+  taskTemplates: Array<{ title: string; defaultPriority?: string }>;
+  /** Scoring : % par tâche réalisée (salarié) / manager qui clôture (Phase 2) */
+  taskScorePercent?: number;
+  managerScorePercent?: number;
+  /** Justificatif obligatoire pour marquer "Réalisé" (Phase 2) */
+  requireJustificationForCompletion?: boolean;
+  /** Gel auto si date/heure dépassée sans Réalisé (Phase 2) */
+  autoFreezeOverdueTasks?: boolean;
+  /** Date de démarrage des évaluations / scoring (Phase 14) : seules les tâches réalisées après cette date comptent pour le score */
+  evaluationStartDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Type de créneau planning (Phase 3) */
+export type PlanningSlotType = 'telework' | 'onsite' | 'leave' | 'meeting' | 'modulation' | 'other';
+
+export interface PlanningSlot {
+  id: string;
+  userId: string;
+  slotDate: string;
+  slotType: PlanningSlotType;
+  startTime?: string;
+  endTime?: string;
+  meetingId?: string;
+  title?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdById?: string;
 }
 
 export interface KeyResult {
@@ -292,9 +782,15 @@ export interface KeyResult {
   unit: string;
 }
 
+/** Type d'entité pour objectifs SMART transverses (Phase 0.4) */
+export type ObjectiveEntityType = 'project' | 'programme' | 'user' | 'department' | 'course' | 'other';
+
 export interface Objective {
   id: string;
-  projectId: string;
+  projectId: string; // rétrocompatibilité ; préférer entityType + entityId
+  /** Entité liée (SMART transverse) */
+  entityType?: ObjectiveEntityType;
+  entityId?: string;
   title: string;
   description?: string;
   quarter?: string;
@@ -324,6 +820,9 @@ export interface Contact {
   officePhone?: string;
   mobilePhone?: string;
   whatsappNumber?: string;
+  /** Catégorie extensible (Client, Partenaire, Bailleur, etc.) – référentiel contact_category */
+  categoryId?: string | null;
+  categoryName?: string | null;
   createdById?: string;
   createdByName?: string;
 }
@@ -348,10 +847,70 @@ export interface Document {
   attachments?: Array<{ name: string; url: string; type: string; size: number }>; // Pièces jointes
 }
 
+/** Statut de présence (pointage) – Phase 4 Bloc 1 + sélecteur post-login COYA.PRO */
+export type PresenceStatus =
+  | 'online' | 'pause' | 'in_meeting'
+  | 'present' | 'absent' | 'pause_coffee' | 'pause_lunch'
+  | 'away_mission' | 'brief_team' | 'technical_issue';
+
+/** Session de présence : en ligne, pause, ou en réunion (optionnellement liée à une réunion) */
+export interface PresenceSession {
+  id: string;
+  userId: string; // auth user id (same as profiles.user_id)
+  organizationId: string;
+  startedAt: string; // ISO
+  endedAt?: string | null; // ISO, null = session en cours
+  status: PresenceStatus;
+  meetingId?: string | null; // FK meetings.id – si "en réunion" non lié = non rémunéré
+  pauseMinutes: number;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Politique de présence (Bloc 1.2) – valeurs par défaut ; extensible par organisation plus tard */
+export interface PresencePolicy {
+  /** Seuil retard en minutes (au-delà = retard comptabilisé) */
+  delayThresholdMinutes: number;
+  /** Durée max d'une pause en minutes (au-delà = dépassement) */
+  maxPauseMinutes: number;
+  /** Heures hebdomadaires de travail (ex. 44) */
+  weeklyHours: number;
+  /** Heures max par jour (ex. 10) */
+  maxHoursPerDay: number;
+}
+
+export const DEFAULT_PRESENCE_POLICY: PresencePolicy = {
+  delayThresholdMinutes: 15,
+  maxPauseMinutes: 60,
+  weeklyHours: 44,
+  maxHoursPerDay: 10
+};
+
+/** Fiche salarié RH (Phase 4 Bloc 1.5) */
+export interface Employee {
+  id: string;
+  organizationId: string;
+  profileId: string;
+  position?: string | null;
+  managerId?: string | null;
+  mentorId?: string | null;
+  cnss?: string | null;
+  amo?: string | null;
+  indemnities?: string | null;
+  leaveRate?: number | null;
+  tenureDate?: string | null;
+  familySituation?: string | null;
+  photoUrl?: string | null;
+  cvUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface TimeLog {
   id: string; // UUID from Supabase
   userId: string; // UUID from Supabase (profile.id)
-  entityType: 'project' | 'course' | 'task';
+  entityType: 'project' | 'course' | 'task' | 'programme';
   entityId: number | string;
   entityTitle: string;
   date: string;

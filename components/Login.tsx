@@ -1,55 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
-import NexusFlowIcon from './icons/NexusFlowIcon';
 import AuthAIAssistant from './AuthAIAssistant';
-import { Translation } from '../types';
+import logoSenegel from '../assets/logo_senegel.png';
 // import SenegelUsersList from './SenegelUsersList'; // supprimé
 
+const IMPULCIA_URL = 'https://impulcia-afrique.com/';
+const SUPPORT_EMAIL = 'techsupport@senegel.org';
+const MAILTO_SUPPORT = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Besoin d\'aide - COYA.PRO')}`;
+
 interface LoginProps {
-  onSwitchToSignup: () => void;
   onLoginSuccess?: () => void;
+  onSwitchToSignup?: () => void;
 }
 
-const HERO_HIGHLIGHTS: Array<{ icon: string; titleKey: keyof Translation; descriptionKey: keyof Translation }> = [
-  {
-    icon: 'fas fa-building',
-    titleKey: 'signup_highlight_multi_org_title',
-    descriptionKey: 'signup_highlight_multi_org_description',
-  },
-  {
-    icon: 'fas fa-users',
-    titleKey: 'signup_highlight_unified_title',
-    descriptionKey: 'signup_highlight_unified_description',
-  },
-  {
-    icon: 'fas fa-shield-alt',
-    titleKey: 'signup_highlight_security_title',
-    descriptionKey: 'signup_highlight_security_description',
-  },
-  {
-    icon: 'fas fa-info-circle',
-    titleKey: 'login_highlight_roles_title',
-    descriptionKey: 'login_highlight_roles_description',
-  },
-];
-
-const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToSignup }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordError, setForgotPasswordError] = useState('');
   const { signIn } = useAuth();
   const { t } = useLocalization();
   const [isAssistantOpen, setAssistantOpen] = useState(false);
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState('');
   // const [showUsersList, setShowUsersList] = useState(false);
-  const [isResetOpen, setResetOpen] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetMsg, setResetMsg] = useState<string | null>(null);
-  const [resetLoading, setResetLoading] = useState(false);
+  const [isHelpOpen, setHelpOpen] = useState(false);
   // Organisation (nom) – création si inexistante (si autorisé)
   const [organizationName, setOrganizationName] = useState('SENEGEL');
   const [organizations, setOrganizations] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
@@ -178,99 +160,72 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
   const openAssistant = (prompt: string = '') => {
     setAssistantInitialPrompt(prompt);
     setAssistantOpen(true);
-  }
+  };
 
-  const handleSendReset = async (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!forgotPasswordEmail.trim()) return;
+    setForgotPasswordLoading(true);
+    setForgotPasswordError('');
+    setForgotPasswordSent(false);
     try {
-      setResetLoading(true);
-      setResetMsg(null);
       const { supabase } = await import('../services/supabaseService');
-      const redirectTo = window.location.origin; // retour app
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail || email, { redirectTo });
-      if (error) throw error;
-      setResetMsg(t('login_reset_success'));
+      const { error: err } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || ''}` : undefined,
+      });
+      if (err) {
+        setForgotPasswordError(err.message || t('login_error_generic'));
+        return;
+      }
+      setForgotPasswordSent(true);
     } catch (err: any) {
-      setResetMsg(err?.message || t('login_reset_error'));
+      setForgotPasswordError(err?.message || t('login_error_generic'));
     } finally {
-      setResetLoading(false);
+      setForgotPasswordLoading(false);
     }
-  }
+  };
 
   return (
     <>
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden md:flex">
-          {/* Left Panel */}
-          <div className="md:w-1/2 bg-gradient-to-br from-emerald-600 to-blue-600 text-white p-12 flex flex-col justify-center items-center text-center">
-            <NexusFlowIcon className="w-28 h-28"/>
-            <h1 className="text-3xl font-bold mt-4">COYA</h1>
-            <p className="mt-2 text-emerald-100 text-sm font-medium">{t('signup_hero_tagline')}</p>
-            <p className="mt-1 text-emerald-50 text-lg">{t('signup_hero_subtagline')}</p>
-            <div className="mt-8 space-y-4 text-sm text-emerald-50">
-              {HERO_HIGHLIGHTS.map((highlight) => (
-                <div key={highlight.titleKey as string} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                  <i className={`${highlight.icon} text-2xl mb-2`}></i>
-                  <h3 className="font-semibold mb-2">{t(highlight.titleKey)}</h3>
-                  <p className="text-xs">{t(highlight.descriptionKey)}</p>
-                </div>
-              ))}
+      {/* Page de connexion uniquement : plein écran, jamais affichée si déjà connecté (géré par App). */}
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 font-coya overflow-hidden"
+        style={{
+          background: `linear-gradient(180deg, var(--coya-primary-dark) 0%, var(--coya-primary) 25%, var(--coya-bg-gradient-start) 60%, var(--coya-bg-gradient-end) 100%)`,
+        }}
+      >
+        <div className="w-full max-w-[340px] mx-auto bg-coya-card rounded-coya shadow-coya overflow-hidden border border-coya-border flex-shrink-0" style={{ boxShadow: 'var(--coya-shadow-lg)' }}>
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col items-center mb-4">
+              <div className="rounded-full p-2 border-2 border-[var(--coya-green)] bg-[var(--coya-green)]/10 flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24">
+                <img
+                  src={logoSenegel}
+                  alt="SENEGEL – CITOYENNETÉ, TRANSPARENCE, COMPÉTENCES"
+                  className="w-full h-full object-contain rounded-full"
+                />
+              </div>
+              <p className="text-[10px] sm:text-xs font-medium text-coya-text-muted tracking-wide mt-2 uppercase">
+                CITOYENNETÉ, TRANSPARENCE, COMPÉTENCES
+              </p>
+              <p className="text-[10px] sm:text-xs text-coya-text-muted mt-1 italic text-center max-w-[260px]">
+                COYA — Create Opportunities for Youth in Africa
+              </p>
             </div>
-          </div>
-
-          {/* Right Panel */}
-          <div className="md:w-1/2 p-8 md:p-12">
-            <h2 className="text-3xl font-bold text-gray-900">{t('login_title')}</h2>
-             <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-            {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
+            <h2 className="text-lg font-semibold text-coya-text mb-4 text-center">{t('login_title')}</h2>
+            <form className="space-y-4" onSubmit={handleLogin}>
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Organisation (sélecteur) */}
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('signup_organization_label')}</label>
-                {orgsLoading ? (
-                  <div className="text-sm text-gray-500">{t('login_organization_loading')}</div>
-                ) : (
-                  <select
-                    value={organizationName}
-                    onChange={(e) => setOrganizationName(e.target.value)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md"
-                  >
-                    {/* Toujours proposer SENEGEL en premier (organisation de référence) */}
-                    {(!organizations.some(o => o.name.toLowerCase() === 'senegel')) && (
-                      <option value="SENEGEL">SENEGEL</option>
-                    )}
-                    {organizations.map(o => (
-                      <option key={o.id} value={o.name}>{o.name}</option>
-                    ))}
-                  </select>
-                )}
-                <p className="mt-2 text-xs text-gray-500">
-                  {t('login_organization_hint')}
-                </p>
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-xs font-semibold text-blue-800 mb-1">
-                    <i className="fas fa-info-circle mr-1"></i>
-                    {t('login_organization_info_title')}
-                  </p>
-                  <p className="text-xs text-blue-700">
-                    <strong>COYA</strong> : {t('login_organization_info_line1')}<br/>
-                    <strong>{t('login_partner_org_label')}</strong> : {t('login_organization_info_line2')}
-                  </p>
-                </div>
-              </div>
-              
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-coya-text mb-1">
                   {t('email')}
                 </label>
                 {emailError && (
-                  <div className="mt-1 mb-1 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded">
-                    <i className="fas fa-exclamation-circle mr-1"></i>
-                    {emailError}
+                  <div className="mb-1 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-lg">
+                    <i className="fas fa-exclamation-circle mr-1" /> {emailError}
                   </div>
                 )}
                 <input
@@ -280,16 +235,16 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                  className="block w-full px-3 py-2.5 border border-coya-border rounded-coya bg-coya-card text-coya-text placeholder-coya-text-muted focus:outline-none focus:ring-2 focus:ring-coya-primary focus:border-coya-primary text-sm"
                   placeholder={t('signup_email_placeholder')}
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-coya-text mb-1">
                   {t('password')}
                 </label>
-                <div className="mt-1 relative">
+                <div className="relative">
                   <input
                     id="password"
                     name="password"
@@ -297,70 +252,65 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm pr-10"
+                    className="block w-full px-3 py-2.5 border border-coya-border rounded-coya bg-coya-card text-coya-text pr-10 focus:outline-none focus:ring-2 focus:ring-coya-primary focus:border-coya-primary text-sm"
                     placeholder="••••••••"
                     autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600"
                     aria-label={showPassword ? t('signup_hide_password') : t('signup_show_password')}
                   >
-                    <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`} />
                   </button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm">
+              <p className="text-xs text-coya-text-muted text-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => setResetOpen(true)}
-                  className="text-emerald-600 hover:text-emerald-500 font-medium"
+                  onClick={() => setForgotPasswordOpen(true)}
+                  className="text-coya-primary hover:underline font-medium"
                 >
-                  {t('forgot_password')}
+                  Mot de passe oublié
                 </button>
-                <button
-                  type="button"
-                  onClick={() => openAssistant(t('auth_ai_prompt_password'))}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  {t('need_help')}
-                </button>
-              </div>
+                {onSwitchToSignup && (
+                  <>
+                    <span>·</span>
+                    <button type="button" onClick={onSwitchToSignup} className="text-coya-primary hover:underline font-medium">
+                      Créer un compte
+                    </button>
+                  </>
+                )}
+              </p>
 
-              <div>
+              <p className="text-center text-xs text-coya-text-muted">
+                <button type="button" onClick={() => setHelpOpen(true)} className="text-coya-primary hover:underline font-medium">
+                  Problèmes de connexion
+                </button>
+              </p>
+
+              <div className="pt-1">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-coya text-white bg-coya-primary hover:bg-coya-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-coya-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-coya"
                 >
                   {loading ? t('login_loading') : t('login')}
                 </button>
+                <p className="text-center text-[10px] text-coya-text-muted mt-2 flex items-center justify-center gap-1">
+                  <i className="fa fa-lock" aria-hidden />
+                  Connexion sécurisée
+                </p>
               </div>
 
-              <div className="text-center">
-                <span className="text-sm text-gray-600">
-                  {t('login_prompt')}{' '}
-                  <button
-                    type="button"
-                    onClick={onSwitchToSignup}
-                    className="text-emerald-600 hover:text-emerald-500 font-medium"
-                  >
-                    {t('signup_prompt')}
-                  </button>
-                </span>
-              </div>
-
-              <div className="text-center space-y-2">
-                <button
-                  type="button"
-                  onClick={() => openAssistant()}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  {t('need_help')}
-                </button>
-              </div>
+              <p className="text-center text-xs text-coya-text-muted pt-4 mt-2 border-t border-coya-border">
+                Solution développée par{' '}
+                <a href={IMPULCIA_URL} target="_blank" rel="noopener noreferrer" className="text-coya-primary hover:underline font-medium">
+                  Impulcia Afrique
+                </a>
+              </p>
             </form>
           </div>
         </div>
@@ -374,52 +324,85 @@ const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onLoginSuccess }) => {
         />
       )}
 
-      {/* Liste d'utilisateurs retirée (composant supprimé) */}
+      {/* Modal Besoin d'aide : style COYA unifié */}
+      {isHelpOpen && (
+        <>
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 font-coya">
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(180deg, var(--coya-primary-dark) 0%, var(--coya-primary) 25%, var(--coya-bg-gradient-start) 60%, var(--coya-bg-gradient-end) 100%)',
+              }}
+              onClick={() => setHelpOpen(false)}
+              aria-hidden
+            />
+            <div className="relative w-full max-w-md bg-coya-card rounded-2xl shadow-coya border border-coya-border p-6" style={{ boxShadow: 'var(--coya-shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-coya-text mb-3">Besoin d&apos;aide</h3>
+              <p className="text-sm text-coya-text mb-4">
+                Pour toute demande d&apos;assistance (accès, mot de passe, problème technique), veuillez vous rapprocher de votre manager afin qu&apos;il effectue une demande via <strong>Tickets IT</strong>.
+              </p>
+              <p className="text-sm text-coya-text-muted mb-4">
+                Contact support :{' '}
+                <a href={MAILTO_SUPPORT} className="text-coya-primary hover:underline font-medium">
+                  {SUPPORT_EMAIL}
+                </a>
+              </p>
+              <div className="flex justify-end">
+                <button type="button" onClick={() => setHelpOpen(false)} className="px-4 py-2 rounded-xl bg-coya-primary text-white text-sm font-medium hover:bg-coya-primary-dark">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
-      {/* Modal reset password */}
-      {isResetOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <form onSubmit={handleSendReset}>
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-bold text-gray-900">{t('login_reset_title')}</h2>
-              </div>
-              <div className="p-6 space-y-3">
-                {resetMsg && (
-                  <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-3">
-                    {resetMsg}
-                  </div>
-                )}
-                <label className="block text-sm font-medium text-gray-700">{t('email')}</label>
+      {/* Modal Mot de passe oublié – charte COYA */}
+      {forgotPasswordOpen && (
+        <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 font-coya">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => { setForgotPasswordOpen(false); setForgotPasswordError(''); setForgotPasswordSent(false); }}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm bg-coya-card rounded-2xl shadow-coya border border-coya-border p-6" style={{ boxShadow: 'var(--coya-shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-coya-text mb-3">Mot de passe oublié</h3>
+            {forgotPasswordSent ? (
+              <p className="text-sm text-coya-text mb-4">
+                Si un compte existe pour cette adresse, un lien de réinitialisation a été envoyé. Vérifiez votre boîte de réception et les spams.
+              </p>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-3">
+                <label htmlFor="forgot-email" className="block text-sm font-medium text-coya-text">Adresse e-mail</label>
                 <input
+                  id="forgot-email"
                   type="email"
-                  value={resetEmail || email}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-                  placeholder={t('signup_email_placeholder')}
                   required
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  className="block w-full px-3 py-2.5 border border-coya-border rounded-coya bg-coya-card text-coya-text text-sm focus:ring-2 focus:ring-coya-primary focus:border-coya-primary"
+                  placeholder={t('signup_email_placeholder')}
                 />
-              </div>
-              <div className="p-4 bg-gray-50 border-t flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setResetOpen(false)}
-                  className="px-4 py-2 bg-gray-200 rounded-lg font-semibold"
-                >
-                  {t('login_reset_cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={resetLoading}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {resetLoading ? t('login_reset_sending') : t('login_reset_send')}
-                </button>
-              </div>
-            </form>
+                {forgotPasswordError && <p className="text-sm text-red-600">{forgotPasswordError}</p>}
+                <div className="flex gap-2 justify-end pt-2">
+                  <button type="button" onClick={() => { setForgotPasswordOpen(false); setForgotPasswordError(''); }} className="px-4 py-2 rounded-xl border border-coya-border text-coya-text text-sm font-medium hover:bg-coya-bg">
+                    Annuler
+                  </button>
+                  <button type="submit" disabled={forgotPasswordLoading} className="px-4 py-2 rounded-xl bg-coya-primary text-white text-sm font-medium hover:bg-coya-primary-dark disabled:opacity-50">
+                    {forgotPasswordLoading ? t('login_loading') : 'Envoyer le lien'}
+                  </button>
+                </div>
+              </form>
+            )}
+            {forgotPasswordSent && (
+              <button type="button" onClick={() => { setForgotPasswordOpen(false); setForgotPasswordSent(false); }} className="mt-2 w-full px-4 py-2 rounded-xl bg-coya-primary text-white text-sm font-medium hover:bg-coya-primary-dark">
+                Fermer
+              </button>
+            )}
           </div>
         </div>
       )}
+
     </>
   );
 };

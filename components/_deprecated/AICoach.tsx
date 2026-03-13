@@ -1,6 +1,10 @@
+/**
+ * @deprecated Module ai_coach retiré de la plateforme (Phase 1 ERP 360°).
+ * Conservé pour réactivation future éventuelle.
+ */
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocalization } from '../contexts/LocalizationContext';
-import { runAICoach } from '../services/geminiService';
+import { useLocalization } from '../../contexts/LocalizationContext';
+import { runAICoach } from '../../services/geminiService';
 
 interface Conversation {
   id: string;
@@ -47,7 +51,7 @@ const AICoach: React.FC = () => {
         setConversations(prev => [newConversation, ...prev]);
         setSelectedConversation(newConversation.id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Erreur AICoach:", error);
       setErrorMessage("Impossible de contacter l'assistant IA. Vérifiez votre connexion internet ou la configuration des clés API, puis réessayez.");
     } finally {
@@ -101,22 +105,20 @@ const AICoach: React.FC = () => {
 
   return (
     <div>
-      {/* Header avec gradient */}
       <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white rounded-t-lg overflow-hidden mb-6">
         <div className="p-6 pb-4">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold mb-2 flex items-center">
                 <i className="fas fa-robot mr-3"></i>
-                {t('ai_coach_title')}
+                Coach IA (module déprécié)
               </h1>
-              <p className="text-emerald-100">{t('ai_coach_subtitle')}</p>
+              <p className="text-emerald-100">Ce module a été retiré de la plateforme.</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Métriques */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-emerald-500">
           <div className="flex items-center justify-between">
@@ -154,7 +156,6 @@ const AICoach: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Formulaire de conversation */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="p-6">
@@ -166,7 +167,6 @@ const AICoach: React.FC = () => {
                 </div>
               )}
               
-              {/* Suggestions rapides */}
               {!response && conversations.length === 0 && (
                 <div className="mb-6">
                   <p className="text-sm text-gray-600 mb-3">Suggestions rapides :</p>
@@ -188,7 +188,7 @@ const AICoach: React.FC = () => {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder={t('ai_coach_prompt_placeholder')}
+            placeholder="Posez une question au coach IA..."
             className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
             rows={4}
             disabled={loading}
@@ -201,28 +201,27 @@ const AICoach: React.FC = () => {
             {loading ? (
               <>
                 <i className="fas fa-spinner fa-spin mr-2"></i>
-                {t('ai_coach_thinking')}
+                Réflexion...
               </>
             ) : (
                     <>
                       <i className="fas fa-paper-plane mr-2"></i>
-                      {t('ai_coach_button')}
+                      Demander à l&apos;IA
                     </>
             )}
           </button>
         </form>
       </div>
 
-            {/* Réponse AI */}
       {(loading || response) && (
               <div ref={responseRef} className="px-6 pb-6 border-t border-gray-200">
-                <h3 className="text-lg font-bold text-gray-700 my-4">{t('ai_coach_response_title')}</h3>
+                <h3 className="text-lg font-bold text-gray-700 my-4">Réponse de l&apos;IA</h3>
                 <div className="bg-gray-50 p-6 rounded-lg min-h-[100px]">
                 {loading && (
                     <div className="flex justify-center items-center h-full">
                       <div className="text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-emerald-500 mb-2"></i>
-                        <p className="text-gray-600">L'IA réfléchit...</p>
+                        <p className="text-gray-600">L&apos;IA réfléchit...</p>
                       </div>
                     </div>
                 )}
@@ -235,7 +234,6 @@ const AICoach: React.FC = () => {
           </div>
         </div>
 
-        {/* Historique des conversations */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="p-6 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-800">Historique</h2>

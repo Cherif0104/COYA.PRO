@@ -1,20 +1,84 @@
 import React, { useState } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Language, User } from '../types';
+import { useModulePermissions } from '../hooks/useModulePermissions';
+import { Language, User, ModuleName } from '../types';
 import UserProfileEdit from './UserProfileEdit';
+import OrganizationManagement from './OrganizationManagement';
+import DepartmentManagement from './DepartmentManagement';
+import UserModulePermissions from './UserModulePermissions';
+import CourseManagement from './CourseManagement';
+import JobManagement from './JobManagement';
+import LeaveManagementAdmin from './LeaveManagementAdmin';
+import PostesManagement from './PostesManagement';
+import ModuleLabelsEditor from './ModuleLabelsEditor';
+import DashboardSettingsEditor from './DashboardSettingsEditor';
+import ProjectModuleSettingsEditor from './ProjectModuleSettingsEditor';
+import { LeaveRequest, Project, Course, Job } from '../types';
 
 interface SettingsProps {
   reminderDays: number;
   onSetReminderDays: (days: number) => void;
+  users?: User[];
+  setView?: (view: string) => void;
+  leaveRequests?: LeaveRequest[];
+  projects?: Project[];
+  courses?: Course[];
+  jobs?: Job[];
+  onUpdateLeaveRequest?: (id: string, status: 'approved' | 'rejected', reason?: string) => Promise<void>;
+  onUpdateLeaveDates?: (id: string, startDate: string, endDate: string, reason: string) => Promise<void>;
+  onDeleteLeaveRequest?: (id: string) => Promise<void>;
+  onAddCourse?: (course: Partial<Course>) => Promise<void>;
+  onUpdateCourse?: (id: string, updates: Partial<Course>) => Promise<void>;
+  onDeleteCourse?: (id: string) => Promise<void>;
+  onAddJob?: (job: Partial<Job>) => Promise<void>;
+  onUpdateJob?: (id: string, updates: Partial<Job>) => Promise<void>;
+  onDeleteJob?: (id: number) => Promise<void>;
+  isLoading?: boolean;
+  loadingOperation?: string | null;
 }
 
-const Settings: React.FC<SettingsProps> = ({ reminderDays, onSetReminderDays }) => {
+/** Administration uniquement (22 modules / 10 départements) : droits et paramétrage */
+const ADMIN_SECTIONS: { key: ModuleName; label: string; icon: string }[] = [
+  { key: 'organization_management', label: 'Gestion des Organisations', icon: 'fas fa-building' },
+  { key: 'department_management', label: 'Départements', icon: 'fas fa-sitemap' },
+  { key: 'postes_management', label: 'Postes', icon: 'fas fa-user-tag' },
+  { key: 'user_management', label: 'Droits d\'accès / Utilisateurs', icon: 'fas fa-user-cog' },
+  { key: 'course_management', label: 'Gestion des formations', icon: 'fas fa-chalkboard-teacher' },
+  { key: 'job_management', label: 'Gestion des Jobs', icon: 'fas fa-briefcase' },
+  { key: 'leave_management_admin', label: 'Demandes de Congés (validation)', icon: 'fas fa-calendar-check' },
+];
+
+const Settings: React.FC<SettingsProps> = ({
+  reminderDays,
+  onSetReminderDays,
+  users = [],
+  setView,
+  leaveRequests = [],
+  courses = [],
+  jobs = [],
+  onUpdateLeaveRequest,
+  onUpdateLeaveDates,
+  onDeleteLeaveRequest,
+  onAddCourse,
+  onUpdateCourse,
+  onDeleteCourse,
+  onAddJob,
+  onUpdateJob,
+  onDeleteJob,
+  isLoading,
+  loadingOperation,
+}) => {
   const { t, language, setLanguage } = useLocalization();
   const { user } = useAuth();
+  const { canAccessModule } = useModulePermissions();
   const [skills, setSkills] = useState(user?.skills || []);
   const [newSkill, setNewSkill] = useState('');
   const [isProfileModalOpen, setProfileModalOpen] = useState(false);
+  const [adminSection, setAdminSection] = useState<ModuleName | ''>('');
+  const [showModuleLabels, setShowModuleLabels] = useState(false);
+  const [showDashboardSettings, setShowDashboardSettings] = useState(false);
+  const [showProjectModuleSettings, setShowProjectModuleSettings] = useState(false);
 
   const handleAddSkill = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +212,121 @@ const Settings: React.FC<SettingsProps> = ({ reminderDays, onSetReminderDays }) 
             </button>
           </div>
         </div>
+
+        {/* Libellés des modules (super admin uniquement) */}
+        {user?.role === 'super_administrator' && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">Libellés des modules</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Personnalisez les noms affichés des modules dans la sidebar et les écrans de droits (super admin).
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowModuleLabels(!showModuleLabels)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${showModuleLabels ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              <i className="fas fa-tags"></i>
+              {showModuleLabels ? 'Masquer l’éditeur' : 'Éditer les libellés'}
+            </button>
+            {showModuleLabels && (
+              <div className="mt-4 border-t pt-4">
+                <ModuleLabelsEditor />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Administration tableau de bord (super admin) – Phase 1.3 */}
+        {user?.role === 'super_administrator' && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">Tableau de bord</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Activer ou désactiver les widgets du tableau de bord pour l’organisation.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowDashboardSettings(!showDashboardSettings)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${showDashboardSettings ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              <i className="fas fa-th-large" />
+              {showDashboardSettings ? 'Masquer les options' : 'Configurer les widgets'}
+            </button>
+            {showDashboardSettings && (
+              <div className="mt-4 border-t pt-4">
+                <DashboardSettingsEditor />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Administration module Projets (super admin) – Phase 2.4 */}
+        {user?.role === 'super_administrator' && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">Module Projets</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Types de projet, statuts personnalisables et seuil d’alerte retard.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowProjectModuleSettings(!showProjectModuleSettings)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${showProjectModuleSettings ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              <i className="fas fa-project-diagram" />
+              {showProjectModuleSettings ? 'Masquer les options' : 'Configurer le module Projets'}
+            </button>
+            {showProjectModuleSettings && (
+              <div className="mt-4 border-t pt-4">
+                <ProjectModuleSettingsEditor />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Administration et gestion (sous-sections Paramètres) */}
+        {(() => {
+          const visibleSections = ADMIN_SECTIONS.filter(s =>
+            s.key === 'postes_management'
+              ? (user?.role === 'super_administrator' || user?.role === 'administrator')
+              : canAccessModule(s.key)
+          );
+          if (visibleSections.length === 0) return null;
+          return (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">Administration et gestion</h2>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {visibleSections.map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setAdminSection(adminSection === s.key ? '' : s.key)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                      adminSection === s.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <i className={s.icon}></i>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {adminSection && (
+                <div className="border-t pt-4 mt-4">
+                  {adminSection === 'organization_management' && <OrganizationManagement />}
+                  {adminSection === 'department_management' && <DepartmentManagement />}
+                  {adminSection === 'postes_management' && <PostesManagement />}
+                  {adminSection === 'user_management' && <UserModulePermissions users={users} canEdit />}
+                  {adminSection === 'course_management' && onAddCourse && onUpdateCourse && onDeleteCourse && (
+                    <CourseManagement courses={courses} users={users} onAddCourse={onAddCourse} onUpdateCourse={onUpdateCourse} onDeleteCourse={onDeleteCourse} isLoading={isLoading} loadingOperation={loadingOperation} />
+                  )}
+                  {adminSection === 'job_management' && onAddJob && onUpdateJob && onDeleteJob && (
+                    <JobManagement jobs={jobs} onAddJob={onAddJob} onUpdateJob={onUpdateJob} onDeleteJob={onDeleteJob} onNavigate={setView} isLoading={isLoading} loadingOperation={loadingOperation} />
+                  )}
+                  {adminSection === 'leave_management_admin' && onUpdateLeaveRequest && (
+                    <LeaveManagementAdmin leaveRequests={leaveRequests} users={users} onUpdateLeaveRequest={onUpdateLeaveRequest} onUpdateLeaveDates={onUpdateLeaveDates} onDeleteLeaveRequest={onDeleteLeaveRequest} />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modal de modification du profil */}

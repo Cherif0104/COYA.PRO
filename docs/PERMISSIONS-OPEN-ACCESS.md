@@ -60,8 +60,6 @@ const basePermissions: ModulePermissions = {
   knowledge_base: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
   courses: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
   jobs: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
-  ai_coach: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
-  gen_ai_lab: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
   crm_sales: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
   analytics: { canRead: true, canWrite: true, canDelete: true, canApprove: true },
   talent_analytics: { canRead: true, canWrite: true, canDelete: true, canApprove: true },

@@ -1,0 +1,358 @@
+import React, { useState, useEffect } from 'react';
+import { useModulePermissions } from '../hooks/useModulePermissions';
+import { Department, ModuleName } from '../types';
+import OrganizationService from '../services/organizationService';
+import DepartmentService from '../services/departmentService';
+import AccessDenied from './common/AccessDenied';
+import { moduleDisplayNames } from './UserModulePermissions';
+
+const ALL_MODULE_NAMES: ModuleName[] = [
+  'dashboard', 'projects', 'goals_okrs', 'time_tracking', 'planning',
+  'leave_management', 'finance', 'comptabilite', 'knowledge_base', 'courses', 'jobs',
+  'crm_sales', 'partenariat', 'analytics', 'talent_analytics', 'qualite',
+  'rh', 'trinite', 'programme', 'juridique', 'studio', 'tech', 'collecte', 'conseil',
+  'user_management', 'course_management', 'job_management', 'leave_management_admin',
+  'organization_management', 'department_management', 'postes_management', 'settings',
+  'logistique', 'parc_auto', 'ticket_it', 'alerte_anonyme', 'messagerie',
+];
+
+interface DepartmentManagementProps {
+  embeddedInUserManagement?: boolean;
+  canRead?: boolean;
+  canWrite?: boolean;
+}
+
+const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInUserManagement, canRead, canWrite }) => {
+  const { canAccessModule, hasPermission } = useModulePermissions();
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    sequence: 0,
+    isActive: true,
+    moduleSlugs: [] as ModuleName[]
+  });
+
+  const canReadModule = embeddedInUserManagement ? (canRead ?? true) : canAccessModule('department_management');
+  const canWriteModule = embeddedInUserManagement ? (canWrite ?? false) : hasPermission('department_management', 'write');
+
+  useEffect(() => {
+    if (canReadModule) {
+      loadOrganizationAndDepartments();
+    }
+  }, [canReadModule]);
+
+  const loadOrganizationAndDepartments = async () => {
+    try {
+      setLoading(true);
+      const orgId = await OrganizationService.getCurrentUserOrganizationId();
+      setOrganizationId(orgId || null);
+      if (orgId) {
+        const list = await DepartmentService.getDepartmentsByOrganizationId(orgId);
+        setDepartments(list);
+      } else {
+        setDepartments([]);
+      }
+    } catch (error) {
+      console.error('Erreur chargement départements:', error);
+      alert('Erreur lors du chargement des départements');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!canWriteModule || !organizationId) return;
+    try {
+      if (!formData.name || !formData.slug) {
+        alert('Le nom et le slug sont obligatoires');
+        return;
+      }
+      await DepartmentService.createDepartment(organizationId, {
+        name: formData.name,
+        slug: formData.slug,
+        moduleSlugs: formData.moduleSlugs,
+        sequence: formData.sequence
+      });
+      alert('Département créé avec succès');
+      setShowCreateModal(false);
+      resetForm();
+      loadOrganizationAndDepartments();
+    } catch (error: any) {
+      console.error('Erreur création département:', error);
+      alert(error?.message || 'Erreur lors de la création');
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!canWriteModule || !editingDept) return;
+    try {
+      await DepartmentService.updateDepartment(editingDept.id, {
+        name: formData.name,
+        slug: formData.slug,
+        sequence: formData.sequence,
+        isActive: formData.isActive,
+        moduleSlugs: formData.moduleSlugs
+      });
+      alert('Département mis à jour');
+      setEditingDept(null);
+      resetForm();
+      loadOrganizationAndDepartments();
+    } catch (error: any) {
+      console.error('Erreur mise à jour département:', error);
+      alert(error?.message || 'Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!canWriteModule) return;
+    try {
+      await DepartmentService.deleteDepartment(id);
+      setDeleteConfirm(null);
+      loadOrganizationAndDepartments();
+    } catch (error: any) {
+      console.error('Erreur suppression département:', error);
+      alert(error?.message || 'Erreur lors de la suppression');
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      slug: '',
+      sequence: 0,
+      isActive: true,
+      moduleSlugs: []
+    });
+  };
+
+  const openEditModal = (dept: Department) => {
+    if (!canWriteModule) return;
+    setEditingDept(dept);
+    setFormData({
+      name: dept.name,
+      slug: dept.slug,
+      sequence: dept.sequence ?? 0,
+      isActive: dept.isActive ?? true,
+      moduleSlugs: dept.moduleSlugs ? [...dept.moduleSlugs] : []
+    });
+  };
+
+  const toggleModuleSlug = (slug: ModuleName) => {
+    setFormData(prev => ({
+      ...prev,
+      moduleSlugs: prev.moduleSlugs.includes(slug)
+        ? prev.moduleSlugs.filter(m => m !== slug)
+        : [...prev.moduleSlugs, slug]
+    }));
+  };
+
+  if (!canReadModule) {
+    return (
+      <AccessDenied description="Vous n'avez pas les permissions nécessaires pour gérer les départements." />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Départements</h1>
+              <p className="text-emerald-50 text-sm">
+                Gérez les départements de votre organisation et les modules autorisés
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (!canWriteModule) return;
+                setEditingDept(null);
+                resetForm();
+                setShowCreateModal(true);
+              }}
+              disabled={!canWriteModule || !organizationId}
+              className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
+                canWriteModule && organizationId ? 'hover:bg-emerald-50' : 'opacity-60 cursor-not-allowed'
+              }`}
+            >
+              <i className="fas fa-plus mr-2"></i>
+              Nouveau Département
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!organizationId ? (
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <p className="text-gray-600">Aucune organisation associée à votre compte.</p>
+          </div>
+        ) : loading ? (
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Chargement des départements...</p>
+          </div>
+        ) : departments.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <i className="fas fa-sitemap text-6xl text-gray-300 mb-4"></i>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">Aucun département</h3>
+            <p className="text-gray-500">Créez le premier département pour votre organisation</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Slug</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordre</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Modules</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                  {canWriteModule && <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {departments.map(dept => (
+                  <tr key={dept.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{dept.slug}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{dept.sequence ?? 0}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {(dept.moduleSlugs?.length ?? 0) > 0
+                        ? (dept.moduleSlugs ?? []).map(s => moduleDisplayNames[s] || s).join(', ')
+                        : '—'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${dept.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {dept.isActive ? 'Actif' : 'Inactif'}
+                      </span>
+                    </td>
+                    {canWriteModule && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <button onClick={() => openEditModal(dept)} className="text-emerald-600 hover:text-emerald-800 mr-4">Modifier</button>
+                        <button onClick={() => setDeleteConfirm(dept.id)} className="text-red-600 hover:text-red-800">Supprimer</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal création / édition */}
+      {(showCreateModal || editingDept) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-2xl font-bold text-gray-800">
+                {editingDept ? 'Modifier le Département' : 'Nouveau Département'}
+              </h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Ex: RH, Juridique"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Slug <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase().trim().replace(/\s+/g, '-') })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Ex: rh, juridique"
+                  disabled={!!editingDept}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ordre d'affichage</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formData.sequence}
+                    onChange={e => setFormData({ ...formData, sequence: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                {editingDept && (
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-sm text-gray-700">Actif</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Modules autorisés pour ce département</label>
+                <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {ALL_MODULE_NAMES.map(slug => (
+                    <label key={slug} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.moduleSlugs.includes(slug)}
+                        onChange={() => toggleModuleSlug(slug)}
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-sm text-gray-700">{moduleDisplayNames[slug] ?? slug}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                onClick={() => { setShowCreateModal(false); setEditingDept(null); resetForm(); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={editingDept ? handleUpdate : handleCreate}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+              >
+                {editingDept ? 'Enregistrer' : 'Créer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation suppression */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md">
+            <p className="text-gray-800 mb-4">Supprimer ce département ? Les assignations utilisateurs seront également supprimées.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 border border-gray-300 rounded-lg">Annuler</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DepartmentManagement;

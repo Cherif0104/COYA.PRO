@@ -1,6 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { User } from '../types';
+import { DEFAULT_POSTES, getPosteNameById } from '../constants/postes';
+import OrganizationService from '../services/organizationService';
+import * as postesService from '../services/postesService';
 
 interface UserProfileEditProps {
   user: User;
@@ -25,9 +28,62 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
   const [email, setEmail] = useState(user.email || '');
   const [phone, setPhone] = useState(user.phone || '');
   const [location, setLocation] = useState(user.location || '');
+  const [posteId, setPosteId] = useState(user.posteId || '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>(user.avatar || '');
+  const [postesOptions, setPostesOptions] = useState<{ id: string; name: string }[]>(DEFAULT_POSTES);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [showCreatePosteModal, setShowCreatePosteModal] = useState(false);
+  const [newPosteName, setNewPosteName] = useState('');
+  const [creatingPoste, setCreatingPoste] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgId = await OrganizationService.getCurrentUserOrganizationId();
+        if (cancelled) return;
+        setOrganizationId(orgId ?? null);
+        const list = await postesService.listPostes(orgId ?? null);
+        if (cancelled) return;
+        setPostesOptions(list.length > 0 ? list.map(p => ({ id: p.id, name: p.name })) : DEFAULT_POSTES);
+      } catch {
+        if (!cancelled) setPostesOptions(DEFAULT_POSTES);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handlePosteSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    if (v === '__create__') {
+      setShowCreatePosteModal(true);
+      setNewPosteName('');
+      return;
+    }
+    setPosteId(v);
+  };
+
+  const handleCreatePosteAndSelect = async () => {
+    const name = newPosteName.trim();
+    if (!name) return;
+    setCreatingPoste(true);
+    try {
+      const created = await postesService.createPoste({
+        organizationId: organizationId ?? null,
+        name,
+      });
+      setPostesOptions(prev => [...prev, { id: created.id, name: created.name }]);
+      setPosteId(created.id);
+      setShowCreatePosteModal(false);
+      setNewPosteName('');
+    } catch (err: any) {
+      setError(err?.message || 'Erreur lors de la création du poste');
+    } finally {
+      setCreatingPoste(false);
+    }
+  };
 
   // Générer les initiales pour l'avatar
   const getInitials = (first: string, last: string): string => {
@@ -77,6 +133,8 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
         email,
         phone: phone || undefined,
         location: location || undefined,
+        posteId: posteId || undefined,
+        posteName: posteId ? (postesOptions.find(p => p.id === posteId)?.name ?? getPosteNameById(posteId) ?? undefined) : undefined,
         avatar: avatarPreview || undefined, // Toujours inclure l'avatar (nouveau ou existant)
       };
 
@@ -246,6 +304,62 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
               placeholder="Ville, Pays"
             />
           </div>
+
+          {/* Poste (intitulé) – liste + Créer et enregistrer (extensibilité Odoo) */}
+          <div>
+            <label htmlFor="poste" className="block text-sm font-medium text-gray-700 mb-2">
+              {t('poste_label')}
+            </label>
+            <select
+              id="poste"
+              value={posteId}
+              onChange={handlePosteSelectChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">—</option>
+              {postesOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              <option value="__create__">+ Créer un nouveau poste...</option>
+            </select>
+          </div>
+
+          {/* Modal Créer et enregistrer (poste) */}
+          {showCreatePosteModal && (
+            <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[60] p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Nouveau poste</h3>
+                <input
+                  type="text"
+                  value={newPosteName}
+                  onChange={(e) => setNewPosteName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreatePosteAndSelect()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 mb-4"
+                  placeholder="Ex: Directeur de programme"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreatePosteModal(false); setNewPosteName(''); setError(null); }}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreatePosteAndSelect}
+                    disabled={!newPosteName.trim() || creatingPoste}
+                    className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {creatingPoste ? 'Création...' : 'Créer et enregistrer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Aperçu de l'avatar avec initiales */}
           <div className="bg-gray-50 p-4 rounded-lg">
