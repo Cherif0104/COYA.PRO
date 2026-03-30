@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from './contexts/AuthContextSupabase';
 import { authGuard } from './middleware/authGuard';
 import { mockProjects, mockGoals } from './constants/data';
-import { Course, Job, Project, Objective, Contact, Document, User, Role, TimeLog, LeaveRequest, Invoice, Expense, AppNotification, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting } from './types';
+import { Course, Job, Project, Objective, Contact, Document, User, Role, TimeLog, LeaveRequest, Invoice, Expense, AppNotification, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, ProjectModuleSettings } from './types';
 import { useLocalization } from './contexts/LocalizationContext';
 import DataAdapter from './services/dataAdapter';
 import DataService from './services/dataService';
@@ -17,6 +17,7 @@ import StatusSelectorModal from './components/StatusSelectorModal';
 import { getSkipStatusSelector } from './components/StatusSelector';
 import Header from './components/Header';
 import { PresenceProvider } from './contexts/PresenceContext';
+import { AppNavigationContext } from './contexts/AppNavigationContext';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Courses from './components/Courses';
@@ -50,6 +51,7 @@ import RhModule from './components/RhModule';
 import Planning from './components/Planning';
 import LoadingOverlay from './components/common/LoadingOverlay';
 import { getModuleViewComponent } from './viewRegistry';
+import { runWorkflowCycle, WorkflowKpiSnapshot } from './services/workflowEngine';
 
 
 const App: React.FC = () => {
@@ -113,6 +115,8 @@ const App: React.FC = () => {
   const [budgets, setBudgets] = useState<Budget[]>([]); // Plus de données mockées - uniquement Supabase
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [reminderDays, setReminderDays] = useState<number>(3);
+  const [projectModuleSettings, setProjectModuleSettings] = useState<ProjectModuleSettings | null>(null);
+  const [workflowKpis, setWorkflowKpis] = useState<WorkflowKpiSnapshot | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [pendingNotification, setPendingNotification] = useState<{ entityType: string; entityId?: string; metadata?: Record<string, any> } | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -121,6 +125,7 @@ const App: React.FC = () => {
   const [newPasswordMsg, setNewPasswordMsg] = useState<string | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const mainScrollRef = useRef<HTMLElement>(null);
+  const automationCycleRunningRef = useRef(false);
 
   const handleMainScroll = useCallback(() => {
     const el = mainScrollRef.current;
@@ -1021,6 +1026,165 @@ const App: React.FC = () => {
     setNotifications(newNotifications.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
 
   }, [invoices, expenses, reminderDays, t]);
+
+  // Charger la configuration du module projet (seuils d'alertes, gel auto, etc.)
+  useEffect(() => {
+    if (!user?.id) return;
+    let isCancelled = false;
+    const loadProjectSettings = async () => {
+      try {
+        const settings = await DataAdapter.getProjectModuleSettings();
+        if (!isCancelled) {
+          setProjectModuleSettings(settings);
+        }
+      } catch (error) {
+        console.error('Erreur chargement settings projet:', error);
+      }
+    };
+    loadProjectSettings();
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
+
+  // Cycle d'automatisation transverse (Projets / Planification / RH / Finance / Programme)
+  useEffect(() => {
+    if (!isDataLoaded || !user?.id) return;
+    if (automationCycleRunningRef.current) return;
+
+    let isCancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (isCancelled || automationCycleRunningRef.current) return;
+      automationCycleRunningRef.current = true;
+      try {
+        const cycle = runWorkflowCycle({
+          projects,
+          objectives,
+          leaveRequests,
+          invoices,
+          expenses,
+          budgets,
+          meetings,
+          users,
+          settings: projectModuleSettings,
+          currentUserId: String(user.profileId || user.id),
+        });
+
+        setWorkflowKpis(cycle.kpis);
+
+        if (cycle.updatedProjects.length > 0) {
+          updateProjectsWithProducer((prev) => prev.map((project) => {
+            const updated = cycle.updatedProjects.find((item) => String(item.id) === String(project.id));
+            return updated || project;
+          }));
+          await Promise.all(
+            cycle.updatedProjects.map(async (project) => {
+              try {
+                await DataAdapter.updateProject(project);
+              } catch (error) {
+                console.error('Erreur persistance auto projet:', error);
+              }
+            })
+          );
+        }
+
+        if (cycle.updatedObjectives.length > 0) {
+          setObjectives((prev) => prev.map((objective) => {
+            const updated = cycle.updatedObjectives.find((item) => String(item.id) === String(objective.id));
+            return updated || objective;
+          }));
+          await Promise.all(
+            cycle.updatedObjectives.map(async (objective) => {
+              try {
+                await DataAdapter.updateObjective(String(objective.id), objective);
+              } catch (error) {
+                console.error('Erreur persistance auto objectif:', error);
+              }
+            })
+          );
+        }
+
+        if (cycle.updatedInvoices.length > 0) {
+          setInvoices((prev) => prev.map((invoice) => {
+            const updated = cycle.updatedInvoices.find((item) => String(item.id) === String(invoice.id));
+            return updated || invoice;
+          }));
+          await Promise.all(
+            cycle.updatedInvoices.map(async (invoice) => {
+              try {
+                await DataAdapter.updateInvoice(String(invoice.id), invoice);
+              } catch (error) {
+                console.error('Erreur persistance auto facture:', error);
+              }
+            })
+          );
+        }
+
+        if (cycle.actions.length > 0) {
+          const defaultRecipient = String(user.profileId || user.id);
+          const deliveries = cycle.actions.flatMap((action) => {
+            const recipients = action.targetUserIds.length > 0 ? action.targetUserIds : [defaultRecipient];
+            return recipients.map((recipientId) => ({
+              userId: recipientId,
+              action,
+            }));
+          });
+          await Promise.all(
+            deliveries.map(async ({ userId: recipientId, action }) => {
+              try {
+                await DataService.createNotification({
+                  userId: recipientId,
+                  message: action.message,
+                  type: action.severity,
+                  entityId: action.entityId,
+                  read: false,
+                });
+              } catch (error) {
+                console.error('Erreur notification auto workflow:', error);
+              }
+            })
+          );
+
+          try {
+            AuditLogService.logAction({
+              action: 'automate',
+              module: 'workflow',
+              entityType: 'workflow_cycle',
+              entityId: cycle.kpis.cycleAt,
+              actor: user as any,
+              metadata: {
+                summary: `Cycle automation: ${cycle.actions.length} action(s), ${cycle.updatedProjects.length} projet(s), ${cycle.updatedObjectives.length} objectif(s), ${cycle.updatedInvoices.length} facture(s).`,
+                kpis: cycle.kpis,
+              },
+            });
+          } catch (error) {
+            console.error('Erreur audit cycle workflow:', error);
+          }
+        }
+      } finally {
+        automationCycleRunningRef.current = false;
+      }
+    }, 350);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    isDataLoaded,
+    user?.id,
+    user?.profileId,
+    projects,
+    objectives,
+    leaveRequests,
+    invoices,
+    expenses,
+    budgets,
+    meetings,
+    users,
+    projectModuleSettings,
+    updateProjectsWithProducer,
+  ]);
 
   // Overlay de chargement unique : initialisation et vérification auth
   if (!isInitialized || (authLoading && !user)) {
@@ -2173,7 +2337,7 @@ const App: React.FC = () => {
     }
   };
   
-  const handleDeleteProject = async (projectId: number) => {
+  const handleDeleteProject = async (projectId: string | number) => {
     setLoadingOperation('delete');
     setIsLoading(true);
     
@@ -2182,10 +2346,11 @@ const App: React.FC = () => {
       const result = await DataAdapter.deleteProject(projectId);
       
       if (result) {
-        const allowedIdsAfterDeletion = updateProjectsWithProducer(prev => prev.filter(p => p.id !== projectId));
+        const projectIdStr = String(projectId);
+        const allowedIdsAfterDeletion = updateProjectsWithProducer(prev => prev.filter(p => String(p.id) !== projectIdStr));
         // Also delete related OKRs
-        setObjectives(prev => filterObjectivesForUser(prev.filter(o => o.projectId !== projectId), allowedIdsAfterDeletion));
-        updateTimeLogsWithProducer(prev => prev.filter(log => !(log.entityType === 'project' && String(log.entityId) === String(projectId))));
+        setObjectives(prev => filterObjectivesForUser(prev.filter(o => String(o.projectId) !== projectIdStr), allowedIdsAfterDeletion));
+        updateTimeLogsWithProducer(prev => prev.filter(log => !(log.entityType === 'project' && String(log.entityId) === projectIdStr)));
         console.log('✅ Projet supprimé avec succès');
         AuditLogService.logAction({
           action: 'delete',
@@ -2723,6 +2888,8 @@ const App: React.FC = () => {
                     onDeleteContact={handleDeleteContact}
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
+                    canAccessModule={canAccessModule}
+                    setView={handleSetView}
                 />;
       case 'knowledge_base':
         return <KnowledgeBase 
@@ -2751,32 +2918,37 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                 />;
+      case 'comptabilite':
       case 'finance':
-        return <Finance 
-                    invoices={invoices}
-                    expenses={expenses}
-                    recurringInvoices={recurringInvoices}
-                    recurringExpenses={recurringExpenses}
-                    budgets={budgets}
-                    projects={projects}
-                    onAddInvoice={handleAddInvoice}
-                    onUpdateInvoice={handleUpdateInvoice}
-                    onDeleteInvoice={handleDeleteInvoice}
-                    onAddExpense={handleAddExpense}
-                    onUpdateExpense={handleUpdateExpense}
-                    onDeleteExpense={handleDeleteExpense}
-                    onAddRecurringInvoice={handleAddRecurringInvoice}
-                    onUpdateRecurringInvoice={handleUpdateRecurringInvoice}
-                    onDeleteRecurringInvoice={handleDeleteRecurringInvoice}
-                    onAddRecurringExpense={handleAddRecurringExpense}
-                    onUpdateRecurringExpense={handleUpdateRecurringExpense}
-                    onDeleteRecurringExpense={handleDeleteRecurringExpense}
-                    onAddBudget={handleAddBudget}
-                    onUpdateBudget={handleUpdateBudget}
-                    onDeleteBudget={handleDeleteBudget}
-                    isLoading={isLoading}
-                    loadingOperation={loadingOperation}
-                />;
+        return (
+          <Finance
+            invoices={invoices}
+            expenses={expenses}
+            recurringInvoices={recurringInvoices}
+            recurringExpenses={recurringExpenses}
+            budgets={budgets}
+            projects={projects}
+            onAddInvoice={handleAddInvoice}
+            onUpdateInvoice={handleUpdateInvoice}
+            onDeleteInvoice={handleDeleteInvoice}
+            onAddExpense={handleAddExpense}
+            onUpdateExpense={handleUpdateExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onAddRecurringInvoice={handleAddRecurringInvoice}
+            onUpdateRecurringInvoice={handleUpdateRecurringInvoice}
+            onDeleteRecurringInvoice={handleDeleteRecurringInvoice}
+            onAddRecurringExpense={handleAddRecurringExpense}
+            onUpdateRecurringExpense={handleUpdateRecurringExpense}
+            onDeleteRecurringExpense={handleDeleteRecurringExpense}
+            onAddBudget={handleAddBudget}
+            onUpdateBudget={handleUpdateBudget}
+            onDeleteBudget={handleDeleteBudget}
+            isLoading={isLoading}
+            loadingOperation={loadingOperation}
+            moduleTitle={currentView === 'comptabilite' ? 'Comptabilité' : undefined}
+            moduleSubtitle={currentView === 'comptabilite' ? 'Facturation, dépenses, budgets et trésorerie.' : undefined}
+          />
+        );
       case 'analytics':
         return <Analytics setView={handleSetView} users={users} projects={projects} courses={courses} jobs={jobs} />;
       case 'talent_analytics':
@@ -2787,6 +2959,7 @@ const App: React.FC = () => {
             leaveRequests={leaveRequests}
             users={users}
             jobs={jobs}
+            setJobs={setJobs}
             setView={handleSetView}
             onAddLeaveRequest={handleAddLeaveRequest}
             onUpdateLeaveRequest={handleUpdateLeaveRequest}
@@ -2819,6 +2992,7 @@ const App: React.FC = () => {
             onDeleteJob={handleDeleteJob}
             isLoading={isLoading}
             loadingOperation={loadingOperation}
+            automationKpis={workflowKpis}
           />
         );
       default:
@@ -2832,6 +3006,7 @@ const App: React.FC = () => {
   
   return (
     <PresenceProvider>
+    <AppNavigationContext.Provider value={{ setView: handleSetView }}>
     <div className="flex h-screen overflow-hidden bg-coya-bg">
       <Sidebar
         currentView={currentView}
@@ -2869,7 +3044,18 @@ const App: React.FC = () => {
           <i className="fas fa-arrow-up" />
         </button>
       )}
-      <AIAgent currentView={currentView} />
+      <AIAgent
+        currentView={currentView}
+        onOpenMessaging={(target) => {
+          try {
+            localStorage.setItem('coya_messaging_default_tab', target === 'direct' ? 'direct' : 'channels');
+          } catch {
+            // ignore
+          }
+          handleSetView('messagerie');
+        }}
+        onOpenTicketIT={() => handleSetView('ticket_it')}
+      />
       {/* Modal nouveau mot de passe — style COYA */}
       {showNewPasswordModal && (
         <div
@@ -2897,6 +3083,7 @@ const App: React.FC = () => {
         </div>
       )}
     </div>
+    </AppNavigationContext.Provider>
     </PresenceProvider>
   );
 };

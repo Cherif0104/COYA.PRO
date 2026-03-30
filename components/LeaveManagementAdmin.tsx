@@ -66,7 +66,7 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">
+      <div className="flex items-center justify-center py-12 text-slate-600">
         <p>Veuillez vous connecter pour gérer les demandes de congés.</p>
       </div>
     );
@@ -162,10 +162,10 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
 
   const getStatusBadge = (status: string) => {
     const styles = {
-      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'approved': 'bg-green-100 text-green-800 border-green-300',
+      'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+      'approved': 'bg-emerald-100 text-emerald-800 border-emerald-300',
       'rejected': 'bg-red-100 text-red-800 border-red-300',
-      'cancelled': 'bg-gray-100 text-gray-800 border-gray-300',
+      'cancelled': 'bg-slate-100 text-slate-700 border-slate-300',
     };
     
     const labels = {
@@ -197,97 +197,62 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header avec gradient */}
-      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Gestion des Demandes de Congés</h1>
-              <p className="text-emerald-50 text-sm">
-                Validez et gérez toutes les demandes de congés de vos collaborateurs
-              </p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Total demandes</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalRequests}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200/70 bg-white p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">En attente</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{pendingRequests}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200/70 bg-white p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Approuvées</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{approvedRequests}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Rejetées</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{rejectedRequests}</p>
         </div>
       </div>
 
-      {/* Métriques Power BI style */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Demandes</span>
-              <i className="fas fa-calendar-alt text-2xl text-blue-500"></i>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <div className="relative">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Rechercher une demande..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+              />
             </div>
-            <p className="text-3xl font-bold text-gray-900">{totalRequests}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">En Attente</span>
-              <i className="fas fa-clock text-2xl text-yellow-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{pendingRequests}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Approuvées</span>
-              <i className="fas fa-check-circle text-2xl text-green-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{approvedRequests}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Rejetées</span>
-              <i className="fas fa-times-circle text-2xl text-red-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{rejectedRequests}</p>
-          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
+          >
+            <option value="all">Tous les statuts</option>
+            <option value="pending">En attente</option>
+            <option value="approved">Approuvé</option>
+            <option value="rejected">Rejeté</option>
+            <option value="cancelled">Annulé</option>
+          </select>
+        </div>
+        <div className="mt-3 pt-3 border-t border-slate-200 text-sm text-slate-500">
+          {filteredRequests.length} {filteredRequests.length > 1 ? 'demandes trouvées' : 'demande trouvée'}
         </div>
       </div>
 
-      {/* Barre de recherche et filtres */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                <input
-                  type="text"
-                  placeholder="Rechercher une demande..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            >
-              <option value="all">Tous les statuts</option>
-              <option value="pending">En attente</option>
-              <option value="approved">Approuvé</option>
-              <option value="rejected">Rejeté</option>
-              <option value="cancelled">Annulé</option>
-            </select>
-          </div>
-
-          {/* Compteur de résultats */}
-          <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600">
-            {filteredRequests.length} {filteredRequests.length > 1 ? 'demandes trouvées' : 'demande trouvée'}
-          </div>
-        </div>
-
-        {/* Liste des demandes */}
-        {filteredRequests.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-            <i className="fas fa-calendar-alt text-6xl text-gray-300 mb-4"></i>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Aucune demande trouvée</h3>
-            <p className="text-gray-500">
+      {filteredRequests.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+            <i className="fas fa-calendar-alt text-5xl text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Aucune demande trouvée</h3>
+            <p className="text-slate-500">
               {searchQuery || statusFilter !== 'all' 
                 ? 'Aucune demande ne correspond aux critères de recherche' 
                 : 'Aucune demande de congé enregistrée'}
@@ -296,46 +261,42 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
         ) : (
           <div className="space-y-4">
             {filteredRequests.map(request => (
-              <div key={request.id} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200">
+              <div key={request.id} className="bg-white p-6 rounded-xl border border-slate-200 hover:bg-slate-50/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-grow">
                     <div className="flex items-center gap-3 mb-3">
                       {request.userAvatar && (
-                        <img 
-                          src={request.userAvatar} 
-                          alt={request.userName} 
-                          className="w-12 h-12 rounded-full"
-                        />
+                        <img src={request.userAvatar} alt={request.userName} className="w-12 h-12 rounded-full" />
                       )}
                       <div>
-                        <h3 className="text-xl font-bold text-gray-800">{request.userName || 'Utilisateur inconnu'}</h3>
-                        <p className="text-sm text-gray-500">{request.leaveTypeName || 'Type de congé non spécifié'}</p>
+                        <h3 className="text-lg font-semibold text-slate-900">{request.userName || 'Utilisateur inconnu'}</h3>
+                        <p className="text-sm text-slate-500">{request.leaveTypeName || 'Type de congé non spécifié'}</p>
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3 text-sm">
                       <div>
-                        <p className="text-gray-500 mb-1">Date de début</p>
-                        <p className="font-semibold text-gray-800">{formatDate(request.startDate)}</p>
+                        <p className="text-slate-500 mb-1">Date de début</p>
+                        <p className="font-semibold text-slate-900">{formatDate(request.startDate)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500 mb-1">Date de fin</p>
-                        <p className="font-semibold text-gray-800">{formatDate(request.endDate)}</p>
+                        <p className="text-slate-500 mb-1">Date de fin</p>
+                        <p className="font-semibold text-slate-900">{formatDate(request.endDate)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500 mb-1">Durée</p>
-                        <p className="font-semibold text-gray-800">{calculateDays(request.startDate, request.endDate)} jour(s)</p>
+                        <p className="text-slate-500 mb-1">Durée</p>
+                        <p className="font-semibold text-slate-900">{calculateDays(request.startDate, request.endDate)} jour(s)</p>
                       </div>
                     </div>
 
                     <div className="mb-3">
-                      <p className="text-gray-500 mb-1">Motif</p>
-                      <p className="text-gray-800">{request.reason}</p>
+                      <p className="text-slate-500 mb-1">Motif</p>
+                      <p className="text-slate-800">{request.reason}</p>
                     </div>
 
                     {request.isUrgent && (
-                      <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded">
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl">
                         <p className="text-red-800 text-sm font-semibold">
                           <i className="fas fa-exclamation-triangle mr-2"></i>
                           Urgent
@@ -347,13 +308,13 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
                     )}
 
                     {request.approvalReason && (
-                      <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded">
-                        <p className="text-green-800 text-sm"><b>Raison d'approbation:</b> {request.approvalReason}</p>
+                      <div className="mb-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <p className="text-emerald-800 text-sm"><b>Raison d'approbation:</b> {request.approvalReason}</p>
                       </div>
                     )}
 
                     {request.rejectionReason && (
-                      <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                      <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-xl">
                         <p className="text-red-800 text-sm"><b>Raison du rejet:</b> {request.rejectionReason}</p>
                       </div>
                     )}
@@ -364,37 +325,23 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
                       <>
                         {canApproveModule && (
                           <>
-                            <button
-                              onClick={() => handleApproval(request, 'approve')}
-                              className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-md"
-                            >
-                              <i className="fas fa-check mr-2"></i>
-                              Approuver
+                            <button type="button" onClick={() => handleApproval(request, 'approve')} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700">
+                              <i className="fas fa-check mr-2" /> Approuver
                             </button>
-                            <button
-                              onClick={() => handleApproval(request, 'reject')}
-                              className="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 transition-colors shadow-md"
-                            >
-                              <i className="fas fa-times mr-2"></i>
-                              Rejeter
+                            <button type="button" onClick={() => handleApproval(request, 'reject')} className="px-4 py-2 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700">
+                              <i className="fas fa-times mr-2" /> Rejeter
                             </button>
                           </>
                         )}
                         {canWriteModule && (
-                          <button
-                            onClick={() => handleEditDates(request)}
-                            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-md"
-                          >
-                            <i className="fas fa-edit mr-2"></i>
-                            Modifier
+                          <button type="button" onClick={() => handleEditDates(request)} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100">
+                            <i className="fas fa-edit mr-2" /> Modifier
                           </button>
                         )}
                       </>
                     )}
                     {onDeleteLeaveRequest && canDeleteModule && (
-                      <button
-                        onClick={() => handleDelete(request)}
-                        className="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700 transition-colors shadow-md"
+                      <button type="button" onClick={() => handleDelete(request)} className="px-4 py-2 rounded-xl bg-slate-700 text-white font-medium hover:bg-slate-800"
                       >
                         <i className="fas fa-trash mr-2"></i>
                         Supprimer
@@ -406,53 +353,52 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
             ))}
           </div>
         )}
-      </div>
 
       {/* Modal de modification des dates */}
       {showEditDatesModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">
               Modifier les dates de congé
             </h3>
             <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-slate-600 mb-4">
                 <b>Demandeur:</b> {selectedRequest.userName}
               </p>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">
+                  <p className="text-sm text-slate-600 mb-2">
                     <b>Date de début actuelle:</b> {formatDate(selectedRequest.startDate)}
                   </p>
                   <input
                     type="date"
                     value={newStartDate}
                     onChange={(e) => setNewStartDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                   />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">
+                  <p className="text-sm text-slate-600 mb-2">
                     <b>Date de fin actuelle:</b> {formatDate(selectedRequest.endDate)}
                   </p>
                   <input
                     type="date"
                     value={newEndDate}
                     onChange={(e) => setNewEndDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                   />
                 </div>
               </div>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Raison de la modification *
               </label>
               <textarea
                 value={editReason}
                 onChange={(e) => setEditReason(e.target.value)}
                 rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                 placeholder="Ex: La période demandée coïncide avec une période de forte activité. Nous proposons ces dates alternatives..."
               />
             </div>
@@ -465,7 +411,7 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
                   setNewEndDate('');
                   setEditReason('');
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100"
                 disabled={isProcessing}
               >
                 Annuler
@@ -473,7 +419,7 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
               <button
                 onClick={confirmEditDates}
                 disabled={!newStartDate || !newEndDate || !editReason.trim() || isProcessing}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-50"
               >
                 {isProcessing ? 'Traitement...' : 'Modifier les dates'}
               </button>
@@ -484,34 +430,16 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
 
       {/* Modal de suppression */}
       {showDeleteModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              Supprimer la demande
-            </h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Supprimer la demande</h3>
             <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                Êtes-vous sûr de vouloir supprimer la demande de congé de <b>{selectedRequest.userName}</b> ?
-              </p>
-              <p className="text-sm text-gray-600">
-                Cette action est irréversible.
-              </p>
+              <p className="text-sm text-slate-600 mb-2">Êtes-vous sûr de vouloir supprimer la demande de congé de <b>{selectedRequest.userName}</b> ?</p>
+              <p className="text-sm text-slate-600">Cette action est irréversible.</p>
             </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setSelectedRequest(null);
-                }}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
-                disabled={isProcessing}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={isProcessing}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowDeleteModal(false); setSelectedRequest(null); }} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100" disabled={isProcessing}>Annuler</button>
+              <button type="button" onClick={confirmDelete} disabled={isProcessing} className="px-4 py-2 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
               >
                 {isProcessing ? 'Suppression...' : 'Supprimer'}
               </button>
@@ -522,51 +450,24 @@ const LeaveManagementAdmin: React.FC<LeaveManagementAdminProps> = ({
 
       {/* Modal de validation/rejet */}
       {showApprovalModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              {approvalAction === 'approve' ? 'Approuver la demande' : 'Rejeter la demande'}
-            </h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">{approvalAction === 'approve' ? 'Approuver la demande' : 'Rejeter la demande'}</h3>
             <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                Demandeur: <b>{selectedRequest.userName}</b>
-              </p>
-              <p className="text-sm text-gray-600">
-                Période: du {formatDate(selectedRequest.startDate)} au {formatDate(selectedRequest.endDate)}
-              </p>
+              <p className="text-sm text-slate-600 mb-2">Demandeur: <b>{selectedRequest.userName}</b></p>
+              <p className="text-sm text-slate-600">Période: du {formatDate(selectedRequest.startDate)} au {formatDate(selectedRequest.endDate)}</p>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {approvalAction === 'approve' ? 'Raison d\'approbation *' : 'Raison du rejet *'}
-              </label>
-              <textarea
-                value={approvalReason}
-                onChange={(e) => setApprovalReason(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                placeholder={approvalAction === 'approve' ? 'Ex: Congé approuvé, bonne régulation de la charge de travail...' : 'Ex: Congé refusé, période de forte activité...'}
+              <label className="block text-sm font-medium text-slate-700 mb-2">{approvalAction === 'approve' ? 'Raison d\'approbation *' : 'Raison du rejet *'}</label>
+              <textarea value={approvalReason} onChange={(e) => setApprovalReason(e.target.value)} rows={4}
+                className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
+                placeholder={approvalAction === 'approve' ? 'Ex: Congé approuvé...' : 'Ex: Congé refusé...'}
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowApprovalModal(false);
-                  setSelectedRequest(null);
-                  setApprovalReason('');
-                }}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
-                disabled={isProcessing}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={confirmApproval}
-                disabled={!approvalReason.trim() || isProcessing}
-                className={`px-4 py-2 rounded-lg font-semibold ${
-                  approvalAction === 'approve'
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowApprovalModal(false); setSelectedRequest(null); setApprovalReason(''); }} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100" disabled={isProcessing}>Annuler</button>
+              <button type="button" onClick={confirmApproval} disabled={!approvalReason.trim() || isProcessing}
+                className={`px-4 py-2 rounded-xl font-medium ${approvalAction === 'approve' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-50`}
               >
                 {isProcessing ? 'Traitement...' : approvalAction === 'approve' ? 'Approuver' : 'Rejeter'}
               </button>

@@ -86,3 +86,52 @@ body {
 .animate-loading-shape {
   animation: loading-shape-float 8s ease-in-out infinite;
 }
+
+@layer components {
+  .btn-3d-base {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 ease-out select-none;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0;
+  }
+
+  .btn-3d-primary {
+    @apply btn-3d-base text-white;
+    background: var(--coya-primary);
+    box-shadow: 0 5px 0 0 var(--coya-primary-dark), 0 10px 18px rgba(45, 157, 130, 0.2);
+  }
+  .btn-3d-primary:hover {
+    background: var(--coya-primary-light);
+    transform: translateY(-1px);
+  }
+  .btn-3d-primary:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 0 var(--coya-primary-dark);
+  }
+
+  .btn-3d-secondary {
+    @apply btn-3d-base border border-slate-200 bg-white text-slate-700;
+    box-shadow: 0 4px 0 0 #e2e8f0;
+  }
+  .btn-3d-secondary:hover {
+    @apply bg-slate-50;
+    transform: translateY(-1px);
+  }
+  .btn-3d-secondary:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 0 #e2e8f0;
+  }
+
+  .btn-3d-danger {
+    @apply btn-3d-base text-white;
+    background: #dc2626;
+    box-shadow: 0 5px 0 0 #b91c1c, 0 10px 18px rgba(220, 38, 38, 0.2);
+  }
+  .btn-3d-danger:hover {
+    background: #ef4444;
+    transform: translateY(-1px);
+  }
+  .btn-3d-danger:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 0 #b91c1c;
+  }
+}

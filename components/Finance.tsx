@@ -1128,6 +1128,9 @@ interface FinanceProps {
   onAddBudget: (budget: Omit<Budget, 'id'>) => Promise<void> | void;
   onUpdateBudget: (budget: Budget) => Promise<void> | void;
   onDeleteBudget: (budgetId: string) => Promise<void> | void;
+  /** Titre et sous-titre affichés (ex. pour le module Comptabilité) */
+  moduleTitle?: string;
+  moduleSubtitle?: string;
 }
 
 
@@ -1525,9 +1528,9 @@ const Finance: React.FC<FinanceProps> = (props) => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     <div className="flex items-center justify-between">
                         <div className="flex-1">
-                            <h1 className="text-4xl font-bold mb-2">{t('finance_title')}</h1>
+                            <h1 className="text-4xl font-bold mb-2">{props.moduleTitle ?? t('finance_title')}</h1>
                             <p className="text-emerald-50 text-sm">
-                                {t('finance_subtitle')}
+                                {props.moduleSubtitle ?? t('finance_subtitle')}
                             </p>
             </div>
                     {canManage && activeTab !== 'recurring' && (

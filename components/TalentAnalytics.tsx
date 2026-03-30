@@ -14,20 +14,16 @@ interface TalentAnalyticsProps {
 
 const SkillList: React.FC<{ title: string; skills: string[]; color: string }> = ({ title, skills, color }) => (
     <div>
-        <h4 className="font-semibold text-gray-700 mb-3">{title}</h4>
+        <h4 className="font-semibold text-slate-700 mb-3">{title}</h4>
         <div className="flex flex-wrap gap-2">
             {skills.map((skill, index) => (
-                <span 
-                    key={index}
-                    className="text-sm font-medium px-3 py-1 rounded-full text-white"
-                    style={{ backgroundColor: color }}
-                >
+                <span key={index} className="text-sm font-medium px-3 py-1 rounded-full text-white" style={{ backgroundColor: color }}>
                     {skill}
                 </span>
             ))}
         </div>
         {skills.length === 0 && (
-            <p className="text-sm text-gray-400 italic">Aucune compétence disponible</p>
+            <p className="text-sm text-slate-400 italic">Aucune compétence disponible</p>
         )}
     </div>
 );
@@ -143,72 +139,32 @@ Format: Markdown clair avec sections et listes. Ton professionnel, concis.`;
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 via-green-500 to-blue-600 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <button 
-                                onClick={() => setView('analytics')} 
-                                className="flex items-center text-white hover:text-emerald-100 transition-colors"
-                            >
-                <i className="fas fa-arrow-left mr-2"></i>
-            </button>
-                            <div>
-                                <h1 className="text-4xl font-bold mb-2">👥 Talent Analytics</h1>
-                                <p className="text-emerald-50 text-sm">
-                                    Analysez les compétences et talents de votre organisation
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Talents actifs</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.activeUsers}</p>
+                    <p className="text-xs text-slate-500 mt-1">utilisateurs actifs</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Compétences</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.totalSkills}</p>
+                    <p className="text-xs text-slate-500 mt-1">compétences totales</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Moyenne</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.avgSkillsPerUser}</p>
+                    <p className="text-xs text-slate-500 mt-1">compétences/utilisateur</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Offres actives</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.activeJobs}</p>
+                    <p className="text-xs text-slate-500 mt-1">postes disponibles</p>
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-                {/* Métriques Power BI style */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Talents Actifs</span>
-                            <i className="fas fa-users text-2xl text-blue-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{metrics.activeUsers}</p>
-                        <p className="text-xs text-gray-500 mt-1">utilisateurs actifs</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Compétences</span>
-                            <i className="fas fa-tags text-2xl text-green-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{metrics.totalSkills}</p>
-                        <p className="text-xs text-gray-500 mt-1">compétences totales</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Moyenne</span>
-                            <i className="fas fa-chart-bar text-2xl text-purple-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{metrics.avgSkillsPerUser}</p>
-                        <p className="text-xs text-gray-500 mt-1">compétences/utilisateur</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Offres Actives</span>
-                            <i className="fas fa-briefcase text-2xl text-orange-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{metrics.activeJobs}</p>
-                        <p className="text-xs text-gray-500 mt-1">postes disponibles</p>
-                    </div>
-                </div>
-
-                {/* Analyse des compétences */}
-                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-gray-100 mb-8">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">📊 Écart de Compétences</h3>
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Écart de compétences</h3>
                     <div className="flex items-center justify-center h-48 mb-6">
                         <div className="grid grid-cols-3 gap-8">
                             {skillChartData.map((item, index) => (
@@ -219,78 +175,51 @@ Format: Markdown clair avec sections et listes. Ton professionnel, concis.`;
                                     >
                                         {item.value}
                                     </div>
-                                    <p className="text-sm font-medium text-gray-700">{item.label}</p>
+                                    <p className="text-sm font-medium text-slate-700">{item.label}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Compétences demandées */}
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4">💼 Compétences Demandées</h3>
-                        <SkillList 
-                            title="Top 10 des compétences demandées"
-                            skills={skillsData.demanded}
-                            color="#f59e0b"
-                        />
-                    </div>
-
-                    {/* Compétences disponibles */}
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4">✅ Compétences Disponibles</h3>
-                        <SkillList 
-                            title="Top 10 des compétences disponibles"
-                            skills={skillsData.available}
-                            color="#10b981"
-                        />
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Compétences demandées</h3>
+                    <SkillList title="Top 10 des compétences demandées" skills={skillsData.demanded} color="#f59e0b" />
                 </div>
-
-                {/* Compétences en déficit */}
-                <div className="mt-8 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">⚠️ Compétences en Déficit</h3>
-                    {skillsGap.length > 0 ? (
-                        <SkillList 
-                            title="Compétences demandées mais non disponibles"
-                            skills={skillsGap}
-                            color="#ef4444"
-                        />
-                    ) : (
-                        <div className="text-center py-8">
-                            <i className="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
-                            <p className="text-gray-600">Excellent ! Toutes les compétences demandées sont disponibles dans votre organisation.</p>
-                        </div>
-                    )}
+                <div className="bg-white rounded-xl border border-slate-200 p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Compétences disponibles</h3>
+                    <SkillList title="Top 10 des compétences disponibles" skills={skillsData.available} color="#10b981" />
                 </div>
+            </div>
 
-                {/* Talent Forecasting */}
-                <div className="mt-8 bg-gradient-to-br from-emerald-50 to-blue-50 p-6 rounded-xl shadow-lg border border-emerald-200">
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">🔮 Prédiction des Talents</h3>
-                    <p className="text-sm text-gray-600 mb-6">Analyse IA basée sur vos compétences disponibles/demandées et les offres publiées.</p>
-
-                    <div className="bg-white p-6 border rounded-lg">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <i className="fas fa-magic text-emerald-600"></i>
-                                <span className="text-sm text-gray-700">Prévoir les besoins (3-6 mois)</span>
-                            </div>
-                            <button 
-                                onClick={handlePredictTalents}
-                                disabled={isPredicting || !canWriteModule}
-                                className="bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60"
-                            >
-                                {isPredicting ? 'Analyse…' : t('forecast_needs')}
-                            </button>
-                        </div>
-                        {forecast && (
-                            <div className="mt-4 p-4 bg-gray-50 border rounded-lg max-h-96 overflow-auto text-sm whitespace-pre-wrap">
-                                {forecast}
-                            </div>
-                        )}
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Compétences en déficit</h3>
+                {skillsGap.length > 0 ? (
+                    <SkillList title="Compétences demandées mais non disponibles" skills={skillsGap} color="#ef4444" />
+                ) : (
+                    <div className="text-center py-8">
+                        <i className="fas fa-check-circle text-5xl text-emerald-500 mb-4" />
+                        <p className="text-slate-600">Toutes les compétences demandées sont disponibles dans votre organisation.</p>
                     </div>
+                )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Prédiction des talents</h3>
+                <p className="text-sm text-slate-600 mb-4">Analyse IA basée sur vos compétences et les offres publiées.</p>
+                <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <span className="text-sm text-slate-700"><i className="fas fa-magic text-emerald-600 mr-2" />Prévoir les besoins (3-6 mois)</span>
+                    <button type="button" onClick={handlePredictTalents} disabled={isPredicting || !canWriteModule}
+                        className="px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-50">
+                        {isPredicting ? 'Analyse…' : t('forecast_needs')}
+                    </button>
                 </div>
+                {forecast && (
+                    <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl max-h-96 overflow-auto text-sm whitespace-pre-wrap text-slate-700">
+                        {forecast}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 import { Job, User } from '../types';
 
 const CircularProgress: React.FC<{ score: number }> = ({ score }) => {
@@ -118,12 +119,13 @@ const ApplicantsModal: React.FC<{ job: Job; onClose: () => void }> = ({ job, onC
 };
 
 
-const JobRow: React.FC<{ job: Job, onApply: (jobId: number) => void, onShowApplicants: (job: Job) => void, currentUser: User }> = ({ job, onApply, onShowApplicants, currentUser }) => {
+const JobRow: React.FC<{ job: Job, onApply: (jobId: number, source: 'online' | 'email' | 'link') => void, onShowApplicants: (job: Job) => void, currentUser: User, canManageJobs?: boolean }> = ({ job, onApply, onShowApplicants, currentUser, canManageJobs }) => {
   const { t } = useLocalization();
   const hasApplied = job.applicants.some(app => app.id === currentUser.id);
+  const showApplicants = Boolean(canManageJobs) || currentUser.role === 'employer' || currentUser.role === 'administrator' || currentUser.role === 'super_administrator';
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200">
+    <div className="bg-white p-6 rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all">
       <div className="flex flex-col lg:flex-row lg:items-start gap-6">
         {/* Contenu principal */}
         <div className="flex-grow">
@@ -217,21 +219,14 @@ const JobRow: React.FC<{ job: Job, onApply: (jobId: number) => void, onShowAppli
 
         {/* Actions */}
         <div className="flex flex-col gap-3 lg:min-w-[200px]">
-        {currentUser.role === 'employer' || currentUser.role === 'administrator' || currentUser.role === 'super_administrator' ? (
-            <button 
-              onClick={() => onShowApplicants(job)} 
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-md"
-            >
+        {showApplicants ? (
+            <button type="button" onClick={() => onShowApplicants(job)} className="btn-3d-secondary">
               <i className="fas fa-users mr-2"></i>
-              Voir candidats ({job.applicants.length})
-          </button>
+              Voir candidats ({job.applicants?.length ?? 0})
+            </button>
         ) : (
-          <button 
-            onClick={() => handleApply(job.id, 'online')} 
-            disabled={hasApplied}
-              className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
-            >
-              <i className={`fas ${hasApplied ? 'fa-check' : 'fa-paper-plane'} mr-2`}></i>
+          <button type="button" onClick={() => onApply(job.id, 'online')} disabled={hasApplied} className="btn-3d-primary disabled:opacity-50 disabled:cursor-not-allowed">
+            <i className={`fas ${hasApplied ? 'fa-check' : 'fa-paper-plane'} mr-2`}></i>
             {hasApplied ? t('applied') : t('apply_now')}
           </button>
         )}
@@ -278,6 +273,14 @@ interface JobsProps {
 const Jobs: React.FC<JobsProps> = ({ jobs, setJobs, setView }) => {
   const { t } = useLocalization();
   const { user } = useAuth();
+  const { canAccessModule, hasPermission } = useModulePermissions();
+  const canManageJobs = useMemo(() => {
+    try {
+      return Boolean(canAccessModule && hasPermission && canAccessModule('job_management') && hasPermission('job_management', 'write'));
+    } catch {
+      return false;
+    }
+  }, [canAccessModule, hasPermission]);
   const [modalJob, setModalJob] = useState<Job | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState<string>('all');
@@ -365,8 +368,8 @@ const Jobs: React.FC<JobsProps> = ({ jobs, setJobs, setView }) => {
   };
   
   if (!user) return null;
-  
-  const isPrivilegedUser = user.role === 'employer' || user.role === 'administrator' || user.role === 'super_administrator';
+
+  const isPrivilegedUser = Boolean(canManageJobs) || user.role === 'employer' || user.role === 'administrator' || user.role === 'super_administrator';
 
   // Extraire toutes les localisations uniques
   const locations = [...new Set(jobs.map(job => job.location).filter(Boolean))].sort();
@@ -395,60 +398,56 @@ const Jobs: React.FC<JobsProps> = ({ jobs, setJobs, setView }) => {
   const openJobs = jobs.filter(j => j.status === 'published' && j.applicants?.length === 0).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header moderne avec gradient */}
-      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold mb-2">{isPrivilegedUser ? 'Mes Offres d\'Emploi' : t('job_openings')}</h1>
-              <p className="text-emerald-50 text-sm">
-                {isPrivilegedUser ? 'Gérez vos offres d\'emploi' : 'Consultez les opportunités de carrière'}
-              </p>
-            </div>
-            {isPrivilegedUser && (
-              <button 
-                onClick={() => setView('create_job')} 
-                className="bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg hover:bg-emerald-50 flex items-center shadow-md transition-all"
-              >
-                    <i className="fas fa-plus mr-2"></i>
-                Nouvelle Offre
-                </button>
-            )}
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isPrivilegedUser ? (t('job_openings') || 'Offres d\'emploi') : t('job_openings')}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {isPrivilegedUser ? 'Gérez vos offres et candidatures.' : 'Consultez les opportunités et postulez.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {Boolean(canManageJobs) && (
+            <button
+              type="button"
+              onClick={() => setView('job_management')}
+              className="btn-3d-secondary"
+            >
+              <i className="fas fa-cog mr-2" />
+              {t('job_management') || 'Gestion des offres'}
+            </button>
+          )}
+          {isPrivilegedUser && (
+            <button
+              type="button"
+              onClick={() => setView('create_job')}
+              className="btn-3d-primary"
+            >
+              <i className="fas fa-plus mr-2" />
+              {t('create_job') || 'Nouvelle offre'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Métriques Power BI style */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Offres Actives</span>
-              <i className="fas fa-briefcase text-2xl text-blue-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{totalJobs}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Candidats Total</span>
-              <i className="fas fa-users text-2xl text-green-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{totalApplicants}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Offres Ouvertes</span>
-              <i className="fas fa-sign-in-alt text-2xl text-purple-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{openJobs}</p>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Offres actives</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalJobs}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Candidats total</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{totalApplicants}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Offres sans candidature</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{openJobs}</p>
         </div>
       </div>
 
-      {/* Barre de recherche et filtres */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
@@ -503,38 +502,38 @@ const Jobs: React.FC<JobsProps> = ({ jobs, setJobs, setView }) => {
               </span>
             )}
           </div>
+      </div>
+
+      {filteredJobs.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+          <i className="fas fa-briefcase text-5xl text-slate-300 mb-4" />
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">{t('no_jobs_found')}</h3>
+          <p className="text-slate-500 text-sm">
+            {searchQuery || locationFilter !== 'all' || typeFilter !== 'all'
+              ? 'Aucune offre publiée ne correspond aux critères.'
+              : isPrivilegedUser ? "Créez une nouvelle offre pour attirer les talents." : "Aucune opportunité disponible pour le moment."}
+          </p>
+          {isPrivilegedUser && (
+            <button type="button" onClick={() => setView('create_job')} className="mt-4 btn-3d-primary">
+              <i className="fas fa-plus mr-2" />
+              Créer la première offre
+            </button>
+          )}
         </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredJobs.map(job => (
+            <JobRow
+              key={job.id}
+              job={job}
+              onApply={handleApply}
+              onShowApplicants={handleShowApplicants}
+              currentUser={user}
+              canManageJobs={Boolean(canManageJobs)}
+            />
+          ))}
         </div>
-      
-      {/* Liste des jobs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        {filteredJobs.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-            <i className="fas fa-briefcase text-6xl text-gray-300 mb-4"></i>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">{t('no_jobs_found')}</h3>
-            <p className="text-gray-500">
-              {searchQuery || locationFilter !== 'all' || typeFilter !== 'all' ? 
-                'Aucune offre publiée ne correspond aux critères' : 
-                isPrivilegedUser ? "Créez une nouvelle offre d'emploi pour attirer les talents." : "Aucune opportunité disponible pour le moment."}
-            </p>
-            {isPrivilegedUser && (
-              <button
-                onClick={() => setView('create_job')}
-                className="mt-4 bg-emerald-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
-              >
-                <i className="fas fa-plus mr-2"></i>
-                Créer la première offre
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredJobs.map(job => (
-            <JobRow key={job.id} job={job} onApply={handleApply} onShowApplicants={handleShowApplicants} currentUser={user} />
-            ))}
-        </div>
-        )}
-        </div>
+      )}
 
       {modalJob && <ApplicantsModal job={modalJob} onClose={() => setModalJob(null)} />}
     </div>

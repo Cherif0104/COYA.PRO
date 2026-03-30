@@ -4,6 +4,11 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 import { Project, User } from '../types';
 import TeamSelector from './common/TeamSelector';
 
+const PROJECT_TITLE_MIN = 10;
+const PROJECT_TITLE_MAX = 120;
+const PROJECT_DESCRIPTION_MIN = 30;
+const PROJECT_DESCRIPTION_MAX = 1200;
+
 interface ProjectCreatePageProps {
     onClose: () => void;
     onSave: (project: Omit<Project, 'id' | 'tasks' | 'risks'> | Project) => Promise<void>;
@@ -67,13 +72,19 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
 
     const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {};
+        const titleLen = formData.title.trim().length;
+        const descLen = formData.description.trim().length;
 
-        if (!formData.title.trim()) {
-            newErrors.title = 'Le titre du projet est requis';
+        if (!titleLen) {
+            newErrors.title = 'Le titre du projet est requis.';
+        } else if (titleLen < PROJECT_TITLE_MIN || titleLen > PROJECT_TITLE_MAX) {
+            newErrors.title = `Le titre doit contenir entre ${PROJECT_TITLE_MIN} et ${PROJECT_TITLE_MAX} caractères.`;
         }
 
-        if (!formData.description.trim()) {
-            newErrors.description = 'La description du projet est requise';
+        if (!descLen) {
+            newErrors.description = 'La description du projet est requise.';
+        } else if (descLen < PROJECT_DESCRIPTION_MIN || descLen > PROJECT_DESCRIPTION_MAX) {
+            newErrors.description = `La description doit contenir entre ${PROJECT_DESCRIPTION_MIN} et ${PROJECT_DESCRIPTION_MAX} caractères.`;
         }
 
         if (!formData.dueDate) {
@@ -125,25 +136,25 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-50 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-50 z-50 overflow-y-auto">
             {/* Header avec bouton de retour - Fixe en haut */}
-            <div className="sticky top-0 bg-white shadow-sm border-b z-10">
+            <div className="sticky top-0 bg-white border-b border-slate-200 z-10">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center">
                             <button
                                 onClick={onClose}
-                                className="flex items-center text-gray-600 hover:text-gray-900 mr-4 transition-colors"
+                                className="flex items-center text-slate-600 hover:text-slate-900 mr-4 transition-colors"
                             >
                                 <i className="fas fa-arrow-left mr-2"></i>
                                 Retour aux projets
                             </button>
-                            <h1 className="text-2xl font-bold text-gray-900">
+                            <h1 className="text-2xl font-semibold text-slate-900">
                                 {editingProject ? 'Modifier le projet' : 'Créer un nouveau projet'}
                             </h1>
                         </div>
                         <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-slate-500">
                                 {editingProject ? 'Mode édition' : 'Nouveau projet'}
                             </span>
                         </div>
@@ -153,7 +164,7 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
 
             {/* Contenu principal - Scrollable */}
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="bg-white rounded-lg shadow-lg">
+                <div className="bg-white rounded-xl border border-slate-200">
                     <form onSubmit={handleSubmit} className="p-6">
                         <div className="space-y-8">
                             {/* Informations de base */}
@@ -163,7 +174,7 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                 <div className="grid grid-cols-1 gap-6">
                                     {/* Titre */}
                                     <div>
-                                        <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-2">
                                             Titre du projet *
                                         </label>
                                         <input
@@ -171,11 +182,15 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                             id="title"
                                             value={formData.title}
                                             onChange={(e) => handleInputChange('title', e.target.value)}
-                                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 ${
                                                 errors.title ? 'border-red-500' : 'border-gray-300'
                                             }`}
-                                            placeholder="Entrez le titre du projet"
+                                            placeholder={`Entrez le titre du projet (${PROJECT_TITLE_MIN}-${PROJECT_TITLE_MAX} caractères)`}
+                                            maxLength={PROJECT_TITLE_MAX}
                                         />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            {formData.title.trim().length}/{PROJECT_TITLE_MAX} caractères (min {PROJECT_TITLE_MIN}).
+                                        </p>
                                         {errors.title && (
                                             <p className="mt-1 text-sm text-red-600">{errors.title}</p>
                                         )}
@@ -183,7 +198,7 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
 
                                     {/* Description */}
                                     <div>
-                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                                        <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-2">
                                             Description *
                                         </label>
                                         <textarea
@@ -191,11 +206,15 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                             value={formData.description}
                                             onChange={(e) => handleInputChange('description', e.target.value)}
                                             rows={4}
-                                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${
+                                            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 resize-none ${
                                                 errors.description ? 'border-red-500' : 'border-gray-300'
                                             }`}
-                                            placeholder="Décrivez le projet en détail"
+                                            placeholder={`Décrivez le projet en détail (${PROJECT_DESCRIPTION_MIN}-${PROJECT_DESCRIPTION_MAX} caractères)`}
+                                            maxLength={PROJECT_DESCRIPTION_MAX}
                                         />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            {formData.description.trim().length}/{PROJECT_DESCRIPTION_MAX} caractères (min {PROJECT_DESCRIPTION_MIN}).
+                                        </p>
                                         {errors.description && (
                                             <p className="mt-1 text-sm text-red-600">{errors.description}</p>
                                         )}
@@ -204,14 +223,14 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                     {/* Statut et Dates */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                         <div>
-                                            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label htmlFor="status" className="block text-sm font-medium text-slate-700 mb-2">
                                                 Statut
                                             </label>
                                             <select
                                                 id="status"
                                                 value={formData.status}
                                                 onChange={(e) => handleInputChange('status', e.target.value)}
-                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400"
                                             >
                                                 <option value="Not Started">Non démarré</option>
                                                 <option value="In Progress">En cours</option>
@@ -221,7 +240,7 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                         </div>
 
                                         <div>
-                                            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label htmlFor="startDate" className="block text-sm font-medium text-slate-700 mb-2">
                                                 Date de début
                                             </label>
                                             <input
@@ -229,12 +248,12 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                                 id="startDate"
                                                 value={formData.startDate || ''}
                                                 onChange={(e) => handleInputChange('startDate', e.target.value)}
-                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400"
                                             />
                                         </div>
 
                                         <div>
-                                            <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label htmlFor="dueDate" className="block text-sm font-medium text-slate-700 mb-2">
                                                 Date d'échéance *
                                             </label>
                                             <input
@@ -242,7 +261,7 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                                 id="dueDate"
                                                 value={formData.dueDate}
                                                 onChange={(e) => handleInputChange('dueDate', e.target.value)}
-                                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 ${
                                                     errors.dueDate ? 'border-red-500' : 'border-gray-300'
                                                 }`}
                                             />
@@ -304,18 +323,18 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                             </div>
 
                             {/* Actions */}
-                            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                            <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200">
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+                                    className="btn-3d-secondary"
                                 >
                                     Annuler
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors flex items-center"
+                                    className="btn-3d-primary"
                                 >
                                     {isLoading ? (
                                         <>

@@ -5,11 +5,7 @@
  */
 import React from 'react';
 import ProgrammeModule from './components/ProgrammeModule';
-import ComptabiliteModule from './components/ComptabiliteModule';
-import PartenariatModule from './components/PartenariatModule';
 import CollecteModule from './components/CollecteModule';
-import QualiteModule from './components/QualiteModule';
-import ConseilModule from './components/ConseilModule';
 import JuridiqueModule from './components/JuridiqueModule';
 import StudioModule from './components/StudioModule';
 import TechModule from './components/TechModule';
@@ -24,11 +20,7 @@ export type ViewName = string;
 
 const MODULE_VIEWS: Record<string, React.ComponentType<{}>> = {
   programme: ProgrammeModule,
-  comptabilite: ComptabiliteModule,
-  partenariat: PartenariatModule,
   collecte: CollecteModule,
-  qualite: QualiteModule,
-  conseil: ConseilModule,
   juridique: JuridiqueModule,
   studio: StudioModule,
   tech: TechModule,
@@ -62,10 +54,7 @@ export const ViewRouter: React.FC<{ currentView: string; children: React.ReactNo
 export const MODULE_LABELS: Record<string, { fr: string; en: string }> = {
   programme: { fr: 'Programme & Bailleur', en: 'Programme & Donor' },
   comptabilite: { fr: 'Comptabilité', en: 'Accounting' },
-  partenariat: { fr: 'Partenariat', en: 'Partnership' },
-  collecte: { fr: 'Collecte', en: 'Data collection' },
-  qualite: { fr: 'Qualité', en: 'Quality' },
-  conseil: { fr: 'Conseil', en: 'Consulting' },
+  collecte: { fr: 'Collecte de données', en: 'Data collection' },
   juridique: { fr: 'Juridique', en: 'Legal' },
   studio: { fr: 'Studio', en: 'Studio' },
   tech: { fr: 'Tech / IT', en: 'Tech / IT' },

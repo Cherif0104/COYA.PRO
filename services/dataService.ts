@@ -750,15 +750,14 @@ export class DataService {
         teamCount: project.team?.length || 0
       });
 
-      // Convertir les membres d'équipe en UUIDs valides
-      const teamMemberIds = project.team?.map(member => {
-        // Si c'est déjà un UUID valide, l'utiliser tel quel
-        if (member.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(member.id)) {
-          return member.id;
-        }
-        // Générer un vrai UUID
-        return crypto.randomUUID();
-      }) || [];
+      // Conserver uniquement les IDs réellement connus, sans générer d'UUID artificiels.
+      const teamMemberIds = (project.team || [])
+        .map(member => {
+          const candidate = (member as any)?.profileId || (member as any)?.userId || member.id;
+          if (!candidate) return null;
+          return String(candidate);
+        })
+        .filter((id): id is string => Boolean(id));
 
       console.log('🔍 Team members IDs:', teamMemberIds);
       console.log('🔍 Team members count:', teamMemberIds.length);
@@ -983,6 +982,15 @@ export class DataService {
     statuses?: string[];
     alertDelayDays?: number;
     taskTemplates?: Array<{ title: string; defaultPriority?: string }>;
+    taskScorePercent?: number;
+    managerScorePercent?: number;
+    requireJustificationForCompletion?: boolean;
+    autoFreezeOverdueTasks?: boolean;
+    evaluationStartDate?: string | null;
+    leavePendingSlaDays?: number;
+    budgetWarningPercent?: number;
+    budgetCriticalPercent?: number;
+    objectiveOffTrackGapPercent?: number;
   }) {
     try {
       const orgId = await this.getCurrentUserOrganizationId();
@@ -995,6 +1003,15 @@ export class DataService {
       if (settings.statuses !== undefined) payload.statuses = settings.statuses;
       if (settings.alertDelayDays !== undefined) payload.alert_delay_days = settings.alertDelayDays;
       if (settings.taskTemplates !== undefined) payload.task_templates = settings.taskTemplates;
+      if (settings.taskScorePercent !== undefined) payload.task_score_percent = settings.taskScorePercent;
+      if (settings.managerScorePercent !== undefined) payload.manager_score_percent = settings.managerScorePercent;
+      if (settings.requireJustificationForCompletion !== undefined) payload.require_justification_for_completion = settings.requireJustificationForCompletion;
+      if (settings.autoFreezeOverdueTasks !== undefined) payload.auto_freeze_overdue_tasks = settings.autoFreezeOverdueTasks;
+      if (settings.evaluationStartDate !== undefined) payload.evaluation_start_date = settings.evaluationStartDate;
+      if (settings.leavePendingSlaDays !== undefined) payload.leave_pending_sla_days = settings.leavePendingSlaDays;
+      if (settings.budgetWarningPercent !== undefined) payload.budget_warning_percent = settings.budgetWarningPercent;
+      if (settings.budgetCriticalPercent !== undefined) payload.budget_critical_percent = settings.budgetCriticalPercent;
+      if (settings.objectiveOffTrackGapPercent !== undefined) payload.objective_offtrack_gap_percent = settings.objectiveOffTrackGapPercent;
 
       const { data, error } = await supabase
         .from('project_module_settings')

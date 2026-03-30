@@ -6,10 +6,10 @@ import { DataAdapter } from '../services/dataAdapter';
 import ConfirmationModal from './common/ConfirmationModal';
 
 const statusStyles = {
-    'pending': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    'approved': 'bg-green-100 text-green-800 border-green-300',
+    'pending': 'bg-amber-100 text-amber-800 border-amber-300',
+    'approved': 'bg-emerald-100 text-emerald-800 border-emerald-300',
     'rejected': 'bg-red-100 text-red-800 border-red-300',
-    'cancelled': 'bg-gray-100 text-gray-800 border-gray-300',
+    'cancelled': 'bg-slate-100 text-slate-700 border-slate-300',
 };
 
 const statusLabels: Record<string, string> = {
@@ -106,22 +106,22 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden">
                 <form onSubmit={handleSubmit}>
-                    <div className="p-6 border-b bg-gradient-to-r from-emerald-600 to-blue-600 text-white">
-                        <h2 className="text-xl font-bold">{isEditMode ? t('edit') : t('request_leave')}</h2>
+                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                        <h2 className="text-lg font-semibold text-slate-900">{isEditMode ? t('edit') : t('request_leave')}</h2>
                     </div>
                     <div className="p-6 space-y-4">
                         {leaveTypes.length > 0 && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
                                     {t('leave_type') || 'Type de congé'}
                                 </label>
                                 <select
                                     value={formData.leaveTypeId}
                                     onChange={e => setFormData(prev => ({ ...prev, leaveTypeId: e.target.value }))}
-                                    className="mt-1 block w-full p-2 border rounded-md"
+                                    className="mt-1 block w-full p-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
                                     required
                                 >
                                     {leaveTypes.map(lt => (
@@ -134,36 +134,36 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
                         )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('start_date')}</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t('start_date')}</label>
                                 <input
                                     type="date"
                                     value={formData.startDate}
                                     onChange={e => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                                    className="mt-1 block w-full p-2 border rounded-md"
+                                    className="mt-1 block w-full p-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('end_date')}</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{t('end_date')}</label>
                                 <input
                                     type="date"
                                     value={formData.endDate}
                                     onChange={e => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                                    className="mt-1 block w-full p-2 border rounded-md"
+                                    className="mt-1 block w-full p-2.5 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                                     required
                                 />
                             </div>
                         </div>
                         {formData.startDate && formData.endDate && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                                <p className="text-sm text-blue-800">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <p className="text-sm text-slate-700">
                                     <i className="fas fa-calendar-alt mr-2"></i>
                                     Durée: <strong>{calculateDays()} jour{calculateDays() > 1 ? 's' : ''}</strong>
                                 </p>
                             </div>
                         )}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">{t('reason')}</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">{t('reason')}</label>
                             <textarea
                                 value={formData.reason}
                                 onChange={e => {
@@ -174,13 +174,13 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
                                 }}
                                 rows={4}
                                 maxLength={500}
-                                className={`mt-1 block w-full p-2 border rounded-md ${
-                                    (500 - (formData.reason?.length || 0)) < 50 ? 'border-orange-300' : 'border-gray-300'
+                                className={`mt-1 block w-full p-2.5 border rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400 ${
+                                    (500 - (formData.reason?.length || 0)) < 50 ? 'border-amber-300' : 'border-slate-200'
                                 }`}
                                 placeholder="Décrivez la raison de votre demande de congé..."
                                 required
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-slate-500 mt-1">
                                 {500 - (formData.reason?.length || 0)}/500 caractères restants
                             </p>
                         </div>
@@ -198,9 +198,9 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
                                             setFormData(prev => ({ ...prev, urgencyReason: '' }));
                                         }
                                     }}
-                                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                                    className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500"
                                 />
-                                <label htmlFor="isUrgent" className="ml-2 text-sm font-medium text-gray-700">
+                                <label htmlFor="isUrgent" className="ml-2 text-sm font-medium text-slate-700">
                                     <i className="fas fa-exclamation-triangle text-red-600 mr-1"></i>
                                     Congé urgent
                                 </label>
@@ -229,7 +229,7 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
                                     <p className="text-xs text-red-600 mt-1">
                                         <i className="fas fa-info-circle mr-1"></i>
                                         Les congés urgents peuvent contourner certaines restrictions (préavis, délai entre congés).
-                                        <span className="ml-2 text-gray-500">
+                                        <span className="ml-2 text-slate-500">
                                             ({500 - (formData.urgencyReason?.length || 0)}/500 caractères restants)
                                         </span>
                                     </p>
@@ -262,8 +262,8 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
 
                         {/* Règles RH affichées */}
                         {!formData.isUrgent && formData.startDate && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                                <p className="text-xs text-blue-800">
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <p className="text-xs text-slate-700">
                                     <i className="fas fa-info-circle mr-1"></i>
                                     <strong>Règle RH :</strong> Un préavis de 15 jours minimum est requis pour les congés non urgents.
                                     {(() => {
@@ -281,18 +281,18 @@ const LeaveRequestModal: React.FC<LeaveRequestModalProps> = ({ leaveRequest, lea
                             </div>
                         )}
                     </div>
-                    <div className="p-4 bg-gray-50 border-t flex justify-end space-x-2">
+                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100"
                             disabled={isSaving}
                         >
                             {t('cancel')}
                         </button>
                         <button
                             type="submit"
-                            className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                            className="px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-50"
                             disabled={isSaving}
                         >
                             {isSaving ? t('saving') || 'Enregistrement...' : t('submit_request')}
@@ -443,195 +443,114 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
     
     return (
         <>
-            {/* Header avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white rounded-t-lg overflow-hidden mb-6">
-                <div className="p-6 pb-4">
-                    <div className="flex justify-between items-start">
-                <div>
-                            <h1 className="text-3xl font-bold mb-2">{t('leave_management')}</h1>
-                            <p className="text-emerald-100">{t('leave_management_subtitle')}</p>
-                </div>
-                        <button
-                            onClick={() => {
-                                setEditingRequest(null);
-                                setModalOpen(true);
-                            }}
-                            className="bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg hover:bg-emerald-50 flex items-center shadow-lg"
-                        >
-                    <i className="fas fa-plus mr-2"></i>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <h2 className="text-lg font-semibold text-slate-900">
+                    {t('my_requests')} ({filteredAndSortedRequests.length})
+                </h2>
+                <button
+                    onClick={() => { setEditingRequest(null); setModalOpen(true); }}
+                    className="inline-flex items-center px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800"
+                >
+                    <i className="fas fa-plus mr-2" />
                     {t('request_leave')}
                 </button>
-                    </div>
-                </div>
             </div>
 
-            {/* Métriques */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-emerald-500">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm font-medium">{t('total_requests') || 'Total Demandes'}</p>
-                            <p className="text-2xl font-bold text-gray-800 mt-1">{metrics.totalRequests}</p>
-                        </div>
-                        <div className="bg-emerald-100 rounded-full p-3">
-                            <i className="fas fa-file-alt text-emerald-600 text-xl"></i>
-                        </div>
-                    </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{t('total_requests') || 'Total demandes'}</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.totalRequests}</p>
                 </div>
-                <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm font-medium">{t('pending') || 'En Attente'}</p>
-                            <p className="text-2xl font-bold text-gray-800 mt-1">{metrics.pendingRequests}</p>
-                        </div>
-                        <div className="bg-yellow-100 rounded-full p-3">
-                            <i className="fas fa-clock text-yellow-600 text-xl"></i>
-                        </div>
-                    </div>
+                <div className="rounded-xl border border-amber-200/70 bg-white p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">{t('pending') || 'En attente'}</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.pendingRequests}</p>
                 </div>
-                <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm font-medium">{t('approved') || 'Approuvés'}</p>
-                            <p className="text-2xl font-bold text-gray-800 mt-1">{metrics.approvedRequests}</p>
-                        </div>
-                        <div className="bg-green-100 rounded-full p-3">
-                            <i className="fas fa-check-circle text-green-600 text-xl"></i>
-                        </div>
-                    </div>
+                <div className="rounded-xl border border-emerald-200/70 bg-white p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">{t('approved') || 'Approuvés'}</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.approvedRequests}</p>
                 </div>
-                <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm font-medium">{t('total_days') || 'Total Jours'}</p>
-                            <p className="text-2xl font-bold text-gray-800 mt-1">{metrics.totalApprovedDays}</p>
-                        </div>
-                        <div className="bg-blue-100 rounded-full p-3">
-                            <i className="fas fa-calendar-check text-blue-600 text-xl"></i>
-                        </div>
-                        </div>
-                    </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{t('total_days') || 'Total jours'}</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{metrics.totalApprovedDays}</p>
+                </div>
             </div>
 
-            {/* Barre de recherche et filtres */}
-            <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
                 <div className="flex flex-col md:flex-row gap-4">
-                    {/* Recherche */}
                     <div className="flex-1">
                         <div className="relative">
-                            <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 placeholder={t('search') || 'Rechercher...'}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
                             />
                         </div>
                     </div>
-                    {/* Filtre statut */}
                     <select
                         value={filterStatus}
                         onChange={e => setFilterStatus(e.target.value as any)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        className="px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                     >
                         <option value="all">{t('all_statuses') || 'Tous les statuts'}</option>
                         <option value="pending">{t('pending') || 'En attente'}</option>
                         <option value="approved">{t('approved') || 'Approuvé'}</option>
                         <option value="rejected">{t('rejected') || 'Rejeté'}</option>
                     </select>
-                    {/* Tri */}
                     <select
                         value={`${sortBy}-${sortOrder}`}
-                        onChange={e => {
-                            const [by, order] = e.target.value.split('-');
-                            setSortBy(by as any);
-                            setSortOrder(order as any);
-                        }}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        onChange={e => { const [by, order] = e.target.value.split('-'); setSortBy(by as any); setSortOrder(order as any); }}
+                        className="px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-slate-400"
                     >
                         <option value="date-desc">{t('sort_by_date_desc') || 'Date (récent)'}</option>
                         <option value="date-asc">{t('sort_by_date_asc') || 'Date (ancien)'}</option>
                         <option value="status-asc">{t('sort_by_status') || 'Statut'}</option>
                         <option value="duration-desc">{t('sort_by_duration') || 'Durée (long)'}</option>
                     </select>
-                    {/* Mode d'affichage */}
-                    <div className="flex gap-2 border border-gray-300 rounded-lg p-1">
-                        <button
-                            onClick={() => setViewMode('grid')}
-                            className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-emerald-600 text-white' : 'text-gray-600'}`}
-                            title={t('grid_view') || 'Vue grille'}
-                        >
-                            <i className="fas fa-th"></i>
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-emerald-600 text-white' : 'text-gray-600'}`}
-                            title={t('list_view') || 'Vue liste'}
-                        >
-                            <i className="fas fa-list"></i>
-                        </button>
-                        <button
-                            onClick={() => setViewMode('compact')}
-                            className={`px-3 py-1 rounded ${viewMode === 'compact' ? 'bg-emerald-600 text-white' : 'text-gray-600'}`}
-                            title={t('compact_view') || 'Vue compacte'}
-                        >
-                            <i className="fas fa-table"></i>
-                        </button>
+                    <div className="flex gap-1 border border-slate-200 rounded-xl p-1 bg-slate-50">
+                        <button type="button" onClick={() => setViewMode('grid')} className={`px-3 py-1.5 rounded-lg text-sm ${viewMode === 'grid' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-200'}`} title={t('grid_view') || 'Vue grille'}><i className="fas fa-th" /></button>
+                        <button type="button" onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-lg text-sm ${viewMode === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-200'}`} title={t('list_view') || 'Vue liste'}><i className="fas fa-list" /></button>
+                        <button type="button" onClick={() => setViewMode('compact')} className={`px-3 py-1.5 rounded-lg text-sm ${viewMode === 'compact' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-200'}`} title={t('compact_view') || 'Vue compacte'}><i className="fas fa-table" /></button>
                     </div>
                 </div>
-                {/* Compteur de résultats */}
-                <div className="mt-3 text-sm text-gray-600">
-                    <i className="fas fa-info-circle mr-1"></i>
-                    {filteredAndSortedRequests.length} {t('results_found') || 'résultat(s) trouvé(s)'}
-                    {searchQuery && ` pour "${searchQuery}"`}
+                <div className="mt-3 text-sm text-slate-500">
+                    {filteredAndSortedRequests.length} {t('results_found') || 'résultat(s) trouvé(s)'}{searchQuery ? ` pour "${searchQuery}"` : ''}
                 </div>
             </div>
 
-
-            {/* Mes demandes */}
-            <div>
-                <h2 className="text-2xl font-bold text-gray-700 mb-4">
-                    {t('my_requests')} ({filteredAndSortedRequests.length})
-                </h2>
-                {filteredAndSortedRequests.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-md p-12 text-center">
-                        <i className="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
-                        <p className="text-gray-500 text-lg">{t('no_leave_requests')}</p>
-                        <button
-                            onClick={() => {
-                                setEditingRequest(null);
-                                setModalOpen(true);
-                            }}
-                            className="mt-4 bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700"
-                        >
-                            <i className="fas fa-plus mr-2"></i>
-                            {t('request_leave')}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            {filteredAndSortedRequests.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                    <i className="fas fa-inbox text-5xl text-slate-300 mb-4" />
+                    <p className="text-slate-600">{t('no_leave_requests')}</p>
+                    <button onClick={() => { setEditingRequest(null); setModalOpen(true); }} className="mt-4 px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800">
+                        <i className="fas fa-plus mr-2" />{t('request_leave')}
+                    </button>
+                </div>
+            ) : (
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                         {viewMode === 'grid' && (
                             <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {filteredAndSortedRequests.map(req => (
                                     <div
                                         key={req.id}
-                                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                                        className="border border-slate-200 rounded-xl p-4 hover:bg-slate-50/50 transition-colors"
                                     >
                                         <div className="flex justify-between items-start mb-3">
                                             <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${statusStyles[req.status]}`}>
                                                 {statusLabels[req.status] || req.status}
                                             </span>
                                         </div>
-                                        <p className="text-sm text-gray-500 mb-2">
+                                        <p className="text-sm text-slate-500 mb-2">
                                             <i className="fas fa-calendar mr-2"></i>
                                             {formatDate(req.startDate)} - {formatDate(req.endDate)}
                                         </p>
-                                        <p className="text-sm text-gray-600 mb-2">
+                                        <p className="text-sm text-slate-600 mb-2">
                                             <strong>{calculateDaysBetween(req.startDate, req.endDate)} jour{calculateDaysBetween(req.startDate, req.endDate) > 1 ? 's' : ''}</strong>
                                         </p>
                                         {req.leaveTypeName && (
-                                            <p className="text-xs text-gray-500 mb-2">
+                                            <p className="text-xs text-slate-500 mb-2">
                                                 <i className="fas fa-tag mr-1"></i>
                                                 {req.leaveTypeName.replace('_', ' ')}
                                             </p>
@@ -648,7 +567,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
                                                 )}
                                             </div>
                                         )}
-                                        <p className="text-sm text-gray-700 line-clamp-2 mb-2">{req.reason}</p>
+                                        <p className="text-sm text-slate-700 line-clamp-2 mb-2">{req.reason}</p>
                                         {/* Affichage des motifs d'approbation/rejet */}
                                         {req.status === 'approved' && req.approvalReason && (
                                             <div className="bg-green-50 border border-green-200 rounded-md p-2 mt-2">
@@ -671,18 +590,18 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
                             </div>
                         )}
                         {viewMode === 'list' && (
-                            <div className="divide-y divide-gray-200">
+                            <div className="divide-y divide-slate-200">
                                 {filteredAndSortedRequests.map(req => (
-                                    <div key={req.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                                    <div key={req.id} className="p-4 hover:bg-slate-50 flex justify-between items-center">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${statusStyles[req.status]}`}>
                                                     {statusLabels[req.status] || req.status}
                                                 </span>
-                                                <span className="text-sm font-medium text-gray-700">
+                                                <span className="text-sm font-medium text-slate-700">
                                                     {formatDate(req.startDate)} - {formatDate(req.endDate)}
                                                 </span>
-                                                <span className="text-sm text-gray-500">
+                                                <span className="text-sm text-slate-500">
                                                     ({calculateDaysBetween(req.startDate, req.endDate)} jour{calculateDaysBetween(req.startDate, req.endDate) > 1 ? 's' : ''})
                                                 </span>
                                             </div>
@@ -693,10 +612,9 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
                                                     Urgent
                                                 </span>
                                             )}
-                                            <p className="text-sm text-gray-600 mb-1">{req.reason}</p>
-                                            {/* Affichage des motifs */}
+                                            <p className="text-sm text-slate-600 mb-1">{req.reason}</p>
                                             {req.status === 'approved' && req.approvalReason && (
-                                                <p className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded mt-1 inline-block">
+                                                <p className="text-xs text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg mt-1 inline-block">
                                                     <i className="fas fa-check-circle mr-1"></i>
                                                     <strong>Motif:</strong> {req.approvalReason}
                                                 </p>
@@ -715,25 +633,25 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
                         {viewMode === 'compact' && (
                     <div className="overflow-x-auto">
                          <table className="w-full">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-slate-50">
                                 <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                                                 {t('start_date')}
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                                                 {t('end_date')}
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                                                 {t('reason')}
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                                                 {t('status')}
                                             </th>
                                 </tr>
                             </thead>
-                             <tbody className="divide-y divide-gray-200">
+                             <tbody className="divide-y divide-slate-200">
                                         {filteredAndSortedRequests.map(req => (
-                                            <tr key={req.id} className="hover:bg-gray-50">
+                                            <tr key={req.id} className="hover:bg-slate-50">
                                                 <td className="px-6 py-4 whitespace-nowrap">{formatDate(req.startDate)}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap">{formatDate(req.endDate)}</td>
                                                 <td className="px-6 py-4 max-w-xs">
@@ -771,9 +689,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({
                         )}
                 </div>
                 )}
-            </div>
 
-            {/* Modals */}
             {isModalOpen && (
                 <LeaveRequestModal
                     leaveRequest={editingRequest}

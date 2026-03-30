@@ -306,12 +306,12 @@ export class DataAdapter {
     return false;
   }
 
-  static async deleteProject(projectId: number): Promise<boolean> {
+  static async deleteProject(projectId: string | number): Promise<boolean> {
     if (this.useSupabase) {
       try {
         console.log('🔄 DataAdapter.deleteProject - Suppression projet ID:', projectId);
         
-        const { error } = await DataService.deleteProject(projectId.toString());
+        const { error } = await DataService.deleteProject(String(projectId));
         if (error) throw error;
         
         console.log('✅ DataAdapter.deleteProject - Projet supprimé avec succès');
@@ -1361,7 +1361,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           createdAt: objective.created_at || new Date().toISOString(),
           updatedAt: objective.updated_at || new Date().toISOString(),
           // Champ projectId pour compatibilité avec l'interface actuelle
-          projectId: objective.project_id || "1"
+          projectId: objective.project_id || objective.entity_id || ''
         })) || [];
         
         console.log('✅ DataAdapter.getObjectives - Objectifs convertis:', objectives.length);
@@ -2296,6 +2296,15 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       statuses: Array.isArray(data.statuses) ? data.statuses : [],
       alertDelayDays: data.alert_delay_days ?? 3,
       taskTemplates: Array.isArray(data.task_templates) ? data.task_templates : [],
+      taskScorePercent: data.task_score_percent ?? undefined,
+      managerScorePercent: data.manager_score_percent ?? undefined,
+      requireJustificationForCompletion: data.require_justification_for_completion ?? undefined,
+      autoFreezeOverdueTasks: data.auto_freeze_overdue_tasks ?? undefined,
+      evaluationStartDate: data.evaluation_start_date ?? null,
+      leavePendingSlaDays: data.leave_pending_sla_days ?? undefined,
+      budgetWarningPercent: data.budget_warning_percent ?? undefined,
+      budgetCriticalPercent: data.budget_critical_percent ?? undefined,
+      objectiveOffTrackGapPercent: data.objective_offtrack_gap_percent ?? undefined,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -2306,6 +2315,15 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     statuses?: string[];
     alertDelayDays?: number;
     taskTemplates?: Array<{ title: string; defaultPriority?: string }>;
+    taskScorePercent?: number;
+    managerScorePercent?: number;
+    requireJustificationForCompletion?: boolean;
+    autoFreezeOverdueTasks?: boolean;
+    evaluationStartDate?: string | null;
+    leavePendingSlaDays?: number;
+    budgetWarningPercent?: number;
+    budgetCriticalPercent?: number;
+    objectiveOffTrackGapPercent?: number;
   }): Promise<ProjectModuleSettings | null> {
     const { data, error } = await DataService.upsertProjectModuleSettings(settings);
     if (error || !data) return null;
@@ -2316,6 +2334,15 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       statuses: Array.isArray(data.statuses) ? data.statuses : [],
       alertDelayDays: data.alert_delay_days ?? 3,
       taskTemplates: Array.isArray(data.task_templates) ? data.task_templates : [],
+      taskScorePercent: data.task_score_percent ?? undefined,
+      managerScorePercent: data.manager_score_percent ?? undefined,
+      requireJustificationForCompletion: data.require_justification_for_completion ?? undefined,
+      autoFreezeOverdueTasks: data.auto_freeze_overdue_tasks ?? undefined,
+      evaluationStartDate: data.evaluation_start_date ?? null,
+      leavePendingSlaDays: data.leave_pending_sla_days ?? undefined,
+      budgetWarningPercent: data.budget_warning_percent ?? undefined,
+      budgetCriticalPercent: data.budget_critical_percent ?? undefined,
+      objectiveOffTrackGapPercent: data.objective_offtrack_gap_percent ?? undefined,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };

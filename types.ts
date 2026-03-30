@@ -369,6 +369,9 @@ export interface Risk {
   likelihood: 'High' | 'Medium' | 'Low';
   impact: 'High' | 'Medium' | 'Low';
   mitigationStrategy: string;
+  ownerId?: string;
+  dueDate?: string;
+  status?: 'open' | 'mitigating' | 'closed';
 }
 
 export type CurrencyCode = 'USD' | 'EUR' | 'XOF';
@@ -384,11 +387,13 @@ export interface ProjectBudgetLine {
   currency?: CurrencyCode;
 }
 
+export type ProjectStatus = 'Not Started' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
+
 export interface Project {
   id: string;
   title: string;
   description: string;
-  status: 'Not Started' | 'In Progress' | 'Completed';
+  status: ProjectStatus;
   dueDate: string;
   startDate?: string;
   team: User[];
@@ -675,11 +680,14 @@ export interface Beneficiaire {
 export type TicketITStatus =
   | 'draft'             // brouillon
   | 'pending_validation' // en attente validation manager
+  | 'needs_reformulation' // demande de reformulation au demandeur
   | 'validated'         // validé par manager
   | 'sent_to_it'       // envoyé au département IT
   | 'in_progress'      // en cours de traitement
   | 'resolved'         // résolu
   | 'rejected';        // refusé par manager
+
+export type TicketITVisibilityScope = 'self' | 'team' | 'all_users';
 
 export interface TicketIT {
   id: string;
@@ -687,6 +695,8 @@ export interface TicketIT {
   title: string;
   description: string;
   status: TicketITStatus;
+  visibilityScope?: TicketITVisibilityScope;
+  broadcastOnCreate?: boolean;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   issueTypeId?: string | null;
   issueTypeName?: string | null;
@@ -752,6 +762,14 @@ export interface ProjectModuleSettings {
   autoFreezeOverdueTasks?: boolean;
   /** Date de démarrage des évaluations / scoring (Phase 14) : seules les tâches réalisées après cette date comptent pour le score */
   evaluationStartDate?: string | null;
+  /** SLA RH: nombre de jours avant escalade des congés en attente */
+  leavePendingSlaDays?: number;
+  /** Alerte budget warning (%) */
+  budgetWarningPercent?: number;
+  /** Alerte budget critique (%) */
+  budgetCriticalPercent?: number;
+  /** Ecart autorisé objectif (%). Au-delà -> off-track */
+  objectiveOffTrackGapPercent?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -807,6 +825,25 @@ export interface Objective {
   keyResults: KeyResult[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** Campagne / stratégie de collecte de données (projet, programme ou formation globale – hors formation RH) */
+export interface DataCollection {
+  id: string;
+  organizationId?: string | null;
+  name: string;
+  description?: string;
+  status?: 'draft' | 'active' | 'archived';
+  /** Une seule affectation principale parmi les trois (validation métier côté UI) */
+  projectId?: string | null;
+  programmeId?: string | null;
+  /** Formation globale (ex. cours / offre) – distinct de l’espace formation RH */
+  formationId?: string | null;
+  linkedToCrm?: boolean;
+  /** Collecte d’origine lors d’une réutilisation / duplication */
+  reusedFromCollecteId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Contact {

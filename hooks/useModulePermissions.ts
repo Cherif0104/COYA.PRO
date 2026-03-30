@@ -104,14 +104,18 @@ export const useModulePermissions = () => {
   // Fonction pour vérifier si l'utilisateur a une permission spécifique
   const hasPermission = (
     module: ModuleName,
-    _action: 'read' | 'write' | 'delete' | 'approve'
+    action: 'read' | 'write' | 'delete' | 'approve'
   ): boolean => {
     if (!user) return false;
 
     const modulePermissions = permissions[module];
     if (!modulePermissions) return false;
 
-    return !!modulePermissions.canRead;
+    if (action === 'read') return !!modulePermissions.canRead;
+    if (action === 'write') return !!modulePermissions.canWrite;
+    if (action === 'delete') return !!modulePermissions.canDelete;
+    if (action === 'approve') return !!modulePermissions.canApprove;
+    return false;
   };
 
   // Fonction pour vérifier si l'utilisateur peut accéder à un module (au minimum read)

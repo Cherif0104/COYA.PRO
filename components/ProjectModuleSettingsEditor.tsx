@@ -15,6 +15,10 @@ const ProjectModuleSettingsEditor: React.FC = () => {
   const [requireJustificationForCompletion, setRequireJustificationForCompletion] = useState(true);
   const [autoFreezeOverdueTasks, setAutoFreezeOverdueTasks] = useState(true);
   const [evaluationStartDate, setEvaluationStartDate] = useState('');
+  const [leavePendingSlaDays, setLeavePendingSlaDays] = useState(2);
+  const [budgetWarningPercent, setBudgetWarningPercent] = useState(10);
+  const [budgetCriticalPercent, setBudgetCriticalPercent] = useState(20);
+  const [objectiveOffTrackGapPercent, setObjectiveOffTrackGapPercent] = useState(10);
 
   useEffect(() => {
     if (settings) {
@@ -26,6 +30,10 @@ const ProjectModuleSettingsEditor: React.FC = () => {
       setRequireJustificationForCompletion(settings.requireJustificationForCompletion !== false);
       setAutoFreezeOverdueTasks(settings.autoFreezeOverdueTasks !== false);
       setEvaluationStartDate(settings.evaluationStartDate ? settings.evaluationStartDate.slice(0, 10) : '');
+      setLeavePendingSlaDays(settings.leavePendingSlaDays ?? 2);
+      setBudgetWarningPercent(settings.budgetWarningPercent ?? 10);
+      setBudgetCriticalPercent(settings.budgetCriticalPercent ?? 20);
+      setObjectiveOffTrackGapPercent(settings.objectiveOffTrackGapPercent ?? 10);
     }
   }, [settings]);
 
@@ -172,6 +180,60 @@ const ProjectModuleSettingsEditor: React.FC = () => {
               className="border border-gray-300 rounded px-2 py-1 text-sm"
             />
             <p className="text-xs text-gray-500 mt-1">Seules les tâches réalisées après cette date comptent pour le score (optionnel).</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-200 pt-6">
+        <h4 className="text-sm font-semibold text-gray-800 mb-3">Seuils workflows transverses</h4>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">SLA congés en attente (jours)</label>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={leavePendingSlaDays}
+              onChange={(e) => setLeavePendingSlaDays(Number(e.target.value))}
+              onBlur={() => update({ leavePendingSlaDays: Math.max(1, Number(leavePendingSlaDays) || 2) })}
+              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Objectif off-track: écart mini (%)</label>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={objectiveOffTrackGapPercent}
+              onChange={(e) => setObjectiveOffTrackGapPercent(Number(e.target.value))}
+              onBlur={() => update({ objectiveOffTrackGapPercent: Math.max(1, Number(objectiveOffTrackGapPercent) || 10) })}
+              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Alerte budget warning (%)</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={budgetWarningPercent}
+              onChange={(e) => setBudgetWarningPercent(Number(e.target.value))}
+              onBlur={() => update({ budgetWarningPercent: Math.max(1, Number(budgetWarningPercent) || 10) })}
+              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Alerte budget critique (%)</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={budgetCriticalPercent}
+              onChange={(e) => setBudgetCriticalPercent(Number(e.target.value))}
+              onBlur={() => update({ budgetCriticalPercent: Math.max(1, Number(budgetCriticalPercent) || 20) })}
+              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+            />
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ const JuridiqueModule: React.FC = () => (
     descriptionFr="Contrats, conformité, contentieux. Gestion des documents et échéances juridiques."
     descriptionEn="Contracts, compliance, litigation. Legal documents and deadlines."
     icon="fas fa-gavel"
-    sections={[{ key: 'j', titleFr: 'Contrats et conformité', titleEn: 'Contracts & compliance', icon: 'fas fa-file-signature', content: <p className="text-coya-text-muted text-sm">Base documentaire et alertes échéances à venir.</p> }]}
+    sections={[{ key: 'j', titleFr: 'Contrats et conformité', titleEn: 'Contracts & compliance', icon: 'fas fa-file-signature', content: <p className="text-slate-600 text-sm">Base documentaire et alertes échéances à venir.</p> }]}
   />
 );
 

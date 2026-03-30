@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, User, TimeLog, Objective, MANAGEMENT_ROLES, Language, Translation, RESOURCE_MANAGEMENT_ROLES, SUPPORTED_CURRENCIES } from '../types';
+import { Project, User, TimeLog, Objective, Language, Translation, Role, SUPPORTED_CURRENCIES } from '../types';
 import LogTimeModal from './LogTimeModal';
 import ConfirmationModal from './common/ConfirmationModal';
 import TeamSelector from './common/TeamSelector';
 import ExtensibleSelect from './common/ExtensibleSelect';
 import ProjectDetailPage from './ProjectDetailPage';
 import ProjectCreatePage from './ProjectCreatePage';
-import TeamWorkloadMetrics from './TeamWorkloadMetrics';
 import ProjectsAnalytics from './ProjectsAnalytics';
 import OrganizationService from '../services/organizationService';
 import * as programmeService from '../services/programmeService';
 import * as referentialsService from '../services/referentialsService';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 
 const statusStyles: Record<string, string> = {
     'Not Started': 'bg-gray-200 text-gray-800',
@@ -21,6 +21,9 @@ const statusStyles: Record<string, string> = {
     'On Hold': 'bg-amber-200 text-amber-800',
     'Cancelled': 'bg-red-200 text-red-800',
 };
+
+// Gouvernance projet : seuls ces rôles créent des projets (et gouvernent la structuration).
+const PROJECT_CREATOR_ROLES: Role[] = ['super_administrator', 'administrator', 'manager'];
 
 const ProjectFormModal: React.FC<{
     project: Omit<Project, 'id' | 'tasks' | 'risks'> | Project | null;
@@ -1697,7 +1700,7 @@ interface ProjectsProps {
     timeLogs: TimeLog[];
     onUpdateProject: (project: Project) => void;
     onAddProject: (project: Omit<Project, 'id' | 'tasks' | 'risks'>) => void;
-    onDeleteProject: (projectId: number) => void;
+    onDeleteProject: (projectId: string | number) => void;
     onAddTimeLog: (log: Omit<TimeLog, 'id' | 'userId'>) => void;
     objectives?: Objective[];
     setView?: (view: string) => void;
@@ -1712,8 +1715,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const { t, language } = useLocalization();
     const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
     const { user: currentUser } = useAuth();
+    const { hasPermission } = useModulePermissions();
     const locale = language === Language.FR ? 'fr-FR' : 'en-US';
-    const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
     const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -1725,9 +1728,9 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [programmeFilter, setProgrammeFilter] = useState<string>('');
     const [programmesList, setProgrammesList] = useState<{ id: string; name: string }[]>([]);
-    const [sortBy, setSortBy] = useState<'date' | 'title' | 'status'>('date');
+    const [sortBy, setSortBy] = useState<'date' | 'title' | 'status' | 'smart'>('smart');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
     const [activeSection, setActiveSection] = useState<'overview' | 'analytics' | 'tasks_week'>('overview');
 
     useEffect(() => {
@@ -1762,6 +1765,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
 
         setSelectedProject(targetProject);
         setIsProjectDetailPageOpen(true);
+        setActiveSection('overview');
+        setViewMode('list');
         onNotificationHandled?.();
     }, [autoOpenProjectId, projects, isProjectDetailPageOpen, selectedProject, onNotificationHandled]);
 
@@ -1852,6 +1857,54 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         setProjectToDelete(project);
     };
 
+    const getProjectInsights = useCallback((project: Project) => {
+        const projectTasks = Array.isArray(project.tasks) ? project.tasks : [];
+        const completedTasks = projectTasks.filter(t => t.status === 'Completed').length;
+        const progressPercentage = projectTasks.length > 0
+            ? Math.round((completedTasks / projectTasks.length) * 100)
+            : 0;
+        const highRiskCount = (project.risks || []).filter(risk => risk.impact === 'High' || risk.likelihood === 'High').length;
+
+        let dueInDays = 9999;
+        if (project.dueDate) {
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const due = new Date(project.dueDate);
+            due.setHours(0, 0, 0, 0);
+            dueInDays = Math.floor((due.getTime() - now.getTime()) / 86400000);
+        }
+
+        const statusPenalty =
+            project.status === 'Completed' ? -25 :
+            project.status === 'In Progress' ? 10 :
+            20;
+        const overduePenalty = dueInDays < 0 ? 45 : dueInDays <= 3 ? 25 : dueInDays <= 7 ? 12 : 0;
+        const lowProgressPenalty = progressPercentage < 40 ? 15 : progressPercentage < 70 ? 8 : 0;
+        const riskPenalty = highRiskCount * 12;
+
+        const urgencyScore = Math.max(0, Math.min(100, overduePenalty + lowProgressPenalty + riskPenalty + statusPenalty));
+        const riskLevel: 'low' | 'medium' | 'high' =
+            urgencyScore >= 65 ? 'high' : urgencyScore >= 35 ? 'medium' : 'low';
+
+        const recommendedAction =
+            dueInDays < 0
+                ? localize('Escalate now and replan milestones', 'Escalader maintenant et replanifier les jalons')
+                : highRiskCount > 0
+                    ? localize('Mitigate top risks this week', 'Mitiger les risques majeurs cette semaine')
+                    : progressPercentage < 40
+                        ? localize('Refocus team on priority tasks', 'Recentrer l equipe sur les taches prioritaires')
+                        : localize('Maintain cadence and close blockers', 'Maintenir le rythme et lever les blocages');
+
+        return {
+            progressPercentage,
+            highRiskCount,
+            dueInDays,
+            urgencyScore,
+            riskLevel,
+            recommendedAction,
+        };
+    }, [localize]);
+
     const filteredProjects = useMemo(() => {
         let filtered = projects.filter(project => {
             const matchesSearch = searchQuery === '' ||
@@ -1871,6 +1924,12 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
             let compareValue = 0;
             
             switch (sortBy) {
+                case 'smart': {
+                    const aScore = getProjectInsights(a).urgencyScore;
+                    const bScore = getProjectInsights(b).urgencyScore;
+                    compareValue = aScore - bScore;
+                    break;
+                }
                 case 'title':
                     compareValue = a.title.localeCompare(b.title);
                     break;
@@ -1889,13 +1948,18 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         });
 
         return filtered;
-    }, [projects, searchQuery, statusFilter, programmeFilter, sortBy, sortOrder]);
+    }, [projects, searchQuery, statusFilter, programmeFilter, sortBy, sortOrder, getProjectInsights]);
+
+    const prioritizedProjects = useMemo(
+        () => [...filteredProjects].sort((a, b) => getProjectInsights(b).urgencyScore - getProjectInsights(a).urgencyScore),
+        [filteredProjects, getProjectInsights]
+    );
 
     // Rôles autorisés à créer un projet
     const canCreateProject = useMemo(() => {
         if (!currentUser) return false;
-        return RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
-    }, [currentUser]);
+        return hasPermission('projects', 'write') || PROJECT_CREATOR_ROLES.includes(currentUser.role as Role);
+    }, [currentUser, hasPermission]);
 
     const canManageProject = useCallback(
         (project: Project | null) => {
@@ -1907,57 +1971,15 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     return true;
                 }
             }
-            return RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role);
+            return (
+                hasPermission('projects', 'write') ||
+                hasPermission('projects', 'delete') ||
+                PROJECT_CREATOR_ROLES.includes(currentUser.role as Role)
+            );
         },
-        [currentUser]
+        [currentUser, hasPermission]
     );
 
-    // Vérifier si l'utilisateur appartient à l'équipe de gestion
-    const isSenegalTeam = useMemo(() => {
-        return currentUser?.role && MANAGEMENT_ROLES.includes(currentUser.role);
-    }, [currentUser?.role]);
-
-    // Calculer la charge de travail de l'équipe (version simplifiée pour MVP)
-    const teamWorkload = useMemo(() => {
-        const teamMembers = new Map();
-        
-        // Collecter tous les membres d'équipe de tous les projets
-        projects.forEach(project => {
-            project.team.forEach(member => {
-                if (!teamMembers.has(member.id)) {
-                    teamMembers.set(member.id, {
-                        ...member,
-                        projectCount: 0,
-                        totalProjects: 0,
-                        estimatedHours: 0
-                    });
-                }
-                
-                const current = teamMembers.get(member.id);
-                current.projectCount += 1;
-                current.totalProjects = projects.filter(p => 
-                    p.team.some(tm => tm.id === member.id)
-                ).length;
-                
-                // Estimation simple des heures (8h par projet en moyenne)
-                current.estimatedHours = current.projectCount * 8;
-            });
-        });
-        
-        return Array.from(teamMembers.values()).slice(0, 3); // Limiter à 3 membres
-    }, [projects]);
-
-    const overdueProjects = useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return projects
-            .filter(project => {
-                if (!project.dueDate || project.status === 'Completed') return false;
-                return new Date(project.dueDate) < today;
-            })
-            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-            .slice(0, 3);
-    }, [projects]);
 
     // Tâches de la semaine (Phase 2.2) : tâches dont l'échéance est dans la semaine courante (lundi–dimanche)
     const tasksThisWeek = useMemo(() => {
@@ -1985,45 +2007,29 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         return out;
     }, [projects]);
 
-    const highRiskProjects = useMemo(() => {
-        return projects
-            .filter(project =>
-                (project.risks || []).some(risk => risk.impact === 'High' || risk.likelihood === 'High')
-            )
-            .slice(0, 3);
-    }, [projects]);
-
     // Calculer les métriques globales
     const totalProjects = projects.length;
     const activeProjects = projects.filter(p => p.status === 'In Progress').length;
-    const completedProjects = projects.filter(p => p.status === 'Completed').length;
     const totalTasks = projects.reduce((sum, p) => sum + (Array.isArray(p.tasks) ? p.tasks.length : 0), 0);
-    const allTeamMemberIds: string[] = [];
-    projects.forEach(project => {
-        const teamMembers = Array.isArray(project.team) ? project.team : [];
-        teamMembers.forEach(member => {
-            if (member?.id !== undefined && member?.id !== null) {
-                allTeamMemberIds.push(member.id.toString());
-            }
-        });
-    });
-    const totalTeamMembers = new Set(allTeamMemberIds).size;
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header moderne avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
+        <div className="min-h-screen bg-slate-50">
+            {/* Header modernise et minimaliste */}
+            <div className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     <div className="flex items-center justify-between">
                         <div className="flex-1">
-                            <h1 className="text-4xl font-bold mb-2">{t('projects')}</h1>
-                            <p className="text-emerald-50 text-sm">
-                                Gérez et suivez tous vos projets en un seul endroit
+                            <h1 className="text-3xl font-semibold text-slate-900 mb-2">{t('projects')}</h1>
+                            <p className="text-slate-500 text-sm">
+                                {localize(
+                                    'A clean command center to prioritize, execute, and predict delivery risk.',
+                                    'Un centre de commande epure pour prioriser, executer et anticiper les risques de livraison.'
+                                )}
                             </p>
                         </div>
                         <div className="flex items-center gap-4">
                     {isLoading && (
-                                <div className="flex items-center text-white">
+                                <div className="flex items-center text-slate-500">
                             <i className="fas fa-spinner fa-spin mr-2"></i>
                             <span className="text-sm">
                                 {loadingOperation === 'create' && 'Création...'}
@@ -2033,11 +2039,20 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             </span>
                         </div>
                     )}
+                {setView && (
+                    <button
+                        onClick={() => setView('planning')}
+                        className="btn-3d-secondary"
+                    >
+                        <i className="fas fa-calendar-week mr-2"></i>
+                        {localize('Planning', 'Planning')}
+                    </button>
+                )}
                 {canCreateProject && (
                     <button
                         onClick={() => handleOpenForm()}
                         disabled={isLoading}
-                                    className="bg-white text-emerald-600 px-6 py-3 rounded-lg font-semibold hover:bg-emerald-50 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center transition-all shadow-md hover:shadow-lg"
+                                    className="btn-3d-primary"
                     >
                         <i className="fas fa-plus mr-2"></i>
                         {t('create_new_project')}
@@ -2049,172 +2064,121 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
             </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-6 flex items-center">
+            <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex items-center">
                 <button
                     onClick={() => setActiveSection('overview')}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                         activeSection === 'overview'
-                            ? 'bg-emerald-600 text-white shadow-md'
-                            : 'text-gray-600 hover:text-gray-800'
+                            ? 'bg-slate-900 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                 >
                     {t('overview') || 'Vue globale'}
                 </button>
                 <button
                     onClick={() => setActiveSection('analytics')}
-                    className={`ml-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    className={`ml-1 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                         activeSection === 'analytics'
-                            ? 'bg-emerald-600 text-white shadow-md'
-                            : 'text-gray-600 hover:text-gray-800'
+                            ? 'bg-slate-900 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                 >
                     {t('analytics') || 'Analytics'}
                 </button>
                 <button
                     onClick={() => setActiveSection('tasks_week')}
-                    className={`ml-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    className={`ml-1 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                         activeSection === 'tasks_week'
-                            ? 'bg-emerald-600 text-white shadow-md'
-                            : 'text-gray-600 hover:text-gray-800'
+                            ? 'bg-slate-900 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                 >
                     {localize('Tasks this week', 'Tâches de la semaine')}
                     {tasksThisWeek.length > 0 && (
-                        <span className="ml-1.5 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{tasksThisWeek.length}</span>
+                        <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${activeSection === 'tasks_week' ? 'bg-white/20' : 'bg-slate-200 text-slate-700'}`}>{tasksThisWeek.length}</span>
                     )}
                 </button>
             </div>
 
             {activeSection === 'overview' && (
                 <>
-                    {(overdueProjects.length > 0 || highRiskProjects.length > 0) && (
-                        <div className="space-y-3 mb-6">
-                            {overdueProjects.length > 0 && (
-                                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg shadow-sm">
-                                    <div className="flex items-start gap-3">
-                                        <i className="fas fa-exclamation-triangle text-red-500 text-xl"></i>
-                                        <div className="flex-1">
-                                            <h3 className="text-sm font-bold text-red-800">
-                                                {localize(
-                                                    `${overdueProjects.length} project(s) overdue`,
-                                                    `${overdueProjects.length} projet(s) en retard`
-                                                )}
-                                            </h3>
-                                            <p className="text-sm text-red-700">
-                                                {localize(
-                                                    'Follow up on the due dates below to avoid delays.',
-                                                    'Suivez les échéances ci-dessous pour éviter les retards.'
-                                                )}
-                                            </p>
-                                            <ul className="mt-2 text-sm text-red-700 list-disc list-inside space-y-1">
-                                                {overdueProjects.map(project => (
-                                                    <li key={`overdue-${project.id}`}>
-                                                        {project.title} —{' '}
-                                                        {project.dueDate
-                                                            ? new Date(project.dueDate).toLocaleDateString(locale)
-                                                            : '-'}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            {highRiskProjects.length > 0 && (
-                                <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg shadow-sm">
-                                    <div className="flex items-start gap-3">
-                                        <i className="fas fa-fire text-orange-500 text-xl"></i>
-                                        <div className="flex-1">
-                                            <h3 className="text-sm font-bold text-orange-800">
-                                                {localize(
-                                                    'Projects with high risks detected',
-                                                    'Projets avec risques élevés détectés'
-                                                )}
-                                            </h3>
-                                            <p className="text-sm text-orange-700">
-                                                {localize(
-                                                    'Review mitigation plans for these projects.',
-                                                    'Révisez les plans de mitigation pour ces projets.'
-                                                )}
-                                            </p>
-                                            <ul className="mt-2 text-sm text-orange-700 list-disc list-inside space-y-1">
-                                                {highRiskProjects.map(project => (
-                                                    <li key={`risk-${project.id}`}>{project.title}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                    {/* KPI minimalistes */}
+                    {projects.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <p className="text-xs uppercase tracking-wide text-slate-500">{localize('Total projects', 'Projets totaux')}</p>
+                                <p className="mt-1 text-2xl font-semibold text-slate-900">{totalProjects}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <p className="text-xs uppercase tracking-wide text-slate-500">{localize('Active', 'Actifs')}</p>
+                                <p className="mt-1 text-2xl font-semibold text-slate-900">{activeProjects}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <p className="text-xs uppercase tracking-wide text-slate-500">{localize('Tasks', 'Taches')}</p>
+                                <p className="mt-1 text-2xl font-semibold text-slate-900">{totalTasks}</p>
+                            </div>
                         </div>
                     )}
 
-                    {/* Section Métriques - Style Power BI */}
-                    {projects.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                        {/* Carte Projets totaux */}
-                        <div className="bg-white rounded-xl shadow-lg border-l-4 border-blue-500 p-6 hover:shadow-xl transition-shadow">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Projets totaux</p>
-                                    <p className="text-3xl font-bold text-gray-900">{totalProjects}</p>
-                                </div>
-                                <div className="bg-blue-100 rounded-full p-4">
-                                    <i className="fas fa-folder-open text-blue-600 text-2xl"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Carte Projets actifs */}
-                        <div className="bg-white rounded-xl shadow-lg border-l-4 border-emerald-500 p-6 hover:shadow-xl transition-shadow">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Projets actifs</p>
-                                    <p className="text-3xl font-bold text-gray-900">{activeProjects}</p>
-                                </div>
-                                <div className="bg-emerald-100 rounded-full p-4">
-                                    <i className="fas fa-play-circle text-emerald-600 text-2xl"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Carte Tâches */}
-                        <div className="bg-white rounded-xl shadow-lg border-l-4 border-purple-500 p-6 hover:shadow-xl transition-shadow">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                <p className="text-sm font-medium text-gray-600 mb-1">{localize('Total tasks', 'Tâches totales')}</p>
-                                    <p className="text-3xl font-bold text-gray-900">{totalTasks}</p>
-                                </div>
-                                <div className="bg-purple-100 rounded-full p-4">
-                                    <i className="fas fa-tasks text-purple-600 text-2xl"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Carte Membres d'équipe */}
-                        <div className="bg-white rounded-xl shadow-lg border-l-4 border-orange-500 p-6 hover:shadow-xl transition-shadow">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                <p className="text-sm font-medium text-gray-600 mb-1">{localize('Team members', 'Membres d\'équipe')}</p>
-                                    <p className="text-3xl font-bold text-gray-900">{totalTeamMembers}</p>
-                                </div>
-                                <div className="bg-orange-100 rounded-full p-4">
-                                    <i className="fas fa-users text-orange-600 text-2xl"></i>
-                                </div>
-                            </div>
-                        </div>
+                {/* Bandeau predictif - priorisation intelligente */}
+                {prioritizedProjects.length > 0 && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
+                        {(() => {
+                            const critical = prioritizedProjects.filter(p => getProjectInsights(p).urgencyScore >= 65).length;
+                            const forecastSlippage = prioritizedProjects.filter(p => {
+                                const days = getProjectInsights(p).dueInDays;
+                                return days < 0 && p.status !== 'Completed';
+                            }).length;
+                            const avgHealth = prioritizedProjects.length > 0
+                                ? Math.max(
+                                      0,
+                                      Math.round(
+                                          prioritizedProjects.reduce((sum, p) => sum + (100 - getProjectInsights(p).urgencyScore), 0) /
+                                              prioritizedProjects.length
+                                      )
+                                  )
+                                : 0;
+                            const topProject = prioritizedProjects[0];
+                            const topInsight = getProjectInsights(topProject);
+                            return (
+                                <>
+                                    <div className="rounded-xl border border-red-200/70 bg-white px-4 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-red-600">
+                                            {localize('Critical priority', 'Priorite critique')}
+                                        </p>
+                                        <p className="mt-1 text-xl font-semibold text-slate-900">{critical}</p>
+                                        <p className="text-xs text-slate-500">
+                                            {localize('Projects require immediate attention', 'Projets a traiter immediatement')}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-amber-200/70 bg-white px-4 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                                            {localize('Portfolio health', 'Sante portefeuille')}
+                                        </p>
+                                        <p className="mt-1 text-xl font-semibold text-slate-900">{avgHealth}/100</p>
+                                        <p className="text-xs text-slate-500">
+                                            {localize('Delayed forecast projects', 'Projets en retard previsionnel')}: {forecastSlippage}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl border border-blue-200/70 bg-white px-4 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                                            {localize('Next best action', 'Prochaine meilleure action')}
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-slate-900 truncate">
+                                            {topProject?.title || localize('No project', 'Aucun projet')}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            {topInsight?.recommendedAction}
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 )}
 
-                {/* Section Team Workload Metrics - Style Power BI - Visible uniquement pour SENEGEL */}
-                {projects.length > 0 && isSenegalTeam && (
-                <div className="mb-8">
-                    <TeamWorkloadMetrics projects={projects} users={users} />
-                </div>
-            )}
-
                 {/* Barre de recherche, filtres et sélecteur de vue */}
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
                     <div className="flex flex-col lg:flex-row gap-4">
                         {/* Barre de recherche */}
                         <div className="flex-1">
@@ -2224,7 +2188,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                     placeholder={localize("Search a project by name, description or team member...", "Rechercher un projet par nom, description ou membre d'équipe...")}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 transition-all"
                                 />
                                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
                                 {searchQuery && (
@@ -2244,7 +2208,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                className="px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 bg-white"
                             >
                                 <option value="all">{localize('All statuses', 'Tous les statuts')}</option>
                                 <option value="Not Started">{localize('Not started', 'Non démarré')}</option>
@@ -2257,7 +2221,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             <select
                                 value={programmeFilter}
                                 onChange={(e) => setProgrammeFilter(e.target.value)}
-                                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                className="px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 bg-white"
                             >
                                 <option value="">{localize('All programmes', 'Tous les programmes')}</option>
                                 {programmesList.map(p => (
@@ -2268,9 +2232,10 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             {/* Tri */}
                             <select
                                 value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as 'date' | 'title' | 'status')}
-                                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                onChange={(e) => setSortBy(e.target.value as 'date' | 'title' | 'status' | 'smart')}
+                                className="px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 bg-white"
                             >
+                                <option value="smart">{localize('Smart priority', 'Priorite intelligente')}</option>
                                 <option value="date">{t('sort_by_date')}</option>
                                 <option value="title">{t('sort_by_title')}</option>
                                 <option value="status">{t('sort_by_status')}</option>
@@ -2279,7 +2244,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             {/* Ordre de tri */}
                             <button
                                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                                className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
+                                className="px-3 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors flex items-center"
                                 title={sortOrder === 'asc' ? t('sort_ascending') : t('sort_descending')}
                             >
                                 <i className={`fas ${sortOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} mr-2`}></i>
@@ -2289,9 +2254,9 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     </div>
 
                     {/* Sélecteur de vue */}
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-                        <div className="text-sm text-gray-600">
-                            {filteredProjects.length} {filteredProjects.length > 1 ? t('project_found_plural') : t('project_found_singular')}
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                        <div className="text-sm text-slate-500">
+                            {prioritizedProjects.length} {prioritizedProjects.length > 1 ? t('project_found_plural') : t('project_found_singular')}
                             {searchQuery && (
                                 <span className="ml-2">
                                     {t('for_search')} "{searchQuery}"
@@ -2299,13 +2264,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             )}
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600 mr-2">{t('view_label')}:</span>
+                            <span className="text-sm text-slate-500 mr-2">{t('view_label')}:</span>
                             <button
                                 onClick={() => setViewMode('grid')}
                                 className={`p-2 rounded-lg transition-all ${
                                     viewMode === 'grid'
-                                        ? 'bg-emerald-600 text-white shadow-md'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        ? 'bg-slate-900 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                                 title={t('grid_view')}
                             >
@@ -2315,98 +2280,105 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                 onClick={() => setViewMode('list')}
                                 className={`p-2 rounded-lg transition-all ${
                                     viewMode === 'list'
-                                        ? 'bg-emerald-600 text-white shadow-md'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        ? 'bg-slate-900 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                                 title={t('list_view')}
                             >
                                 <i className="fas fa-list"></i>
                             </button>
-                            <button
-                                onClick={() => setViewMode('compact')}
-                                className={`p-2 rounded-lg transition-all ${
-                                    viewMode === 'compact'
-                                        ? 'bg-emerald-600 text-white shadow-md'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                }`}
-                                title={t('compact_view')}
-                            >
-                                <i className="fas fa-grip-lines"></i>
-                            </button>
                         </div>
                     </div>
                 </div>
 
-                {filteredProjects.length > 0 ? (
+                {prioritizedProjects.length > 0 ? (
                     <>
                         {viewMode === 'grid' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {filteredProjects.map(project => {
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {prioritizedProjects.map(project => {
                                     const projectTasks = project.tasks || [];
                                     const completedTasks = projectTasks.filter(t => t.status === 'Completed').length;
                                     const progressPercentage = projectTasks.length > 0 
                                         ? Math.round((completedTasks / projectTasks.length) * 100) 
                                         : 0;
+                                    const insight = getProjectInsights(project);
                                     
                                     return (
                                         <div 
                                             key={project.id} 
-                                            className="bg-white rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-all duration-300 overflow-hidden group"
+                                            className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all duration-200 overflow-hidden"
                                         >
-                                            {/* Header de la carte avec gradient */}
-                                            <div className={`bg-gradient-to-r ${
-                                                project.status === 'Completed' ? 'from-emerald-500 to-teal-500' :
-                                                project.status === 'In Progress' ? 'from-blue-500 to-cyan-500' :
-                                                'from-gray-400 to-gray-500'
-                                            } p-4 text-white`}>
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <h3 className="text-xl font-bold mb-1 truncate">{project.title}</h3>
-                                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white bg-opacity-20 backdrop-blur-sm">
-                                        {t(project.status.toLowerCase().replace(' ', '_'))}
-                                    </span>
-                                                    </div>
+                                            <div className="p-5 border-b border-slate-100">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <h3 className="text-base font-semibold text-slate-900 truncate">{project.title}</h3>
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                                        project.status === 'Completed'
+                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                            : project.status === 'In Progress'
+                                                                ? 'bg-blue-100 text-blue-700'
+                                                                : 'bg-slate-100 text-slate-700'
+                                                    }`}>
+                                                        {t(project.status.toLowerCase().replace(' ', '_'))}
+                                                    </span>
                                                 </div>
-                                </div>
-                                
-                                            <div className="p-6">
-                                                <p className="text-gray-600 text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
+                                            </div>
+
+                                            <div className="p-5">
+                                                <p className="text-slate-600 text-sm mb-3 line-clamp-2 min-h-[2.5rem]">
                                                     {project.description || localize('No description', 'Aucune description')}
                                                 </p>
+
+                                                <div className="mb-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-medium text-slate-500">
+                                                            {localize('Predictive urgency', 'Urgence predictive')}
+                                                        </span>
+                                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                                            insight.riskLevel === 'high'
+                                                                ? 'bg-red-100 text-red-700'
+                                                                : insight.riskLevel === 'medium'
+                                                                    ? 'bg-amber-100 text-amber-700'
+                                                                    : 'bg-emerald-100 text-emerald-700'
+                                                        }`}>
+                                                            {insight.urgencyScore}/100
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-slate-500 line-clamp-2">{insight.recommendedAction}</p>
+                                                </div>
                                                 
                                                 {/* Barre de progression */}
                                                 {projectTasks.length > 0 && (
                                                     <div className="mb-4">
                                                         <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-xs font-medium text-gray-600">Progression</span>
-                                                            <span className="text-xs font-bold text-gray-900">{progressPercentage}%</span>
+                                                            <span className="text-xs font-medium text-slate-500">Progression</span>
+                                                            <span className="text-xs font-semibold text-slate-800">{progressPercentage}%</span>
                                     </div>
-                                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                                        <div className="w-full bg-slate-200 rounded-full h-2">
                                                             <div 
-                                                                className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                                                                className="bg-slate-900 h-2 rounded-full transition-all duration-300"
                                                                 style={{ width: `${progressPercentage}%` }}
                                                             ></div>
                                     </div>
                                                     </div>
                                                 )}
                                                 
-                                                <div className="space-y-2 mb-6">
+                                                <div className="space-y-2 mb-5">
                                                     {project.programmeName && (
-                                                        <div className="flex items-center text-sm text-gray-600">
-                                                            <i className="fas fa-bookmark mr-2 text-gray-400"></i>
+                                                        <div className="flex items-center text-sm text-slate-500">
+                                                            <i className="fas fa-bookmark mr-2 text-slate-400"></i>
                                                             <span>{project.programmeName}{project.programmeBailleurName ? ` (${project.programmeBailleurName})` : ''}</span>
                                                         </div>
                                                     )}
-                                                    <div className="flex items-center text-sm text-gray-600">
-                                                        <i className="fas fa-calendar-alt mr-2 text-gray-400"></i>
+                                                    <div className="flex items-center text-sm text-slate-500">
+                                                        <i className="fas fa-calendar-alt mr-2 text-slate-400"></i>
                                                         <span>{project.dueDate ? new Date(project.dueDate).toLocaleDateString('fr-FR') : t('no_due_date')}</span>
                                                     </div>
-                                                    <div className="flex items-center text-sm text-gray-600">
-                                                        <i className="fas fa-users mr-2 text-gray-400"></i>
+                                                    <div className="flex items-center text-sm text-slate-500">
+                                                        <i className="fas fa-users mr-2 text-slate-400"></i>
                                                         <span>{project.team.length} {project.team.length > 1 ? 'membres' : 'membre'}</span>
                                                     </div>
-                                                    <div className="flex items-center text-sm text-gray-600">
-                                                        <i className="fas fa-tasks mr-2 text-gray-400"></i>
+                                                    <div className="flex items-center text-sm text-slate-500">
+                                                        <i className="fas fa-tasks mr-2 text-slate-400"></i>
                                                         <span>{projectTasks.length} {projectTasks.length > 1 ? 'tâches' : 'tâche'}</span>
                                                     </div>
                                                 </div>
@@ -2418,7 +2390,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                             setIsProjectDetailPageOpen(true);
                                         }}
                                         disabled={isLoading}
-                                                        className="text-emerald-600 hover:text-emerald-700 font-semibold text-sm disabled:text-gray-400 disabled:cursor-not-allowed flex items-center transition-colors"
+                                                        className="btn-3d-secondary"
                                     >
                                                         <i className="fas fa-eye mr-2"></i>
                                         {t('view_details')}
@@ -2453,19 +2425,20 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
 
                         {/* Vue Liste */}
                         {viewMode === 'list' && (
-                            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                                 <div className="divide-y divide-gray-200">
-                                    {filteredProjects.map(project => {
+                                    {prioritizedProjects.map(project => {
                                         const projectTasks = project.tasks || [];
                                         const completedTasks = projectTasks.filter(t => t.status === 'Completed').length;
                                         const progressPercentage = projectTasks.length > 0 
                                             ? Math.round((completedTasks / projectTasks.length) * 100) 
                                             : 0;
+                                        const insight = getProjectInsights(project);
 
                                         return (
                                             <div 
                                                 key={project.id} 
-                                                className="p-6 hover:bg-gray-50 transition-colors"
+                                                className="p-5 hover:bg-slate-50 transition-colors"
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1 min-w-0">
@@ -2477,7 +2450,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                             }`}></div>
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-3 mb-2">
-                                                                    <h3 className="text-lg font-bold text-gray-900 truncate">{project.title}</h3>
+                                                                    <h3 className="text-lg font-semibold text-slate-900 truncate">{project.title}</h3>
                                                                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                                                                         project.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
                                                                         project.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
@@ -2491,10 +2464,13 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                         {project.programmeName}{project.programmeBailleurName ? ` · ${project.programmeBailleurName}` : ''}
                                                                     </p>
                                                                 )}
-                                                                <p className="text-sm text-gray-600 mb-3 line-clamp-1">
+                                                                <p className="text-sm text-slate-600 mb-3 line-clamp-1">
                                                                     {project.description || localize('No description', 'Aucune description')}
                                                                 </p>
-                                                                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                                                                <p className="text-xs text-slate-500 mb-3">
+                                                                    {localize('Suggested action', 'Action suggeree')} : {insight.recommendedAction}
+                                                                </p>
+                                                                <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
                                                                     <div className="flex items-center">
                                                                         <i className="fas fa-calendar-alt mr-2"></i>
                                                                         <span>{project.dueDate ? new Date(project.dueDate).toLocaleDateString('fr-FR') : t('no_due_date')}</span>
@@ -2529,7 +2505,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                                                 setIsProjectDetailPageOpen(true);
                                                             }}
                                                             disabled={isLoading}
-                                                            className="text-emerald-600 hover:text-emerald-700 font-semibold text-sm disabled:text-gray-400 disabled:cursor-not-allowed flex items-center transition-colors px-4 py-2 rounded-lg hover:bg-emerald-50"
+                                                            className="btn-3d-secondary"
                                                         >
                                                             <i className="fas fa-eye mr-2"></i>
                                                             {t('view_details')}
@@ -2563,116 +2539,9 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             </div>
                         )}
 
-                        {/* Vue Compacte */}
-                        {viewMode === 'compact' && (
-                            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Project', 'Projet')}</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Status', 'Statut')}</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Team', 'Équipe')}</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Tasks', 'Tâches')}</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Progress', 'Progression')}</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Due date', 'Échéance')}</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{localize('Actions', 'Actions')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {filteredProjects.map(project => {
-                                            const projectTasks = project.tasks || [];
-                                            const completedTasks = projectTasks.filter(t => t.status === 'Completed').length;
-                                            const progressPercentage = projectTasks.length > 0 
-                                                ? Math.round((completedTasks / projectTasks.length) * 100) 
-                                                : 0;
-
-                                            return (
-                                                <tr key={project.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div>
-                                                            <div className="text-sm font-medium text-gray-900">{project.title}</div>
-                                                            <div className="text-sm text-gray-500 truncate max-w-xs">
-                                                    {project.description || localize('No description', 'Aucune description')}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                                            project.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                                                            project.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                                                            'bg-gray-100 text-gray-800'
-                                                        }`}>
-                                                            {t(project.status.toLowerCase().replace(' ', '_'))}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center text-sm text-gray-500">
-                                                            <i className="fas fa-users mr-2"></i>
-                                                            <span>{project.team.length}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {projectTasks.length} {projectTasks.length > 1 ? 'tâches' : 'tâche'}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center">
-                                                            <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2 max-w-24">
-                                                                <div 
-                                                                    className="bg-emerald-600 h-2 rounded-full transition-all"
-                                                                    style={{ width: `${progressPercentage}%` }}
-                                                                ></div>
-                                                            </div>
-                                                            <span className="text-xs font-bold text-gray-700">{progressPercentage}%</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                        {project.dueDate ? new Date(project.dueDate).toLocaleDateString('fr-FR') : '-'}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setSelectedProject(project);
-                                                                    setIsProjectDetailPageOpen(true);
-                                                                }}
-                                                                disabled={isLoading}
-                                                                className="text-emerald-600 hover:text-emerald-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                title={localize('View details', 'Voir détails')}
-                                                            >
-                                                                <i className="fas fa-eye"></i>
-                                                            </button>
-                                                            {canManageProject(project) && (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => handleOpenForm(project)}
-                                                                        disabled={isLoading}
-                                                                        className="text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                        title={localize('Edit', 'Modifier')}
-                                                                    >
-                                                                        <i className="fas fa-edit"></i>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleRequestDeleteProject(project)}
-                                                                        disabled={isLoading}
-                                                                        className="text-red-600 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                                                        title={localize('Delete', 'Supprimer')}
-                                                                    >
-                                                                        <i className="fas fa-trash"></i>
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
                     </>
                 ) : (
-                    <div className="text-center py-20 px-4 bg-white rounded-xl shadow-lg">
+                    <div className="text-center py-20 px-4 bg-white rounded-xl border border-slate-200">
                         <div className="mb-6">
                             <i className={`fas ${searchQuery || statusFilter !== 'all' ? 'fa-search' : 'fa-folder-open'} fa-5x text-gray-300`}></i>
                         </div>

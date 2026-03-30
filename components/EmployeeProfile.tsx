@@ -4,7 +4,12 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 import DataAdapter from '../services/dataAdapter';
 import { Employee, RESOURCE_MANAGEMENT_ROLES } from '../types';
 
-const EmployeeProfile: React.FC = () => {
+interface EmployeeProfileProps {
+  selectedEmployee?: Employee | null;
+  onClearSelection?: () => void;
+}
+
+const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = null, onClearSelection }) => {
   const { user } = useAuth();
   const { language } = useLocalization();
   const fr = language === 'fr';
@@ -14,7 +19,9 @@ const EmployeeProfile: React.FC = () => {
   const [form, setForm] = useState<Partial<Employee>>({});
   const canEdit = user ? RESOURCE_MANAGEMENT_ROLES.includes(user.role) : false;
 
-  const profileId = user?.profileId ? String(user.profileId) : user?.id ? String(user.id) : null;
+  const profileId = selectedEmployee?.profileId
+    ? String(selectedEmployee.profileId)
+    : (user?.profileId ? String(user.profileId) : user?.id ? String(user.id) : null);
 
   const load = useCallback(async () => {
     if (!profileId) return;
@@ -82,9 +89,17 @@ const EmployeeProfile: React.FC = () => {
 
   return (
     <div className="bg-coya-card rounded-lg shadow-coya border border-coya-border p-6">
-      <h2 className="text-xl font-bold text-coya-text mb-4">
-        {fr ? 'Fiche salarié' : 'Employee profile'}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-coya-text">
+          {fr ? 'Fiche salarié' : 'Employee profile'}
+        </h2>
+        {selectedEmployee && onClearSelection && (
+          <button type="button" onClick={onClearSelection} className="text-sm text-emerald-600 hover:text-emerald-800 font-medium">
+            <i className="fas fa-arrow-left mr-1" />
+            {fr ? 'Retour à la liste' : 'Back to list'}
+          </button>
+        )}
+      </div>
       <p className="text-sm text-coya-text-muted mb-4">
         {fr ? 'État civil, situation familiale, CNSS, AMO, indemnités, taux de congé, ancienneté, poste.' : 'Civil status, family situation, CNSS, AMO, indemnities, leave rate, tenure, position.'}
       </p>

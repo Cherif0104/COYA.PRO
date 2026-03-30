@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 import * as parcAutoService from '../services/parcAutoService';
 import type { Vehicle, VehicleRequest } from '../services/parcAutoService';
 import OrganizationService from '../services/organizationService';
@@ -9,6 +10,7 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 const ParcAutoModule: React.FC = () => {
   const { language } = useLocalization();
   const { user } = useAuth();
+  const { hasPermission } = useModulePermissions();
   const isFr = language === 'fr';
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [requests, setRequests] = useState<VehicleRequest[]>([]);
@@ -18,7 +20,8 @@ const ParcAutoModule: React.FC = () => {
   const [formVehicle, setFormVehicle] = useState({ name: '', brand: '', model: '', plateNumber: '', location: '' });
   const [formRequest, setFormRequest] = useState({ vehicleId: '', notes: '' });
 
-  const isManager = user?.role && ['super_administrator', 'administrator', 'manager'].includes(user.role);
+  const canWrite = useMemo(() => hasPermission('parc_auto', 'write'), [hasPermission]);
+  const isManager = (user?.role && ['super_administrator', 'administrator', 'manager'].includes(user.role)) || canWrite;
 
   const load = async () => {
     setLoading(true);
@@ -75,7 +78,7 @@ const ParcAutoModule: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-gray-500 p-8">
+      <div className="flex items-center gap-2 text-slate-500 p-8">
         <span className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-500 border-t-transparent" />
         <span>{isFr ? 'Chargement...' : 'Loading...'}</span>
       </div>
@@ -83,33 +86,33 @@ const ParcAutoModule: React.FC = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-coya-text mb-2 flex items-center gap-3">
-          <i className="fas fa-car text-coya-primary" />
-          {isFr ? 'Parc automobile' : 'Fleet management'}
-        </h1>
-        <p className="text-coya-text-muted">
-          {isFr ? 'Gestion du parc véhicules. Workflow : demande → validation → mise à disposition → retour.' : 'Vehicle fleet management. Workflow: request → validation → allocation → return.'}
-        </p>
-      </header>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-car text-emerald-600" />
+            {isFr ? 'Parc automobile' : 'Fleet management'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {isFr ? 'Véhicules et demandes. Workflow : demande → validation → mise à disposition → retour.' : 'Vehicles and requests. Workflow: request → validation → allocation → return.'}
+          </p>
+        </div>
+      </div>
 
-      <section className="bg-coya-card rounded-lg border border-coya-border p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-coya-text flex items-center gap-2">
-            <i className="fas fa-car text-coya-primary" />
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-car text-emerald-600" />
             {isFr ? 'Véhicules' : 'Vehicles'}
           </h2>
           {isManager && (
-            <button
-              type="button"
-              onClick={() => setShowVehicleForm(true)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
-            >
+            <button type="button" onClick={() => setShowVehicleForm(true)} className="btn-3d-primary">
+              <i className="fas fa-plus mr-2" />
               {isFr ? 'Nouveau véhicule' : 'New vehicle'}
             </button>
           )}
         </div>
+        <div className="p-4">
         {showVehicleForm && (
           <form onSubmit={handleCreateVehicle} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             <input
@@ -127,64 +130,67 @@ const ParcAutoModule: React.FC = () => {
             </div>
             <input type="text" placeholder={isFr ? 'Emplacement' : 'Location'} value={formVehicle.location} onChange={(e) => setFormVehicle((f) => ({ ...f, location: e.target.value }))} className="w-full border rounded px-3 py-2" />
             <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{isFr ? 'Créer' : 'Create'}</button>
-              <button type="button" onClick={() => setShowVehicleForm(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">{isFr ? 'Annuler' : 'Cancel'}</button>
+              <button type="submit" className="btn-3d-primary">{isFr ? 'Créer' : 'Create'}</button>
+              <button type="button" onClick={() => setShowVehicleForm(false)} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
             </div>
           </form>
         )}
         {vehicles.length === 0 ? (
-          <p className="text-gray-500 text-sm">{isFr ? 'Aucun véhicule.' : 'No vehicles.'}</p>
+          <p className="text-slate-500 text-sm">{isFr ? 'Aucun véhicule.' : 'No vehicles.'}</p>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Nom' : 'Name'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Marque' : 'Brand'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Modèle' : 'Model'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Immatriculation' : 'Plate'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Emplacement' : 'Location'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Nom' : 'Name'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Marque' : 'Brand'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Modèle' : 'Model'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Immatriculation' : 'Plate'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Emplacement' : 'Location'}</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-slate-200">
                 {vehicles.map((v) => (
                   <tr key={v.id}>
-                    <td className="px-4 py-2 text-sm font-medium">{v.name}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{v.brand || '—'}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{v.model || '—'}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{v.plateNumber || '—'}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{v.location || '—'}</td>
+                    <td className="px-4 py-2 text-sm font-medium text-slate-900">{v.name}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{v.brand || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{v.model || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{v.plateNumber || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{v.location || '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+        </div>
       </section>
 
-      <section className="bg-coya-card rounded-lg border border-coya-border p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-coya-text flex items-center gap-2">
-            <i className="fas fa-key text-coya-primary" />
-            {isFr ? 'Demandes' : 'Requests'}
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-truck-loading text-emerald-600" />
+            {isFr ? 'Demandes véhicules' : 'Vehicle requests'}
           </h2>
           <button
             type="button"
             onClick={() => setShowRequestForm(true)}
             disabled={vehicles.length === 0}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium"
+            className="btn-3d-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
+            <i className="fas fa-plus mr-2" />
             {isFr ? 'Nouvelle demande' : 'New request'}
           </button>
         </div>
+        <div className="p-4">
         {showRequestForm && (
-          <form onSubmit={handleCreateRequest} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+          <form onSubmit={handleCreateRequest} className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{isFr ? 'Véhicule' : 'Vehicle'}</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Véhicule' : 'Vehicle'}</label>
               <select
                 value={formRequest.vehicleId}
                 onChange={(e) => setFormRequest((f) => ({ ...f, vehicleId: e.target.value }))}
-                className="w-full border border-gray-300 rounded px-3 py-2"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2"
                 required
               >
                 <option value="">— {isFr ? 'Choisir' : 'Select'} —</option>
@@ -193,27 +199,27 @@ const ParcAutoModule: React.FC = () => {
                 ))}
               </select>
             </div>
-            <textarea placeholder={isFr ? 'Notes (optionnel)' : 'Notes (optional)'} value={formRequest.notes} onChange={(e) => setFormRequest((f) => ({ ...f, notes: e.target.value }))} className="w-full border rounded px-3 py-2" rows={2} />
+            <textarea placeholder={isFr ? 'Notes (optionnel)' : 'Notes (optional)'} value={formRequest.notes} onChange={(e) => setFormRequest((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2" rows={2} />
             <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{isFr ? 'Demander' : 'Request'}</button>
-              <button type="button" onClick={() => setShowRequestForm(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">{isFr ? 'Annuler' : 'Cancel'}</button>
+              <button type="submit" className="btn-3d-primary">{isFr ? 'Demander' : 'Request'}</button>
+              <button type="button" onClick={() => setShowRequestForm(false)} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
             </div>
           </form>
         )}
         {requests.length === 0 ? (
-          <p className="text-gray-500 text-sm">{isFr ? 'Aucune demande.' : 'No requests.'}</p>
+          <p className="text-slate-500 text-sm">{isFr ? 'Aucune demande.' : 'No requests.'}</p>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Véhicule' : 'Vehicle'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Statut' : 'Status'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Date' : 'Date'}</th>
-                  {isManager && <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">{isFr ? 'Actions' : 'Actions'}</th>}
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Véhicule' : 'Vehicle'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Statut' : 'Status'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">{isFr ? 'Date' : 'Date'}</th>
+                  {isManager && <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">{isFr ? 'Actions' : 'Actions'}</th>}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-slate-200">
                 {requests.map((r) => {
                   const v = vehicles.find((ve) => ve.id === r.vehicleId);
                   return (
@@ -229,20 +235,20 @@ const ParcAutoModule: React.FC = () => {
                           {statusLabel(r.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-500">{r.requestedAt ? new Date(r.requestedAt).toLocaleDateString('fr-FR') : '—'}</td>
+                      <td className="px-4 py-2 text-sm text-slate-500">{r.requestedAt ? new Date(r.requestedAt).toLocaleDateString('fr-FR') : '—'}</td>
                       {isManager && (
-                        <td className="px-4 py-2 text-right text-sm">
+                        <td className="px-4 py-2 text-right text-sm space-x-2">
                           {r.status === 'requested' && (
                             <>
-                              <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'validated')} className="text-blue-600 hover:text-blue-800 mr-2">{isFr ? 'Valider' : 'Validate'}</button>
-                              <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'rejected')} className="text-red-600 hover:text-red-800">{isFr ? 'Rejeter' : 'Reject'}</button>
+                              <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'validated')} className="btn-3d-primary text-sm py-1 px-2">{isFr ? 'Valider' : 'Validate'}</button>
+                              <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'rejected')} className="btn-3d-danger text-sm py-1 px-2">{isFr ? 'Rejeter' : 'Reject'}</button>
                             </>
                           )}
                           {r.status === 'validated' && (
-                            <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'allocated')} className="text-green-600 hover:text-green-800">{isFr ? 'Mettre à disposition' : 'Allocate'}</button>
+                            <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'allocated')} className="btn-3d-primary text-sm py-1 px-2">{isFr ? 'Mettre à disposition' : 'Allocate'}</button>
                           )}
                           {r.status === 'allocated' && (
-                            <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'returned')} className="text-gray-600 hover:text-gray-800">{isFr ? 'Retour' : 'Return'}</button>
+                            <button type="button" onClick={() => handleUpdateRequestStatus(r.id, 'returned')} className="btn-3d-secondary text-sm py-1 px-2">{isFr ? 'Retour' : 'Return'}</button>
                           )}
                         </td>
                       )}
@@ -253,6 +259,7 @@ const ParcAutoModule: React.FC = () => {
             </table>
           </div>
         )}
+        </div>
       </section>
     </div>
   );

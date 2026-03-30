@@ -38,21 +38,21 @@ const StructuredModulePage: React.FC<StructuredModulePageProps> = ({
   const description = isFr ? descriptionFr : descriptionEn;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8 text-slate-900">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-coya-text mb-2 flex items-center gap-3">
-          <i className={`${icon} text-coya-primary`} aria-hidden />
+        <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
+          <i className={`${icon} text-slate-600`} aria-hidden />
           {title}
         </h1>
-        <p className="text-coya-text-muted">{description}</p>
+        <p className="text-slate-600">{description}</p>
       </header>
       {children}
       {sections.length > 0 && (
         <div className="space-y-6">
           {sections.map((sec) => (
-            <section key={sec.key} className="bg-coya-card rounded-coya border border-coya-border p-6 shadow-coya">
-              <h2 className="text-lg font-semibold text-coya-text mb-4 flex items-center gap-2">
-                {sec.icon && <i className={`${sec.icon} text-coya-primary`} />}
+            <section key={sec.key} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                {sec.icon && <i className={`${sec.icon} text-slate-600`} />}
                 {isFr ? sec.titleFr : sec.titleEn}
               </h2>
               {sec.content}

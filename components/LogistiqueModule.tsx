@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 import * as logistiqueService from '../services/logistiqueService';
 import type { Equipment, EquipmentRequest } from '../services/logistiqueService';
 import OrganizationService from '../services/organizationService';
@@ -9,6 +10,7 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 const LogistiqueModule: React.FC = () => {
   const { language } = useLocalization();
   const { user } = useAuth();
+  const { hasPermission } = useModulePermissions();
   const isFr = language === 'fr';
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
@@ -18,7 +20,8 @@ const LogistiqueModule: React.FC = () => {
   const [formEquip, setFormEquip] = useState({ name: '', brand: '', model: '', location: '' });
   const [formRequest, setFormRequest] = useState({ equipmentId: '', notes: '' });
 
-  const isManager = user?.role && ['super_administrator', 'administrator', 'manager'].includes(user.role);
+  const canWrite = useMemo(() => hasPermission('logistique', 'write'), [hasPermission]);
+  const isManager = (user?.role && ['super_administrator', 'administrator', 'manager'].includes(user.role)) || canWrite;
 
   const load = async () => {
     setLoading(true);
@@ -75,7 +78,7 @@ const LogistiqueModule: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-gray-500 p-8">
+      <div className="flex items-center gap-2 text-slate-500 p-8">
         <span className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-500 border-t-transparent" />
         <span>{isFr ? 'Chargement...' : 'Loading...'}</span>
       </div>
@@ -83,33 +86,33 @@ const LogistiqueModule: React.FC = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-coya-text mb-2 flex items-center gap-3">
-          <i className="fas fa-boxes text-coya-primary" />
-          {isFr ? 'Logistique' : 'Logistics'}
-        </h1>
-        <p className="text-coya-text-muted">
-          {isFr ? 'Gestion des équipements et demandes. Workflow : demande → validation → mise à disposition → retour.' : 'Equipment and request management. Workflow: request → validation → allocation → return.'}
-        </p>
-      </header>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-boxes text-emerald-600" />
+            {isFr ? 'Logistique' : 'Logistics'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {isFr ? 'Équipements et demandes. Workflow : demande → validation → mise à disposition → retour.' : 'Equipment and requests. Workflow: request → validation → allocation → return.'}
+          </p>
+        </div>
+      </div>
 
-      <section className="bg-coya-card rounded-lg border border-coya-border p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-coya-text flex items-center gap-2">
-            <i className="fas fa-boxes text-coya-primary" />
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-boxes text-emerald-600" />
             {isFr ? 'Équipements' : 'Equipment'}
           </h2>
           {isManager && (
-            <button
-              type="button"
-              onClick={() => setShowEquipForm(true)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
-            >
+            <button type="button" onClick={() => setShowEquipForm(true)} className="btn-3d-primary">
+              <i className="fas fa-plus mr-2" />
               {isFr ? 'Nouvel équipement' : 'New equipment'}
             </button>
           )}
         </div>
+        <div className="p-4">
         {showEquipForm && (
           <form onSubmit={handleCreateEquipment} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             <input
@@ -126,15 +129,15 @@ const LogistiqueModule: React.FC = () => {
               <input type="text" placeholder={isFr ? 'Emplacement' : 'Location'} value={formEquip.location} onChange={(e) => setFormEquip((f) => ({ ...f, location: e.target.value }))} className="border rounded px-3 py-2" />
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{isFr ? 'Créer' : 'Create'}</button>
-              <button type="button" onClick={() => setShowEquipForm(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">{isFr ? 'Annuler' : 'Cancel'}</button>
+              <button type="submit" className="btn-3d-primary">{isFr ? 'Créer' : 'Create'}</button>
+              <button type="button" onClick={() => setShowEquipForm(false)} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
             </div>
           </form>
         )}
         {equipments.length === 0 ? (
-          <p className="text-gray-500 text-sm">{isFr ? 'Aucun équipement.' : 'No equipment.'}</p>
+          <p className="text-slate-500 text-sm">{isFr ? 'Aucun équipement.' : 'No equipment.'}</p>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -157,23 +160,26 @@ const LogistiqueModule: React.FC = () => {
             </table>
           </div>
         )}
+        </div>
       </section>
 
-      <section className="bg-coya-card rounded-lg border border-coya-border p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-coya-text flex items-center gap-2">
-            <i className="fas fa-truck-loading text-coya-primary" />
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <i className="fas fa-truck-loading text-emerald-600" />
             {isFr ? 'Demandes' : 'Requests'}
           </h2>
           <button
             type="button"
             onClick={() => setShowRequestForm(true)}
             disabled={equipments.length === 0}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium"
+            className="btn-3d-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
+            <i className="fas fa-plus mr-2" />
             {isFr ? 'Nouvelle demande' : 'New request'}
           </button>
         </div>
+        <div className="p-4">
         {showRequestForm && (
           <form onSubmit={handleCreateRequest} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             <div>
@@ -192,15 +198,15 @@ const LogistiqueModule: React.FC = () => {
             </div>
             <textarea placeholder={isFr ? 'Notes (optionnel)' : 'Notes (optional)'} value={formRequest.notes} onChange={(e) => setFormRequest((f) => ({ ...f, notes: e.target.value }))} className="w-full border rounded px-3 py-2" rows={2} />
             <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{isFr ? 'Demander' : 'Request'}</button>
-              <button type="button" onClick={() => setShowRequestForm(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">{isFr ? 'Annuler' : 'Cancel'}</button>
+              <button type="submit" className="btn-3d-primary">{isFr ? 'Demander' : 'Request'}</button>
+              <button type="button" onClick={() => setShowRequestForm(false)} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
             </div>
           </form>
         )}
         {requests.length === 0 ? (
-          <p className="text-gray-500 text-sm">{isFr ? 'Aucune demande.' : 'No requests.'}</p>
+          <p className="text-slate-500 text-sm">{isFr ? 'Aucune demande.' : 'No requests.'}</p>
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -250,6 +256,7 @@ const LogistiqueModule: React.FC = () => {
             </table>
           </div>
         )}
+        </div>
       </section>
     </div>
   );

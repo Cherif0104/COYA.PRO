@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { Language } from '../types';
-import NexusFlowIcon from './icons/NexusFlowIcon';
 import NotificationCenter from './common/NotificationCenter';
 import { Notification } from '../services/notificationService';
 
@@ -37,10 +36,7 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationN
             <button onClick={toggleSidebar} className="text-coya-text-muted lg:hidden mr-4 focus:outline-none hover:text-coya-primary">
                 <i className="fas fa-bars fa-lg"></i>
             </button>
-             <div className="flex-shrink-0 flex items-center space-x-2">
-                <NexusFlowIcon className="h-8 w-auto" />
-                <span className="font-bold text-lg text-coya-text hidden sm:block">{t('senegel_workflow_platform')}</span>
-            </div>
+            <div className="flex-shrink-0 flex items-center space-x-2" />
           </div>
 
           <div className="flex items-center space-x-4">

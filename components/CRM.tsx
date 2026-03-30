@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Contact, RESOURCE_MANAGEMENT_ROLES } from '../types';
+import { Contact, RESOURCE_MANAGEMENT_ROLES, ModuleName, DataCollection } from '../types';
+import PartenariatModule from './PartenariatModule';
+import * as dataCollectionService from '../services/dataCollectionService';
+import OrganizationService from '../services/organizationService';
 import { draftSalesEmail } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import ExtensibleSelect from './common/ExtensibleSelect';
-import OrganizationService from '../services/organizationService';
 import * as referentialsService from '../services/referentialsService';
 
 const statusStyles = {
@@ -160,12 +162,26 @@ interface CRMProps {
     onAddContact: (contact: Omit<Contact, 'id'>) => void;
     onUpdateContact: (contact: Contact) => void;
     onDeleteContact: (contactId: number) => void;
+    canAccessModule?: (module: ModuleName) => boolean;
+    setView?: (view: string) => void;
 }
 
-const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact }) => {
+const CRM: React.FC<CRMProps> = ({
+    contacts,
+    onAddContact,
+    onUpdateContact,
+    onDeleteContact,
+    canAccessModule,
+    setView,
+}) => {
     const { t } = useLocalization();
     const { user } = useAuth();
-    const [view, setView] = useState<'list' | 'pipeline'>('list');
+    const showPartenariatTab = canAccessModule ? canAccessModule('partenariat') : true;
+    const [mainTab, setMainTab] = useState<'contacts' | 'partenariat'>('contacts');
+    const [contactSubView, setContactSubView] = useState<'list' | 'pipeline'>('list');
+    const [showCollecteEnrichModal, setShowCollecteEnrichModal] = useState(false);
+    const [collecteEnrichCandidates, setCollecteEnrichCandidates] = useState<DataCollection[]>([]);
+    const [collecteOrgId, setCollecteOrgId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -216,6 +232,37 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
         }).catch(() => {});
         return () => { cancelled = true; };
     }, []);
+
+    useEffect(() => {
+        if (!showPartenariatTab && mainTab === 'partenariat') setMainTab('contacts');
+    }, [showPartenariatTab, mainTab]);
+
+    useEffect(() => {
+        OrganizationService.getCurrentUserOrganizationId().then(setCollecteOrgId).catch(() => setCollecteOrgId(null));
+    }, []);
+
+    const openCollecteEnrichModal = useCallback(() => {
+        const list = dataCollectionService.listDataCollections(collecteOrgId).filter((c) => !c.linkedToCrm);
+        setCollecteEnrichCandidates(list);
+        setShowCollecteEnrichModal(true);
+    }, [collecteOrgId]);
+
+    const applyCollecteToCrm = useCallback(
+        (c: DataCollection) => {
+            const safeId = String(c.id).replace(/[^a-zA-Z0-9-]/g, '');
+            onAddContact({
+                name: c.name,
+                company: 'Collecte de données',
+                status: 'Lead',
+                workEmail: `collecte.${safeId || 'item'}@placeholder.local`,
+                personalEmail: '',
+                avatar: `https://picsum.photos/seed/collecte-${encodeURIComponent(String(c.id))}/100/100`,
+            });
+            dataCollectionService.markDataCollectionLinkedToCrm(c.id);
+            setShowCollecteEnrichModal(false);
+        },
+        [onAddContact]
+    );
 
     // Métriques calculées
     const metrics = useMemo(() => {
@@ -344,62 +391,110 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
 
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-500 via-green-500 to-blue-500 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <div className="mb-4 sm:mb-0">
-                            <h1 className="text-3xl font-bold mb-2">
-                                <i className="fas fa-handshake mr-3"></i>
-                                {t('crm_title')}
-                            </h1>
-                            <p className="text-emerald-100">{t('crm_subtitle')}</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                        <i className="fas fa-users text-slate-600" />
+                        {t('crm_title')}
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-0.5">{t('crm_subtitle')}</p>
                 </div>
-                <div className="flex items-center space-x-2">
-                            <div className="p-1 bg-white bg-opacity-20 rounded-lg backdrop-blur-sm">
-                                <button 
-                                    onClick={() => setView('list')} 
-                                    className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${
-                                        view === 'list' 
-                                            ? 'bg-white text-emerald-600 shadow-lg' 
-                                            : 'text-white hover:bg-white hover:bg-opacity-20'
-                                    }`}
-                                >
-                                    <i className="fas fa-list mr-2"></i>
-                                    {t('list_view')}
-                                </button>
-                                <button 
-                                    onClick={() => setView('pipeline')} 
-                                    className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${
-                                        view === 'pipeline' 
-                                            ? 'bg-white text-emerald-600 shadow-lg' 
-                                            : 'text-white hover:bg-white hover:bg-opacity-20'
-                                    }`}
-                                >
-                                    <i className="fas fa-columns mr-2"></i>
-                                    {t('pipeline_view')}
-                                </button>
-                    </div>
+                {setView && (
+                    <button
+                        type="button"
+                        onClick={() => setView('collecte')}
+                        className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 shrink-0"
+                    >
+                        <i className="fas fa-clipboard-list mr-2" />
+                        Collecte de données
+                    </button>
+                )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex flex-wrap gap-1">
+                <button
+                    type="button"
+                    onClick={() => setMainTab('contacts')}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                        mainTab === 'contacts' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    CRM &amp; Ventes
+                </button>
+                {showPartenariatTab && (
+                    <button
+                        type="button"
+                        onClick={() => setMainTab('partenariat')}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                            mainTab === 'partenariat' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                    >
+                        Partenariat
+                    </button>
+                )}
+            </div>
+
+            {mainTab === 'partenariat' && (
+                <section className="mb-8">
+                    <PartenariatModule embedded />
+                </section>
+            )}
+
+            {mainTab === 'contacts' && (
+            <>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-1.5 inline-flex flex-wrap gap-1">
+                    <button
+                        type="button"
+                        onClick={() => setContactSubView('list')}
+                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            contactSubView === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                        <i className="fas fa-list mr-2" />
+                        {t('list_view')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setContactSubView('pipeline')}
+                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            contactSubView === 'pipeline' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                        <i className="fas fa-columns mr-2" />
+                        {t('pipeline_view')}
+                    </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
                     {canManage && (
-                                <button 
-                                    onClick={() => setFormModalOpen(true)} 
-                                    className="bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg hover:bg-emerald-50 flex items-center shadow-lg transition-all hover:scale-105"
-                                >
-                                    <i className="fas fa-plus mr-2"></i>
-                                    {t('create_contact')}
+                        <button
+                            type="button"
+                            onClick={openCollecteEnrichModal}
+                            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50"
+                        >
+                            <i className="fas fa-database mr-2" />
+                            Enrichir depuis une collecte
                         </button>
                     )}
-                        </div>
-                    </div>
+                    {canManage && (
+                        <button
+                            type="button"
+                            onClick={() => setFormModalOpen(true)}
+                            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                        >
+                            <i className="fas fa-plus mr-2" />
+                            {t('create_contact')}
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Métriques Power BI Style */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
+            {/* Métriques */}
+            <div className="mb-8">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                     {/* Métrique 1: Total Contacts */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-gray-500 text-sm font-medium">Total Contacts</p>
@@ -416,7 +511,7 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                     </div>
 
                     {/* Métrique 2: Leads */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-yellow-500 hover:shadow-xl transition-shadow">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-gray-500 text-sm font-medium">Leads</p>
@@ -433,7 +528,7 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                     </div>
 
                     {/* Métrique 3: Prospects */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-purple-500 hover:shadow-xl transition-shadow">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-gray-500 text-sm font-medium">Prospects</p>
@@ -450,7 +545,7 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                     </div>
 
                     {/* Métrique 4: Customers */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-green-500 hover:shadow-xl transition-shadow">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-gray-500 text-sm font-medium">Clients</p>
@@ -467,7 +562,7 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                     </div>
 
                     {/* Métrique 5: Taux de Conversion */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-emerald-500 hover:shadow-xl transition-shadow">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-gray-500 text-sm font-medium">Conversion</p>
@@ -486,9 +581,8 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
             </div>
 
             {/* Contenu principal */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Barre de recherche et filtres */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                         <div className="flex-1">
                             <div className="relative">
@@ -525,12 +619,12 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                                 ))}
                             </select>
                         </div>
+                    </div>
                 </div>
-            </div>
-            
+
                 {/* Vues */}
-            {view === 'list' && (
-                    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+            {contactSubView === 'list' && (
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-500">
                                 <thead className="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
@@ -615,12 +709,12 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                 </div>
             )}
 
-            {view === 'pipeline' && (
+            {contactSubView === 'pipeline' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {pipelineStatuses.map(status => (
                         <div 
                             key={status} 
-                                className="bg-gray-50 rounded-lg p-4 transition-colors border border-gray-200"
+                                className="bg-slate-50 rounded-xl p-4 transition-colors border border-slate-200"
                             onDrop={(e) => handleDrop(e, status)}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
@@ -684,7 +778,54 @@ const CRM: React.FC<CRMProps> = ({ contacts, onAddContact, onUpdateContact, onDe
                     ))}
                 </div>
             )}
-            </div>
+            </>
+            )}
+
+            {showCollecteEnrichModal && (
+                <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">Enrichir le CRM depuis une collecte</h3>
+                        <p className="text-sm text-slate-600 mb-4">
+                            Choisissez une collecte non encore liée au CRM. Un contact prospect sera créé (nom = titre de la collecte).
+                        </p>
+                        {collecteEnrichCandidates.length === 0 ? (
+                            <p className="text-sm text-slate-500 mb-4">Aucune collecte éligible. Créez-en dans le module Collecte de données.</p>
+                        ) : (
+                            <ul className="space-y-2 mb-4">
+                                {collecteEnrichCandidates.map((c) => (
+                                    <li key={c.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => applyCollecteToCrm(c)}
+                                            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-800"
+                                        >
+                                            {c.name}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCollecteEnrichModal(false)}
+                                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50"
+                            >
+                                Fermer
+                            </button>
+                            {setView && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowCollecteEnrichModal(false); setView('collecte'); }}
+                                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800"
+                                >
+                                    Ouvrir Collecte de données
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modals */}
             {selectedContact && <EmailDraftModal contact={selectedContact} onClose={handleCloseModal} emailBody={emailBody} isLoading={isLoading} />}

@@ -24,7 +24,7 @@ export function useProjectModuleSettings() {
   }, [load]);
 
   const update = useCallback(
-    async (patch: Partial<Pick<ProjectModuleSettings, 'projectTypes' | 'statuses' | 'alertDelayDays' | 'taskTemplates' | 'taskScorePercent' | 'managerScorePercent' | 'requireJustificationForCompletion' | 'autoFreezeOverdueTasks' | 'evaluationStartDate'>>) => {
+    async (patch: Partial<Pick<ProjectModuleSettings, 'projectTypes' | 'statuses' | 'alertDelayDays' | 'taskTemplates' | 'taskScorePercent' | 'managerScorePercent' | 'requireJustificationForCompletion' | 'autoFreezeOverdueTasks' | 'evaluationStartDate' | 'leavePendingSlaDays' | 'budgetWarningPercent' | 'budgetCriticalPercent' | 'objectiveOffTrackGapPercent'>>) => {
       setSaving(true);
       setSettings((prev) => (prev ? { ...prev, ...patch } : null));
       try {

@@ -36,6 +36,29 @@ interface SettingsProps {
   onDeleteJob?: (id: number) => Promise<void>;
   isLoading?: boolean;
   loadingOperation?: string | null;
+  automationKpis?: {
+    cycleAt: string;
+    scanned: {
+      projects: number;
+      tasks: number;
+      objectives: number;
+      leaves: number;
+      invoices: number;
+      meetings: number;
+    };
+    actions: {
+      total: number;
+      notifications: number;
+      projectUpdates: number;
+      objectiveUpdates: number;
+      invoiceUpdates: number;
+    };
+    bySeverity: {
+      info: number;
+      warning: number;
+      critical: number;
+    };
+  } | null;
 }
 
 /** Administration uniquement (22 modules / 10 départements) : droits et paramétrage */
@@ -68,6 +91,7 @@ const Settings: React.FC<SettingsProps> = ({
   onDeleteJob,
   isLoading,
   loadingOperation,
+  automationKpis,
 }) => {
   const { t, language, setLanguage } = useLocalization();
   const { user } = useAuth();
@@ -107,22 +131,25 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-800">{t('settings_title')}</h1>
-      
-      <div className="mt-8 max-w-2xl space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{t('settings_title')}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Profil, préférences et administration des modules.</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
         {/* Profile Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center justify-between border-b pb-3 mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">{t('profile')}</h2>
-            <button 
-              onClick={() => setProfileModalOpen(true)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
-            >
-              <i className="fas fa-user-edit mr-2"></i>
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">{t('profile')}</h2>
+            <button type="button" onClick={() => setProfileModalOpen(true)} className="btn-3d-primary">
+              <i className="fas fa-user-edit mr-2" />
               Modifier le profil
             </button>
           </div>
+          <div className="p-4">
           <div className="flex items-center space-x-4">
             {user?.avatar && !user.avatar.startsWith('data:image') ? (
               <img 
@@ -141,19 +168,23 @@ const Settings: React.FC<SettingsProps> = ({
               {user ? getInitials(user.name) : 'U'}
             </div>
             <div className="flex-1">
-              <p className="font-bold text-xl">{user?.name}</p>
-              <p className="text-gray-500">{user?.email}</p>
+              <p className="font-bold text-xl text-slate-900">{user?.name}</p>
+              <p className="text-slate-500">{user?.email}</p>
               <p className="text-sm capitalize text-emerald-600 font-semibold mt-1">{t(user!.role)}</p>
-              {user?.phone && <p className="text-gray-500 text-sm mt-1">{user.phone}</p>}
-              {user?.location && <p className="text-gray-500 text-sm mt-1">{user.location}</p>}
+              {user?.phone && <p className="text-slate-500 text-sm mt-1">{user.phone}</p>}
+              {user?.location && <p className="text-slate-500 text-sm mt-1">{user.location}</p>}
             </div>
           </div>
-        </div>
+          </div>
+        </section>
 
         {/* Skill Passport */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">{t('my_skills')}</h2>
-          <p className="text-sm text-gray-500 mb-4">{t('skill_passport_subtitle')}</p>
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">{t('my_skills')}</h2>
+          </div>
+          <div className="p-4">
+          <p className="text-sm text-slate-500 mb-4">{t('skill_passport_subtitle')}</p>
           <div className="flex flex-wrap gap-2 mb-4">
             {skills.map(skill => (
               <span key={skill} className="bg-emerald-100 text-emerald-800 text-sm font-medium px-3 py-1 rounded-full flex items-center">
@@ -172,46 +203,91 @@ const Settings: React.FC<SettingsProps> = ({
               placeholder={t('enter_skill')}
               className="flex-grow p-2 border rounded-md"
             />
-            <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-emerald-700 transition-colors">
-              {t('add_skill')}
-            </button>
+            <button type="submit" className="btn-3d-primary">{t('add_skill')}</button>
           </form>
-        </div>
+          </div>
+        </section>
 
         {/* Reminder Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">{t('reminder_settings')}</h2>
-          <div className="flex items-center justify-between">
-            <label htmlFor="reminder-days" className="text-sm text-gray-600">{t('remind_days_before')}:</label>
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">{t('reminder_settings')}</h2>
+          </div>
+          <div className="p-4">
+          <div className="flex items-center justify-between max-w-xs">
+            <label htmlFor="reminder-days" className="text-sm text-slate-600">{t('remind_days_before')}:</label>
             <input
               id="reminder-days"
               type="number"
               value={reminderDays}
               onChange={(e) => onSetReminderDays(Math.max(0, Number(e.target.value)))}
-              className="w-24 p-2 border rounded-md text-center"
+              className="w-24 p-2 border border-slate-300 rounded-lg text-center"
               min="0"
             />
           </div>
-        </div>
-        
-        {/* Language Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">{t('language')}</h2>
-          <div className="flex items-center space-x-4">
-            <button 
-              onClick={() => setLanguage(Language.EN)}
-              className={`px-4 py-2 rounded-md font-medium ${language === Language.EN ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-            >
-              {t('english')}
-            </button>
-            <button 
-              onClick={() => setLanguage(Language.FR)}
-              className={`px-4 py-2 rounded-md font-medium ${language === Language.FR ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-            >
-              {t('french')}
-            </button>
           </div>
-        </div>
+        </section>
+
+        {/* Automatisation & observabilité – pilotage workflows */}
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Automatisation des workflows</h2>
+            {automationKpis && (
+              <span className="text-xs text-slate-500">Dernier cycle: {new Date(automationKpis.cycleAt).toLocaleString('fr-FR')}</span>
+            )}
+          </div>
+          <div className="p-4">
+          {automationKpis ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+                  <p className="text-xs uppercase text-slate-500">Actions totales</p>
+                  <p className="text-xl font-bold text-slate-900">{automationKpis.actions.total}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+                  <p className="text-xs uppercase text-slate-500">Notifications</p>
+                  <p className="text-xl font-bold text-slate-900">{automationKpis.actions.notifications}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+                  <p className="text-xs uppercase text-slate-500">Mises à jour auto</p>
+                  <p className="text-xl font-bold text-slate-900">
+                    {automationKpis.actions.projectUpdates + automationKpis.actions.objectiveUpdates + automationKpis.actions.invoiceUpdates}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-blue-50/80 p-3">
+                  <p className="text-xs uppercase text-blue-700">Info</p>
+                  <p className="text-lg font-semibold text-blue-900">{automationKpis.bySeverity.info}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-amber-50/80 p-3">
+                  <p className="text-xs uppercase text-amber-700">Warning</p>
+                  <p className="text-lg font-semibold text-amber-900">{automationKpis.bySeverity.warning}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-rose-50/80 p-3">
+                  <p className="text-xs uppercase text-rose-700">Critical</p>
+                  <p className="text-lg font-semibold text-rose-900">{automationKpis.bySeverity.critical}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Aucun cycle d&apos;automatisation exécuté pour le moment.</p>
+          )}
+          </div>
+        </section>
+
+        {/* Language Settings */}
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">{t('language')}</h2>
+          </div>
+          <div className="p-4">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setLanguage(Language.EN)} className={language === Language.EN ? 'btn-3d-primary' : 'btn-3d-secondary'}>{t('english')}</button>
+            <button type="button" onClick={() => setLanguage(Language.FR)} className={language === Language.FR ? 'btn-3d-primary' : 'btn-3d-secondary'}>{t('french')}</button>
+          </div>
+          </div>
+        </section>
 
         {/* Libellés des modules (super admin uniquement) */}
         {user?.role === 'super_administrator' && (
@@ -282,7 +358,7 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
         )}
 
-        {/* Administration et gestion (sous-sections Paramètres) */}
+        {/* Administration et gestion – visibilité selon canAccessModule (garde admin) */}
         {(() => {
           const visibleSections = ADMIN_SECTIONS.filter(s =>
             s.key === 'postes_management'
@@ -291,24 +367,27 @@ const Settings: React.FC<SettingsProps> = ({
           );
           if (visibleSections.length === 0) return null;
           return (
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-lg font-semibold text-gray-800 border-b pb-3 mb-4">Administration et gestion</h2>
+            <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-200">
+                <h2 className="text-lg font-semibold text-slate-900">Administration et gestion</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Sous-sections accessibles selon vos droits.</p>
+              </div>
+              <div className="p-4">
               <div className="flex flex-wrap gap-2 mb-4">
                 {visibleSections.map(s => (
                   <button
                     key={s.key}
+                    type="button"
                     onClick={() => setAdminSection(adminSection === s.key ? '' : s.key)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
-                      adminSection === s.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={adminSection === s.key ? 'btn-3d-primary' : 'btn-3d-secondary'}
                   >
-                    <i className={s.icon}></i>
+                    <i className={s.icon + ' mr-2'} />
                     {s.label}
                   </button>
                 ))}
               </div>
               {adminSection && (
-                <div className="border-t pt-4 mt-4">
+                <div className="pt-4 mt-4 border-t border-slate-200">
                   {adminSection === 'organization_management' && <OrganizationManagement />}
                   {adminSection === 'department_management' && <DepartmentManagement />}
                   {adminSection === 'postes_management' && <PostesManagement />}
@@ -324,7 +403,8 @@ const Settings: React.FC<SettingsProps> = ({
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            </section>
           );
         })()}
       </div>

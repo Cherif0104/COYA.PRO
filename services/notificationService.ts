@@ -22,8 +22,8 @@ export interface Notification {
 }
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
-export type NotificationModule = 'project' | 'invoice' | 'expense' | 'course' | 'goal' | 'time_tracking' | 'leave' | 'knowledge' | 'user' | 'system';
-export type NotificationAction = 'created' | 'updated' | 'deleted' | 'approved' | 'rejected' | 'assigned' | 'completed' | 'reminder';
+export type NotificationModule = 'project' | 'invoice' | 'expense' | 'course' | 'goal' | 'time_tracking' | 'leave' | 'knowledge' | 'user' | 'system' | 'ticket_it';
+export type NotificationAction = 'created' | 'updated' | 'deleted' | 'approved' | 'rejected' | 'assigned' | 'completed' | 'reminder' | 'submitted' | 'requested_changes';
 
 export class NotificationService {
   private static channels: Map<string, any> = new Map();

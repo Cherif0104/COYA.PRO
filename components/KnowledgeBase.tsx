@@ -393,9 +393,9 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                         <div className="flex items-center justify-between">
                             <div className="flex-1">
-                                <h1 className="text-4xl font-bold mb-2">{t('knowledge_base_title') || 'Knowledge Base'}</h1>
+                                <h1 className="text-4xl font-bold mb-2">{t('knowledge_base_title') || 'Espace documentaire'}</h1>
                                 <p className="text-emerald-50 text-sm">
-                                    {t('knowledge_base_subtitle') || 'Base de connaissances centralisée pour votre équipe'}
+                                    {t('knowledge_base_subtitle') || 'Archivage et partage de documents par équipe, département ou pilier'}
                                 </p>
                             </div>
                             <div className="flex items-center gap-3">
