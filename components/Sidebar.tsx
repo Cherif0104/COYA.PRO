@@ -95,6 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
   const getLabel = (item: { labelKey: string; labelFallback: string }) => {
     if (item.labelKey === 'rh') return 'Ressources humaines';
     if (item.labelKey === 'collecte') return getDisplayName(item.labelKey) || t(item.labelKey) || 'Collecte de données';
+    if (item.labelKey === 'comptabilite') return 'Comptabilité';
     return getDisplayName(item.labelKey) || t(item.labelKey) || item.labelFallback;
   };
 

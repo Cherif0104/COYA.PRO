@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { LeaveRequest, User, Job, Employee } from '../types';
+import { LeaveRequest, User, Job, Employee, HrAbsenceEvent, HrAttendancePolicy } from '../types';
 import DataAdapter from '../services/dataAdapter';
 import OrganizationService from '../services/organizationService';
 import LeaveManagement from './LeaveManagement';
@@ -13,8 +13,11 @@ import OrganigrammeView from './OrganigrammeView';
 import PayrollTab from './PayrollTab';
 import SalariésList from './SalariésList';
 import Jobs from './Jobs';
+import * as hrAnalyticsService from '../services/hrAnalyticsService';
+import { usePresence } from '../contexts/PresenceContext';
+import { DataService } from '../services/dataService';
 
-export type RhTab = 'salaries' | 'leave' | 'demandes' | 'employee' | 'postes' | 'organigramme' | 'payroll' | 'formation' | 'talent' | 'jobs' | 'planning';
+export type RhTab = 'salaries' | 'presence' | 'leave' | 'demandes' | 'employee' | 'postes' | 'organigramme' | 'payroll' | 'formation' | 'talent' | 'jobs' | 'planning';
 
 interface RhModuleProps {
   leaveRequests: LeaveRequest[];
@@ -50,6 +53,19 @@ const RhModule: React.FC<RhModuleProps> = ({
   const [activeTab, setActiveTab] = useState<RhTab>('salaries');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const { currentSession } = usePresence();
+  const [presencePeriod, setPresencePeriod] = useState<'day' | 'week' | 'month' | 'quarter' | 'year'>('month');
+  const [presenceMetrics, setPresenceMetrics] = useState<ReturnType<typeof hrAnalyticsService.computePresenceMetrics>>([]);
+  const [absenceEvents, setAbsenceEvents] = useState<HrAbsenceEvent[]>([]);
+  const [absenceProfileId, setAbsenceProfileId] = useState('');
+  const [absenceDate, setAbsenceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [absenceDuration, setAbsenceDuration] = useState('480');
+  const [absenceAuthorized, setAbsenceAuthorized] = useState(true);
+  const [absenceReason, setAbsenceReason] = useState('');
+  const [policy, setPolicy] = useState<HrAttendancePolicy | null>(null);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [userIdByProfile, setUserIdByProfile] = useState<Record<string, string>>({});
+  const [complianceRows, setComplianceRows] = useState<hrAnalyticsService.PresenceComplianceMetric[]>([]);
 
   const loadEmployees = useCallback(async () => {
     const orgId = await OrganizationService.getCurrentUserOrganizationId();
@@ -59,6 +75,50 @@ const RhModule: React.FC<RhModuleProps> = ({
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  const loadPresenceAndAbsences = useCallback(async () => {
+    const orgId = await OrganizationService.getCurrentUserOrganizationId();
+    if (!orgId) return;
+    const [sessions, absences, loadedPolicy, profileRows, statusEvents] = await Promise.all([
+      DataAdapter.getPresenceSessions({ organizationId: orgId }),
+      hrAnalyticsService.listHrAbsenceEvents(orgId),
+      DataAdapter.getHrAttendancePolicy(orgId),
+      DataService.getProfiles(),
+      DataAdapter.listPresenceStatusEvents({ organizationId: orgId }),
+    ]);
+    const profileMap = (profileRows.data || []).reduce<Record<string, string>>((acc, row: any) => {
+      if (row?.id && row?.user_id) acc[String(row.id)] = String(row.user_id);
+      return acc;
+    }, {});
+    setUserIdByProfile(profileMap);
+    const metrics = hrAnalyticsService.computePresenceMetrics({
+      sessions: sessions || [],
+      profileIds: employees.map((e) => e.profileId),
+      period: presencePeriod,
+      userIdByProfile: profileMap,
+    });
+    setPresenceMetrics(metrics);
+    setPolicy(loadedPolicy);
+    setAbsenceEvents(absences);
+    const bounds = hrAnalyticsService.getPayrollPeriodBounds(new Date(), loadedPolicy?.payrollPeriodStartDay ?? 1);
+    const compliance = hrAnalyticsService.computePresenceCompliance({
+      employees,
+      sessions: sessions || [],
+      statusEvents: statusEvents || [],
+      absences,
+      policy: loadedPolicy,
+      userIdByProfile: profileMap,
+      periodStart: bounds.start.toISOString().slice(0, 10),
+      periodEnd: bounds.end.toISOString().slice(0, 10),
+    });
+    setComplianceRows(compliance);
+  }, [employees, presencePeriod]);
+
+  useEffect(() => {
+    if (employees.length > 0) {
+      loadPresenceAndAbsences();
+    }
+  }, [employees, loadPresenceAndAbsences]);
 
   const fr = language === 'fr';
   const showSalaries = canAccessModule('rh');
@@ -75,6 +135,7 @@ const RhModule: React.FC<RhModuleProps> = ({
 
   const tabs: { id: RhTab; label: string; show: boolean }[] = [
     { id: 'salaries', label: fr ? 'Salariés' : 'Employees', show: showSalaries },
+    { id: 'presence', label: fr ? 'Présence' : 'Attendance', show: showSalaries },
     { id: 'leave', label: fr ? 'Congés' : 'Leave', show: showLeave },
     { id: 'demandes', label: fr ? 'Demandes' : 'Requests', show: showDemandes },
     { id: 'employee', label: fr ? 'Fiche salarié' : 'Employee profile', show: showEmployee },
@@ -144,6 +205,202 @@ const RhModule: React.FC<RhModuleProps> = ({
                 setActiveTab('employee');
               }}
             />
+          </div>
+        </section>
+      )}
+
+      {currentTab === 'presence' && (
+        <section className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Assiduité et présence multi-périodes' : 'Multi-period attendance'}</h2>
+            <div className="flex items-center gap-2">
+              <select value={presencePeriod} onChange={(e) => setPresencePeriod(e.target.value as any)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                <option value="day">{fr ? 'Jour' : 'Day'}</option>
+                <option value="week">{fr ? 'Semaine' : 'Week'}</option>
+                <option value="month">{fr ? 'Mois' : 'Month'}</option>
+                <option value="quarter">{fr ? 'Trimestre' : 'Quarter'}</option>
+                <option value="year">{fr ? 'Année' : 'Year'}</option>
+              </select>
+              <button type="button" onClick={loadPresenceAndAbsences} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm">{fr ? 'Actualiser' : 'Refresh'}</button>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <h3 className="text-md font-semibold text-slate-900">{fr ? 'Politique présence et paie' : 'Attendance and payroll policy'}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input
+                type="number"
+                min={1}
+                max={28}
+                value={policy?.payrollPeriodStartDay ?? 1}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), payrollPeriodStartDay: Number(e.target.value || 1) }))}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                placeholder={fr ? 'Début mois comptable (1-28)' : 'Accounting month start (1-28)'}
+              />
+              <input
+                type="number"
+                min={0}
+                value={policy?.monthlyDelayToleranceMinutes ?? 45}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), monthlyDelayToleranceMinutes: Number(e.target.value || 0) }))}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                placeholder={fr ? 'Tolérance retard mensuelle (min)' : 'Monthly delay tolerance (min)'}
+              />
+              <input
+                type="number"
+                min={0}
+                value={policy?.monthlyUnjustifiedAbsenceToleranceMinutes ?? 480}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), monthlyUnjustifiedAbsenceToleranceMinutes: Number(e.target.value || 0) }))}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                placeholder={fr ? 'Tolérance absence injustifiée (min/mois)' : 'Unauthorized absence tolerance (min/month)'}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input
+                type="number"
+                min={60}
+                value={policy?.expectedDailyMinutes ?? 480}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), expectedDailyMinutes: Number(e.target.value || 480) }))}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                placeholder={fr ? 'Minutes prévues/jour' : 'Expected minutes/day'}
+              />
+              <input
+                type="time"
+                value={(policy?.expectedWorkStartTime || '09:00:00').slice(0, 5)}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), expectedWorkStartTime: `${e.target.value}:00` }))}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 text-white text-sm px-3 py-2 disabled:opacity-60"
+                disabled={policySaving}
+                onClick={async () => {
+                  const orgId = await OrganizationService.getCurrentUserOrganizationId();
+                  if (!orgId || !policy) return;
+                  setPolicySaving(true);
+                  await DataAdapter.upsertHrAttendancePolicy({ ...policy, organizationId: orgId });
+                  setPolicySaving(false);
+                  await loadPresenceAndAbsences();
+                }}
+              >
+                {policySaving ? (fr ? 'Enregistrement…' : 'Saving…') : (fr ? 'Sauvegarder politique' : 'Save policy')}
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                id="enforceIp"
+                type="checkbox"
+                checked={policy?.enforceOfficeIp === true}
+                onChange={(e) => setPolicy((prev) => ({ ...(prev || { id: '', organizationId: '', officeIpAllowlist: [], defaultWorkMode: 'office', enforceOfficeIp: false, expectedWorkStartTime: '09:00:00', expectedDailyMinutes: 480, monthlyDelayToleranceMinutes: 45, monthlyUnjustifiedAbsenceToleranceMinutes: 480, payrollPeriodStartDay: 1 }), enforceOfficeIp: e.target.checked }))}
+              />
+              <label htmlFor="enforceIp">{fr ? 'Bloquer les sessions "bureau" hors IP autorisées' : 'Block "office" sessions outside allowed IPs'}</label>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Heures réalisées' : 'Hours done'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Heures prévues' : 'Expected hours'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Assiduité' : 'Assiduity'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {presenceMetrics.map((m) => {
+                  const emp = employees.find((e) => e.profileId === m.profileId);
+                  return (
+                    <tr key={m.profileId} className="border-b border-slate-100">
+                      <td className="px-4 py-3">{emp?.profileId?.slice(0, 8) || m.profileId.slice(0, 8)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{m.totalHours.toFixed(1)} h</td>
+                      <td className="px-4 py-3 text-right font-mono">{m.expectedHours.toFixed(1)} h</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${m.assiduityRate >= 90 ? 'bg-emerald-100 text-emerald-700' : m.assiduityRate >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                          {m.assiduityRate.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {presenceMetrics.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence.' : 'No attendance data.'}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Contrôle mensuel paie (présence/retards/absences)' : 'Monthly payroll compliance (attendance/delays/absences)'}</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Déconnexions' : 'Logouts'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Retard (min)' : 'Delay (min)'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Absence NA (min)' : 'Unauthorized absence (min)'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Heures payables' : 'Payable hours'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Montant estimé' : 'Estimated amount'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {complianceRows.map((row) => {
+                  const displayUser = users.find((u) => String((u as any).profileId || '') === row.profileId);
+                  return (
+                    <tr key={row.profileId} className="border-b border-slate-100">
+                      <td className="px-4 py-3">{displayUser?.fullName || displayUser?.name || row.profileId.slice(0, 8)}</td>
+                      <td className="px-4 py-3 text-right">{row.disconnectCount}</td>
+                      <td className="px-4 py-3 text-right">{row.delayMinutes}</td>
+                      <td className="px-4 py-3 text-right">{row.unauthorizedAbsenceMinutes}</td>
+                      <td className="px-4 py-3 text-right font-mono">{(row.paidMinutes / 60).toFixed(2)} h</td>
+                      <td className="px-4 py-3 text-right font-mono">{row.payableAmount.toLocaleString()} XOF</td>
+                    </tr>
+                  );
+                })}
+                {complianceRows.length === 0 && (
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>{fr ? 'Aucun indicateur de conformité.' : 'No compliance metric yet.'}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <h3 className="text-md font-semibold text-slate-900">{fr ? 'Codifier une absence (autorisée / non autorisée)' : 'Classify absence (authorized / unauthorized)'}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <select value={absenceProfileId} onChange={(e) => setAbsenceProfileId(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                <option value="">{fr ? 'Salarié' : 'Employee'}</option>
+                {employees.map((e) => <option key={e.id} value={e.profileId}>{e.profileId.slice(0, 8)}</option>)}
+              </select>
+              <input type="date" value={absenceDate} onChange={(e) => setAbsenceDate(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" value={absenceDuration} onChange={(e) => setAbsenceDuration(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="minutes" />
+              <select value={absenceAuthorized ? 'yes' : 'no'} onChange={(e) => setAbsenceAuthorized(e.target.value === 'yes')} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                <option value="yes">{fr ? 'Autorisée' : 'Authorized'}</option>
+                <option value="no">{fr ? 'Non autorisée' : 'Unauthorized'}</option>
+              </select>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 text-white text-sm px-3 py-2"
+                onClick={async () => {
+                  const orgId = await OrganizationService.getCurrentUserOrganizationId();
+                  if (!orgId || !absenceProfileId) return;
+                  await hrAnalyticsService.createHrAbsenceEvent({
+                    organizationId: orgId,
+                    profileId: absenceProfileId,
+                    absenceDate,
+                    durationMinutes: Number(absenceDuration || 0),
+                    isAuthorized: absenceAuthorized,
+                    reason: absenceReason || null,
+                    createdById: currentSession?.userId || null,
+                  });
+                  setAbsenceReason('');
+                  await loadPresenceAndAbsences();
+                }}
+              >
+                {fr ? 'Enregistrer' : 'Save'}
+              </button>
+            </div>
+            <input value={absenceReason} onChange={(e) => setAbsenceReason(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder={fr ? 'Motif' : 'Reason'} />
+            <div className="text-sm text-slate-600">
+              {fr ? 'Derniers événements : ' : 'Latest events: '}
+              {absenceEvents.slice(0, 5).map((a) => `${a.absenceDate} (${a.isAuthorized ? 'A' : 'NA'})`).join(', ') || '—'}
+            </div>
           </div>
         </section>
       )}

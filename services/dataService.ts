@@ -1,11 +1,13 @@
 import { supabase } from './supabaseService';
 import { ApiHelper } from './apiHelper';
-import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee } from '../types';
+import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee, PresenceStatusEvent, HrAttendancePolicy, WorkMode } from '../types';
 import OrganizationService from './organizationService';
 import { CurrencyService } from './currencyService';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 // Service de données Supabase
 export class DataService {
+  private static projectsSupportsProgrammeId = true;
   /**
    * Helper pour récupérer l'organization_id de l'utilisateur actuel
    * Utilisé pour toutes les opérations multi-tenant
@@ -781,7 +783,7 @@ export class DataService {
 
       const creatorName = profile?.full_name || profile?.email || currentUser?.email || null;
 
-      return await ApiHelper.post('projects', {
+      const payload: Record<string, unknown> = {
         name: project.title || '',
         description: project.description || '',
         status: mapStatus(project.status || 'active'),
@@ -797,8 +799,21 @@ export class DataService {
         created_by_name: creatorName,
         tasks: project.tasks || [],
         risks: project.risks || [],
-        programme_id: project.programmeId || null
-      });
+      };
+      if (this.projectsSupportsProgrammeId) {
+        payload.programme_id = project.programmeId || null;
+      }
+      try {
+        return await ApiHelper.post('projects', payload);
+      } catch (e: any) {
+        const msg = String(e?.message || '').toLowerCase();
+        if (msg.includes("could not find the 'programme_id' column")) {
+          this.projectsSupportsProgrammeId = false;
+          delete payload.programme_id;
+          return await ApiHelper.post('projects', payload);
+        }
+        throw e;
+      }
     } catch (error) {
       console.error('Erreur création projet:', error);
       return { data: null, error };
@@ -864,7 +879,7 @@ export class DataService {
 
     console.log('🔄 DataService.updateProject - Team members IDs:', teamMemberIds);
 
-    return await ApiHelper.put('projects', id, {
+    const payload: Record<string, unknown> = {
       name: updates.title,
       description: updates.description,
       status: mapStatus(updates.status || 'active'),
@@ -877,8 +892,21 @@ export class DataService {
       tasks: updates.tasks || [],
       risks: updates.risks || [],
       updated_at: new Date().toISOString(),
-      programme_id: updates.programmeId !== undefined ? updates.programmeId : undefined
-    });
+    };
+    if (this.projectsSupportsProgrammeId && updates.programmeId !== undefined) {
+      payload.programme_id = updates.programmeId;
+    }
+    try {
+      return await ApiHelper.put('projects', id, payload);
+    } catch (e: any) {
+      const msg = String(e?.message || '').toLowerCase();
+      if (msg.includes("could not find the 'programme_id' column")) {
+        this.projectsSupportsProgrammeId = false;
+        delete payload.programme_id;
+        return await ApiHelper.put('projects', id, payload);
+      }
+      throw e;
+    }
   }
 
   static async deleteProject(id: string) {
@@ -962,6 +990,9 @@ export class DataService {
 
   // ===== PROJECT MODULE SETTINGS (Phase 2.4) =====
   static async getProjectModuleSettings() {
+    if (isTableUnavailable('project_module_settings')) {
+      return { data: null, error: null };
+    }
     try {
       const orgId = await this.getCurrentUserOrganizationId();
       if (!orgId) return { data: null, error: null };
@@ -970,9 +1001,17 @@ export class DataService {
         .select('*')
         .eq('organization_id', orgId)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'project_module_settings', 'DataService.getProjectModuleSettings')) {
+          return { data: null, error: null };
+        }
+        throw error;
+      }
       return { data, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'project_module_settings', 'DataService.getProjectModuleSettings.catch')) {
+        return { data: null, error: null };
+      }
       return { data: null, error };
     }
   }
@@ -992,6 +1031,9 @@ export class DataService {
     budgetCriticalPercent?: number;
     objectiveOffTrackGapPercent?: number;
   }) {
+    if (isTableUnavailable('project_module_settings')) {
+      return { data: null, error: null };
+    }
     try {
       const orgId = await this.getCurrentUserOrganizationId();
       if (!orgId) throw new Error('Organization not found');
@@ -1018,9 +1060,17 @@ export class DataService {
         .upsert({ ...payload, organization_id: orgId }, { onConflict: 'organization_id' })
         .select('*')
         .single();
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'project_module_settings', 'DataService.upsertProjectModuleSettings')) {
+          return { data: null, error: null };
+        }
+        throw error;
+      }
       return { data, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'project_module_settings', 'DataService.upsertProjectModuleSettings.catch')) {
+        return { data: null, error: null };
+      }
       return { data: null, error };
     }
   }
@@ -2239,13 +2289,53 @@ export class DataService {
       status: row.status as PresenceStatus,
       meetingId: row.meeting_id ?? undefined,
       pauseMinutes: row.pause_minutes ?? 0,
+      hourlyRate: row.hourly_rate ?? null,
+      startedIp: row.started_ip ?? null,
+      endedIp: row.ended_ip ?? null,
+      workMode: (row.work_mode || 'office') as WorkMode,
       notes: row.notes ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
   }
 
+  private static mapPresenceStatusEventRow(row: any): PresenceStatusEvent {
+    return {
+      id: row.id,
+      presenceSessionId: row.presence_session_id,
+      organizationId: row.organization_id,
+      userId: row.user_id,
+      status: row.status as PresenceStatus,
+      startedAt: row.started_at,
+      endedAt: row.ended_at ?? null,
+      durationMinutes: row.duration_minutes ?? null,
+      source: row.source ?? 'system',
+      notes: row.notes ?? null,
+      createdAt: row.created_at,
+    };
+  }
+
+  private static mapHrAttendancePolicyRow(row: any): HrAttendancePolicy {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      payrollPeriodStartDay: row.payroll_period_start_day ?? 1,
+      expectedDailyMinutes: row.expected_daily_minutes ?? 480,
+      expectedWorkStartTime: row.expected_work_start_time ?? '09:00:00',
+      monthlyDelayToleranceMinutes: row.monthly_delay_tolerance_minutes ?? 45,
+      monthlyUnjustifiedAbsenceToleranceMinutes: row.monthly_unjustified_absence_tolerance_minutes ?? 480,
+      defaultWorkMode: (row.default_work_mode || 'office') as WorkMode,
+      enforceOfficeIp: row.enforce_office_ip === true,
+      officeIpAllowlist: Array.isArray(row.office_ip_allowlist) ? row.office_ip_allowlist : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
   static async getPresenceSessions(params?: { userId?: string; organizationId?: string; from?: string; to?: string }): Promise<{ data: PresenceSession[] | null; error: any }> {
+    if (isTableUnavailable('presence_sessions')) {
+      return { data: [], error: null };
+    }
     try {
       let query = supabase.from('presence_sessions').select('*').order('started_at', { ascending: false });
       if (params?.userId) query = query.eq('user_id', params.userId);
@@ -2253,9 +2343,17 @@ export class DataService {
       if (params?.from) query = query.gte('started_at', params.from);
       if (params?.to) query = query.lte('started_at', params.to);
       const { data, error } = await query;
-      if (error) return { data: null, error };
+      if (error) {
+        if (handleOptionalTableError(error, 'presence_sessions', 'DataService.getPresenceSessions')) {
+          return { data: [], error: null };
+        }
+        return { data: null, error };
+      }
       return { data: (data || []).map(this.mapPresenceRow), error: null };
     } catch (e) {
+      if (handleOptionalTableError(e, 'presence_sessions', 'DataService.getPresenceSessions.catch')) {
+        return { data: [], error: null };
+      }
       console.error('getPresenceSessions error:', e);
       return { data: null, error: e };
     }
@@ -2283,9 +2381,22 @@ export class DataService {
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return { data: null, error: new Error('Non authentifié') };
-      const { data: profile } = await supabase.from('profiles').select('organization_id').eq('user_id', currentUser.id).single();
+      const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('user_id', currentUser.id).single();
       const organizationId = session.organizationId || (profile as any)?.organization_id;
       if (!organizationId) return { data: null, error: new Error('Organisation inconnue') };
+
+      const [policyResult, employeeResult] = await Promise.all([
+        this.getHrAttendancePolicy(organizationId),
+        profile?.id ? this.getEmployeeByProfileId(String((profile as any).id)) : Promise.resolve({ data: null, error: null as any }),
+      ]);
+      const policy = policyResult.data;
+      const employee = employeeResult.data;
+      const resolvedMode = (session.workMode || employee?.workMode || policy?.defaultWorkMode || 'office') as WorkMode;
+      const officeCheck = this.isOfficeAccessAllowed(policy, resolvedMode, session.startedIp ?? null);
+      if (!officeCheck.allowed) {
+        return { data: null, error: new Error(officeCheck.reason || 'Accès présence refusé (politique de localisation).') };
+      }
+
       const row = {
         user_id: currentUser.id,
         organization_id: organizationId,
@@ -2294,11 +2405,23 @@ export class DataService {
         status: session.status || 'online',
         meeting_id: session.meetingId ?? null,
         pause_minutes: session.pauseMinutes ?? 0,
-        notes: session.notes ?? null
+        notes: session.notes ?? null,
+        hourly_rate: session.hourlyRate ?? employee?.hourlyRate ?? null,
+        started_ip: session.startedIp ?? null,
+        work_mode: resolvedMode,
       };
       const { data, error } = await supabase.from('presence_sessions').insert(row).select().single();
       if (error) return { data: null, error };
-      return { data: this.mapPresenceRow(data), error: null };
+      const mapped = this.mapPresenceRow(data);
+      await this.startPresenceStatusEvent({
+        presenceSessionId: mapped.id,
+        organizationId: mapped.organizationId,
+        userId: mapped.userId,
+        status: mapped.status,
+        startedAt: mapped.startedAt,
+        source: 'selector',
+      });
+      return { data: mapped, error: null };
     } catch (e) {
       console.error('createPresenceSession error:', e);
       return { data: null, error: e };
@@ -2314,13 +2437,144 @@ export class DataService {
       if (updates.meetingId !== undefined) row.meeting_id = updates.meetingId;
       if (updates.pauseMinutes !== undefined) row.pause_minutes = updates.pauseMinutes;
       if (updates.notes !== undefined) row.notes = updates.notes;
+      if (updates.hourlyRate !== undefined) row.hourly_rate = updates.hourlyRate;
+      if (updates.startedIp !== undefined) row.started_ip = updates.startedIp;
+      if (updates.endedIp !== undefined) row.ended_ip = updates.endedIp;
+      if (updates.workMode !== undefined) row.work_mode = updates.workMode;
       row.updated_at = new Date().toISOString();
       const { data, error } = await supabase.from('presence_sessions').update(row).eq('id', id).select().single();
       if (error) return { data: null, error };
-      return { data: this.mapPresenceRow(data), error: null };
+      const mapped = this.mapPresenceRow(data);
+      if (updates.status !== undefined) {
+        await this.startPresenceStatusEvent({
+          presenceSessionId: mapped.id,
+          organizationId: mapped.organizationId,
+          userId: mapped.userId,
+          status: updates.status,
+          startedAt: new Date().toISOString(),
+          source: 'widget',
+        });
+      }
+      if (updates.endedAt) {
+        await this.closeActivePresenceStatusEvent(mapped.id, updates.endedAt);
+      }
+      return { data: mapped, error: null };
     } catch (e) {
       console.error('updatePresenceSession error:', e);
       return { data: null, error: e };
+    }
+  }
+
+  static async listPresenceStatusEvents(params: { organizationId?: string; userId?: string; sessionId?: string; from?: string; to?: string }): Promise<{ data: PresenceStatusEvent[] | null; error: any }> {
+    if (isTableUnavailable('presence_status_events')) {
+      return { data: [], error: null };
+    }
+    try {
+      let query = supabase.from('presence_status_events').select('*').order('started_at', { ascending: false });
+      if (params.organizationId) query = query.eq('organization_id', params.organizationId);
+      if (params.userId) query = query.eq('user_id', params.userId);
+      if (params.sessionId) query = query.eq('presence_session_id', params.sessionId);
+      if (params.from) query = query.gte('started_at', params.from);
+      if (params.to) query = query.lte('started_at', params.to);
+      const { data, error } = await query;
+      if (error) {
+        if (handleOptionalTableError(error, 'presence_status_events', 'DataService.listPresenceStatusEvents')) {
+          return { data: [], error: null };
+        }
+        return { data: null, error };
+      }
+      return { data: (data || []).map((r: any) => this.mapPresenceStatusEventRow(r)), error: null };
+    } catch (e) {
+      if (handleOptionalTableError(e, 'presence_status_events', 'DataService.listPresenceStatusEvents.catch')) {
+        return { data: [], error: null };
+      }
+      return { data: null, error: e };
+    }
+  }
+
+  static async startPresenceStatusEvent(params: {
+    presenceSessionId: string;
+    organizationId: string;
+    userId: string;
+    status: PresenceStatus;
+    startedAt?: string;
+    source?: 'selector' | 'widget' | 'system';
+    notes?: string | null;
+  }): Promise<{ data: PresenceStatusEvent | null; error: any }> {
+    if (isTableUnavailable('presence_status_events')) {
+      return { data: null, error: null };
+    }
+    try {
+      const nowIso = params.startedAt || new Date().toISOString();
+      const { data: active } = await supabase
+        .from('presence_status_events')
+        .select('*')
+        .eq('presence_session_id', params.presenceSessionId)
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (active) {
+        await supabase
+          .from('presence_status_events')
+          .update({
+            ended_at: nowIso,
+            duration_minutes: Math.max(0, Math.round((new Date(nowIso).getTime() - new Date(active.started_at).getTime()) / 60000)),
+          })
+          .eq('id', active.id);
+      }
+
+      const { data, error } = await supabase
+        .from('presence_status_events')
+        .insert({
+          presence_session_id: params.presenceSessionId,
+          organization_id: params.organizationId,
+          user_id: params.userId,
+          status: params.status,
+          started_at: nowIso,
+          source: params.source || 'system',
+          notes: params.notes ?? null,
+        })
+        .select('*')
+        .single();
+      if (error) {
+        if (handleOptionalTableError(error, 'presence_status_events', 'DataService.startPresenceStatusEvent')) {
+          return { data: null, error: null };
+        }
+        return { data: null, error };
+      }
+      return { data: this.mapPresenceStatusEventRow(data), error: null };
+    } catch (e) {
+      if (handleOptionalTableError(e, 'presence_status_events', 'DataService.startPresenceStatusEvent.catch')) {
+        return { data: null, error: null };
+      }
+      return { data: null, error: e };
+    }
+  }
+
+  static async closeActivePresenceStatusEvent(sessionId: string, endedAt?: string): Promise<void> {
+    if (isTableUnavailable('presence_status_events')) return;
+    const endIso = endedAt || new Date().toISOString();
+    try {
+      const { data: active } = await supabase
+        .from('presence_status_events')
+        .select('*')
+        .eq('presence_session_id', sessionId)
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!active) return;
+      await supabase
+        .from('presence_status_events')
+        .update({
+          ended_at: endIso,
+          duration_minutes: Math.max(0, Math.round((new Date(endIso).getTime() - new Date(active.started_at).getTime()) / 60000)),
+        })
+        .eq('id', active.id);
+    } catch {
+      // silent
     }
   }
 
@@ -2331,6 +2585,9 @@ export class DataService {
       organizationId: row.organization_id,
       profileId: row.profile_id,
       position: row.position ?? undefined,
+      workMode: row.work_mode ?? 'office',
+      hourlyRate: row.hourly_rate ?? null,
+      expectedDailyMinutes: row.expected_daily_minutes ?? null,
       managerId: row.manager_id ?? undefined,
       mentorId: row.mentor_id ?? undefined,
       cnss: row.cnss ?? undefined,
@@ -2347,6 +2604,7 @@ export class DataService {
   }
 
   static async listEmployees(organizationId?: string | null): Promise<Employee[]> {
+    if (isTableUnavailable('employees')) return [];
     try {
       const orgId = organizationId || (await this.getCurrentUserOrganizationId());
       if (!orgId) return [];
@@ -2355,15 +2613,24 @@ export class DataService {
         .select('*')
         .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
-      if (error) return [];
+      if (error) {
+        if (handleOptionalTableError(error, 'employees', 'DataService.listEmployees')) {
+          return [];
+        }
+        return [];
+      }
       return (data || []).map((r: any) => this.mapEmployeeRow(r));
     } catch (e) {
+      if (handleOptionalTableError(e, 'employees', 'DataService.listEmployees.catch')) {
+        return [];
+      }
       console.error('listEmployees error:', e);
       return [];
     }
   }
 
   static async getEmployeeByProfileId(profileId: string): Promise<{ data: Employee | null; error: any }> {
+    if (isTableUnavailable('employees')) return { data: null, error: null };
     try {
       const orgId = await this.getCurrentUserOrganizationId();
       if (!orgId) return { data: null, error: new Error('Organisation inconnue') };
@@ -2373,9 +2640,17 @@ export class DataService {
         .eq('organization_id', orgId)
         .eq('profile_id', profileId)
         .maybeSingle();
-      if (error) return { data: null, error };
+      if (error) {
+        if (handleOptionalTableError(error, 'employees', 'DataService.getEmployeeByProfileId')) {
+          return { data: null, error: null };
+        }
+        return { data: null, error };
+      }
       return { data: data ? this.mapEmployeeRow(data) : null, error: null };
     } catch (e) {
+      if (handleOptionalTableError(e, 'employees', 'DataService.getEmployeeByProfileId.catch')) {
+        return { data: null, error: null };
+      }
       console.error('getEmployeeByProfileId error:', e);
       return { data: null, error: e };
     }
@@ -2393,6 +2668,9 @@ export class DataService {
         organization_id: organizationId,
         profile_id: profileId,
         position: employee.position ?? null,
+        work_mode: employee.workMode ?? null,
+        hourly_rate: employee.hourlyRate ?? null,
+        expected_daily_minutes: employee.expectedDailyMinutes ?? null,
         manager_id: employee.managerId ?? null,
         mentor_id: employee.mentorId ?? null,
         cnss: employee.cnss ?? null,
@@ -2415,6 +2693,89 @@ export class DataService {
       console.error('upsertEmployee error:', e);
       return { data: null, error: e };
     }
+  }
+
+  static async getHrAttendancePolicy(organizationId?: string | null): Promise<{ data: HrAttendancePolicy | null; error: any }> {
+    if (isTableUnavailable('hr_attendance_policies')) {
+      return { data: null, error: null };
+    }
+    try {
+      const orgId = organizationId || (await this.getCurrentUserOrganizationId());
+      if (!orgId) return { data: null, error: new Error('Organisation inconnue') };
+      const { data, error } = await supabase
+        .from('hr_attendance_policies')
+        .select('*')
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (error) {
+        if (handleOptionalTableError(error, 'hr_attendance_policies', 'DataService.getHrAttendancePolicy')) {
+          return { data: null, error: null };
+        }
+        return { data: null, error };
+      }
+      return { data: data ? this.mapHrAttendancePolicyRow(data) : null, error: null };
+    } catch (e) {
+      if (handleOptionalTableError(e, 'hr_attendance_policies', 'DataService.getHrAttendancePolicy.catch')) {
+        return { data: null, error: null };
+      }
+      return { data: null, error: e };
+    }
+  }
+
+  static async upsertHrAttendancePolicy(policy: Partial<HrAttendancePolicy>): Promise<{ data: HrAttendancePolicy | null; error: any }> {
+    if (isTableUnavailable('hr_attendance_policies')) {
+      return { data: null, error: null };
+    }
+    try {
+      const orgId = policy.organizationId || (await this.getCurrentUserOrganizationId());
+      if (!orgId) return { data: null, error: new Error('Organisation inconnue') };
+      const row = {
+        organization_id: orgId,
+        payroll_period_start_day: policy.payrollPeriodStartDay ?? 1,
+        expected_daily_minutes: policy.expectedDailyMinutes ?? 480,
+        expected_work_start_time: policy.expectedWorkStartTime ?? '09:00:00',
+        monthly_delay_tolerance_minutes: policy.monthlyDelayToleranceMinutes ?? 45,
+        monthly_unjustified_absence_tolerance_minutes: policy.monthlyUnjustifiedAbsenceToleranceMinutes ?? 480,
+        default_work_mode: policy.defaultWorkMode ?? 'office',
+        enforce_office_ip: policy.enforceOfficeIp === true,
+        office_ip_allowlist: policy.officeIpAllowlist ?? [],
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabase
+        .from('hr_attendance_policies')
+        .upsert(row, { onConflict: 'organization_id', ignoreDuplicates: false })
+        .select('*')
+        .single();
+      if (error) {
+        if (handleOptionalTableError(error, 'hr_attendance_policies', 'DataService.upsertHrAttendancePolicy')) {
+          return { data: null, error: null };
+        }
+        return { data: null, error };
+      }
+      return { data: this.mapHrAttendancePolicyRow(data), error: null };
+    } catch (e) {
+      if (handleOptionalTableError(e, 'hr_attendance_policies', 'DataService.upsertHrAttendancePolicy.catch')) {
+        return { data: null, error: null };
+      }
+      return { data: null, error: e };
+    }
+  }
+
+  private static isOfficeAccessAllowed(policy: HrAttendancePolicy | null, workMode: WorkMode, ip: string | null): { allowed: boolean; reason?: string } {
+    if (!policy || policy.enforceOfficeIp !== true) return { allowed: true };
+    if (workMode !== 'office') return { allowed: true };
+    const allowlist = policy.officeIpAllowlist || [];
+    if (allowlist.length === 0) {
+      return { allowed: false, reason: 'Aucune IP bureau autorisée n’est configurée.' };
+    }
+    if (!ip) {
+      return { allowed: false, reason: 'IP non détectée. Connexion bureau requise.' };
+    }
+    const normalized = ip.trim();
+    if (!allowlist.includes(normalized)) {
+      return { allowed: false, reason: 'Connexion refusée: IP hors liste bureau.' };
+    }
+    return { allowed: true };
   }
 
   // ===== MEETINGS =====
@@ -2537,6 +2898,7 @@ export class DataService {
 
   // ===== PLANNING SLOTS (Phase 3) =====
   static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string }) {
+    if (isTableUnavailable('planning_slots')) return { data: [], error: null };
     try {
       const orgId = await this.getCurrentUserOrganizationId();
       if (!orgId) return { data: [], error: null };
@@ -2550,9 +2912,17 @@ export class DataService {
         .order('start_time', { ascending: true, nullsFirst: false });
       if (params.userId) query = query.eq('user_id', params.userId);
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'planning_slots', 'DataService.getPlanningSlots')) {
+          return { data: [], error: null };
+        }
+        throw error;
+      }
       return { data: data || [], error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'planning_slots', 'DataService.getPlanningSlots.catch')) {
+        return { data: [], error: null };
+      }
       return { data: [], error };
     }
   }
@@ -2567,6 +2937,7 @@ export class DataService {
     title?: string;
     notes?: string;
   }) {
+    if (isTableUnavailable('planning_slots')) return { data: null, error: null };
     try {
       const orgId = await this.getCurrentUserOrganizationId();
       if (!orgId) throw new Error('Organization not found');
@@ -2587,9 +2958,17 @@ export class DataService {
         })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'planning_slots', 'DataService.createPlanningSlot')) {
+          return { data: null, error: null };
+        }
+        throw error;
+      }
       return { data, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'planning_slots', 'DataService.createPlanningSlot.catch')) {
+        return { data: null, error: null };
+      }
       return { data: null, error };
     }
   }
@@ -2603,6 +2982,7 @@ export class DataService {
     title: string | null;
     notes: string | null;
   }>) {
+    if (isTableUnavailable('planning_slots')) return { data: null, error: null };
     try {
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (updates.slotDate !== undefined) row.slot_date = updates.slotDate;
@@ -2618,19 +2998,36 @@ export class DataService {
         .eq('id', id)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'planning_slots', 'DataService.updatePlanningSlot')) {
+          return { data: null, error: null };
+        }
+        throw error;
+      }
       return { data, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'planning_slots', 'DataService.updatePlanningSlot.catch')) {
+        return { data: null, error: null };
+      }
       return { data: null, error };
     }
   }
 
   static async deletePlanningSlot(id: string) {
+    if (isTableUnavailable('planning_slots')) return { error: null };
     try {
       const { error } = await supabase.from('planning_slots').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'planning_slots', 'DataService.deletePlanningSlot')) {
+          return { error: null };
+        }
+        throw error;
+      }
       return { error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'planning_slots', 'DataService.deletePlanningSlot.catch')) {
+        return { error: null };
+      }
       return { error };
     }
   }
@@ -3690,16 +4087,53 @@ export class DataService {
 
   static async createNotification(notification: any) {
     try {
+      const rawUserId = notification.userId || notification.user_id || null;
+      if (!rawUserId) {
+        return { data: null, error: new Error('userId manquant') };
+      }
+
+      // La table notifications pointe vers profiles.id (et non auth.users.id)
+      let targetProfileId = rawUserId;
+      const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (uuidLike.test(rawUserId)) {
+        const { data: profileById } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', rawUserId)
+          .maybeSingle();
+
+        if (!profileById) {
+          const { data: profileByUserId } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('user_id', rawUserId)
+            .maybeSingle();
+          if (profileByUserId?.id) targetProfileId = profileByUserId.id;
+        }
+      }
+
+      const entityId =
+        typeof notification.entityId === 'string' && uuidLike.test(notification.entityId)
+          ? notification.entityId
+          : null;
+
       const { data, error } = await supabase
         .from('notifications')
         .insert({
-          user_id: notification.userId || '',
+          user_id: targetProfileId,
           message: notification.message || '',
           type: notification.type || 'info',
-          entity_id: notification.entityId,
+          module: notification.module || 'system',
+          action: notification.action || 'created',
+          title: notification.title || 'Notification',
+          entity_type: notification.entityType || notification.entity_type || null,
+          entity_id: entityId,
+          entity_title: notification.entityTitle || notification.entity_title || null,
+          created_by: notification.createdBy || notification.created_by || null,
+          created_by_name: notification.createdByName || notification.created_by_name || null,
+          metadata: notification.metadata || null,
           read: notification.read || false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -3716,7 +4150,7 @@ export class DataService {
     try {
       const { error } = await supabase
         .from('notifications')
-        .update({ read: true, updated_at: new Date().toISOString() })
+        .update({ read: true, read_at: new Date().toISOString() })
         .eq('id', id);
       
       if (error) throw error;

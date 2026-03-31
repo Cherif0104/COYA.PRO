@@ -1,5 +1,8 @@
 import { supabase } from './supabaseService';
 import OrganizationService from './organizationService';
+import DataAdapter from './dataAdapter';
+import { DataService } from './dataService';
+import * as hrAnalyticsService from './hrAnalyticsService';
 
 export interface PaySlip {
   id: string;
@@ -94,5 +97,59 @@ export async function updatePaySlipStatus(id: string, status: 'draft' | 'validat
     return !error;
   } catch {
     return false;
+  }
+}
+
+export async function simulatePaySlipFromAttendance(profileId: string, periodStart: string, periodEnd: string): Promise<{
+  grossAmount: number;
+  netAmount: number;
+  payableHours: number;
+  delayMinutes: number;
+  unauthorizedAbsenceMinutes: number;
+  disconnectCount: number;
+  hourlyRate: number;
+} | null> {
+  try {
+    const orgId = await OrganizationService.getCurrentUserOrganizationId();
+    if (!orgId) return null;
+    const [employees, sessions, absences, policy, statusEvents, profiles] = await Promise.all([
+      DataAdapter.listEmployees(orgId),
+      DataAdapter.getPresenceSessions({ organizationId: orgId, from: `${periodStart}T00:00:00.000Z`, to: `${periodEnd}T23:59:59.999Z` }),
+      hrAnalyticsService.listHrAbsenceEvents(orgId),
+      DataAdapter.getHrAttendancePolicy(orgId),
+      DataAdapter.listPresenceStatusEvents({ organizationId: orgId, from: `${periodStart}T00:00:00.000Z`, to: `${periodEnd}T23:59:59.999Z` }),
+      DataService.getProfiles(),
+    ]);
+    const employee = employees.find((e) => String(e.profileId) === String(profileId));
+    if (!employee) return null;
+    const userIdByProfile = (profiles.data || []).reduce<Record<string, string>>((acc, row: any) => {
+      if (row?.id && row?.user_id) acc[String(row.id)] = String(row.user_id);
+      return acc;
+    }, {});
+    const compliance = hrAnalyticsService.computePresenceCompliance({
+      employees: [employee],
+      sessions,
+      statusEvents,
+      absences,
+      policy,
+      userIdByProfile,
+      periodStart,
+      periodEnd,
+    })[0];
+    if (!compliance) return null;
+    const grossAmount = Math.max(0, (compliance.totalWorkedMinutes / 60) * compliance.hourlyRate);
+    const netAmount = Math.max(0, compliance.payableAmount);
+    return {
+      grossAmount,
+      netAmount,
+      payableHours: compliance.paidMinutes / 60,
+      delayMinutes: compliance.delayMinutes,
+      unauthorizedAbsenceMinutes: compliance.unauthorizedAbsenceMinutes,
+      disconnectCount: compliance.disconnectCount,
+      hourlyRate: compliance.hourlyRate,
+    };
+  } catch (e) {
+    console.error('payrollService.simulatePaySlipFromAttendance:', e);
+    return null;
   }
 }

@@ -48,6 +48,7 @@ import { useModulePermissions } from './hooks/useModulePermissions';
 import NotificationsPage from './components/NotificationsPage';
 import ActivityLogsPage from './components/ActivityLogsPage';
 import RhModule from './components/RhModule';
+import ComptabiliteModule from './components/ComptabiliteModule';
 import Planning from './components/Planning';
 import LoadingOverlay from './components/common/LoadingOverlay';
 import { getModuleViewComponent } from './viewRegistry';
@@ -2919,6 +2920,7 @@ const App: React.FC = () => {
                     loadingOperation={loadingOperation}
                 />;
       case 'comptabilite':
+        return <ComptabiliteModule />;
       case 'finance':
         return (
           <Finance
@@ -2945,8 +2947,8 @@ const App: React.FC = () => {
             onDeleteBudget={handleDeleteBudget}
             isLoading={isLoading}
             loadingOperation={loadingOperation}
-            moduleTitle={currentView === 'comptabilite' ? 'Comptabilité' : undefined}
-            moduleSubtitle={currentView === 'comptabilite' ? 'Facturation, dépenses, budgets et trésorerie.' : undefined}
+            moduleTitle={undefined}
+            moduleSubtitle={undefined}
           />
         );
       case 'analytics':

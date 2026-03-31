@@ -52,15 +52,33 @@ const TABLE_DIRECT_THREADS = 'chat_direct_threads';
 const TABLE_DIRECT_MEMBERS = 'chat_direct_members';
 const TABLE_MESSAGES = 'chat_messages';
 const LOCAL_KEY = 'coya_messaging_fallback_v1';
+const unavailableTables = new Set<string>();
 
 function isMissingTableError(error: any): boolean {
   const msg = String(error?.message || '').toLowerCase();
   const details = String(error?.details || '').toLowerCase();
   return (
     msg.includes('could not find the table') ||
+    msg.includes('schema cache') ||
     (msg.includes('relation') && msg.includes('does not exist')) ||
     details.includes('does not exist')
   );
+}
+
+function shouldUseLocal(table: string, error?: any): boolean {
+  if (unavailableTables.has(table)) return true;
+  if (!error) return false;
+  const status = Number(error?.status || error?.code || 0);
+  const msg = String(error?.message || '').toLowerCase();
+  const degrade =
+    isMissingTableError(error) ||
+    status === 404 ||
+    status === 500 ||
+    msg.includes('schema cache') ||
+    msg.includes('failed to parse') ||
+    msg.includes('permission denied');
+  if (degrade) unavailableTables.add(table);
+  return degrade;
 }
 
 function makeId(prefix: string): string {
@@ -138,9 +156,9 @@ export async function listChannels(params: { organizationId: string; profileId: 
       .select('*')
       .eq('organization_id', params.organizationId)
       .eq('is_active', true)
-      .order('name', { ascending: true });
+      .order('updated_at', { ascending: false });
     if (error) {
-      if (!isMissingTableError(error)) return [];
+      if (!shouldUseLocal(TABLE_CHANNELS, error)) return [];
       const local = readLocal();
       const memberIds = new Set(
         local.channelMembers.filter((m) => m.profileId === params.profileId).map((m) => m.channelId)
@@ -159,7 +177,7 @@ export async function listChannelMembers(channelId: string): Promise<string[]> {
   try {
     const { data, error } = await supabase.from(TABLE_CHANNEL_MEMBERS).select('profile_id').eq('channel_id', channelId);
     if (error) {
-      if (!isMissingTableError(error)) return [];
+      if (!shouldUseLocal(TABLE_CHANNEL_MEMBERS, error)) return [];
       const local = readLocal();
       return local.channelMembers.filter((m) => m.channelId === channelId).map((m) => m.profileId);
     }
@@ -188,7 +206,7 @@ export async function createChannel(params: {
   };
   const { data, error } = await supabase.from(TABLE_CHANNELS).insert(payload).select('*').single();
   if (error) {
-    if (!isMissingTableError(error)) throw error;
+    if (!shouldUseLocal(TABLE_CHANNELS, error)) throw error;
     const local = readLocal();
     const now = new Date().toISOString();
     const created: ChatChannel = {
@@ -225,7 +243,7 @@ export async function updateChannel(
   if (updates.isActive !== undefined) row.is_active = updates.isActive;
   const { error } = await supabase.from(TABLE_CHANNELS).update(row).eq('id', channelId);
   if (error) {
-    if (!isMissingTableError(error)) throw error;
+    if (!shouldUseLocal(TABLE_CHANNELS, error)) throw error;
     const local = readLocal();
     const idx = local.channels.findIndex((c) => c.id === channelId);
     if (idx < 0) return;
@@ -249,7 +267,7 @@ export async function setChannelMembers(channelId: string, memberIds: string[]):
   const unique = Array.from(new Set(memberIds.filter(Boolean)));
   const { error: delErr } = await supabase.from(TABLE_CHANNEL_MEMBERS).delete().eq('channel_id', channelId);
   if (delErr) {
-    if (!isMissingTableError(delErr)) throw delErr;
+    if (!shouldUseLocal(TABLE_CHANNEL_MEMBERS, delErr)) throw delErr;
     const local = readLocal();
     local.channelMembers = local.channelMembers.filter((m) => m.channelId !== channelId);
     unique.forEach((pid) => local.channelMembers.push({ channelId, profileId: pid }));
@@ -275,7 +293,7 @@ export async function listChannelMessages(channelId: string): Promise<ChatMessag
       .eq('channel_id', channelId)
       .order('created_at', { ascending: true });
     if (error) {
-      if (!isMissingTableError(error)) return [];
+      if (!shouldUseLocal(TABLE_MESSAGES, error)) return [];
       const local = readLocal();
       return local.messages
         .filter((m) => m.channelId === channelId)
@@ -307,7 +325,7 @@ export async function sendChannelMessage(params: {
   };
   const { data, error } = await supabase.from(TABLE_MESSAGES).insert(row).select('*').single();
   if (error) {
-    if (!isMissingTableError(error)) throw error;
+    if (!shouldUseLocal(TABLE_MESSAGES, error)) throw error;
     const local = readLocal();
     const created: ChatMessage = {
       id: makeId('msg'),
@@ -322,9 +340,12 @@ export async function sendChannelMessage(params: {
       updatedAt: new Date().toISOString(),
     };
     local.messages.push(created);
+    const idx = local.channels.findIndex((c) => c.id === params.channelId);
+    if (idx >= 0) local.channels[idx].updatedAt = created.createdAt;
     writeLocal(local);
     return created;
   }
+  await supabase.from(TABLE_CHANNELS).update({ updated_at: new Date().toISOString() }).eq('id', params.channelId);
   return mapMessage(data);
 }
 
@@ -335,7 +356,7 @@ export async function listDirectThreads(params: { organizationId: string; profil
       .select('thread_id')
       .eq('profile_id', params.profileId);
     if (mErr) {
-      if (!isMissingTableError(mErr)) return [];
+      if (!shouldUseLocal(TABLE_DIRECT_MEMBERS, mErr)) return [];
       const local = readLocal();
       const threadIds = new Set(
         local.directMembers.filter((m) => m.profileId === params.profileId).map((m) => m.threadId)
@@ -402,7 +423,7 @@ export async function createOrGetDirectThread(params: {
   };
   const { data, error } = await supabase.from(TABLE_DIRECT_THREADS).insert(row).select('*').single();
   if (error) {
-    if (!isMissingTableError(error)) throw error;
+    if (!shouldUseLocal(TABLE_DIRECT_THREADS, error)) throw error;
     const local = readLocal();
     const now = new Date().toISOString();
     const thread: ChatDirectThread = {
@@ -442,7 +463,7 @@ export async function listDirectMessages(threadId: string): Promise<ChatMessage[
       .eq('direct_thread_id', threadId)
       .order('created_at', { ascending: true });
     if (error) {
-      if (!isMissingTableError(error)) return [];
+      if (!shouldUseLocal(TABLE_MESSAGES, error)) return [];
       const local = readLocal();
       return local.messages
         .filter((m) => m.directThreadId === threadId)
@@ -474,7 +495,7 @@ export async function sendDirectMessage(params: {
   };
   const { data, error } = await supabase.from(TABLE_MESSAGES).insert(row).select('*').single();
   if (error) {
-    if (!isMissingTableError(error)) throw error;
+    if (!shouldUseLocal(TABLE_MESSAGES, error)) throw error;
     const local = readLocal();
     const created: ChatMessage = {
       id: makeId('msg'),
@@ -489,8 +510,11 @@ export async function sendDirectMessage(params: {
       updatedAt: new Date().toISOString(),
     };
     local.messages.push(created);
+    const idx = local.directThreads.findIndex((t) => t.id === params.directThreadId);
+    if (idx >= 0) local.directThreads[idx].updatedAt = created.createdAt;
     writeLocal(local);
     return created;
   }
+  await supabase.from(TABLE_DIRECT_THREADS).update({ updated_at: new Date().toISOString() }).eq('id', params.directThreadId);
   return mapMessage(data);
 }

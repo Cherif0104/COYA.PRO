@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import OrganizationService from './organizationService';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 export const DASHBOARD_WIDGET_KEYS = [
   'days_worked',
@@ -39,14 +40,23 @@ function mapRow(row: any): DashboardSetting {
 export const DashboardSettingsService = {
   async getSettings(organizationId: string | null): Promise<{ data: DashboardSetting[]; error: any }> {
     if (!organizationId) return { data: [], error: null };
+    if (isTableUnavailable('dashboard_settings')) return { data: [], error: null };
     try {
       const { data, error } = await supabase
         .from('dashboard_settings')
         .select('*')
         .eq('organization_id', organizationId);
-      if (error) return { data: [], error };
+      if (error) {
+        if (handleOptionalTableError(error, 'dashboard_settings', 'DashboardSettingsService.getSettings')) {
+          return { data: [], error: null };
+        }
+        return { data: [], error };
+      }
       return { data: (data || []).map(mapRow), error: null };
     } catch (e) {
+      if (handleOptionalTableError(e, 'dashboard_settings', 'DashboardSettingsService.getSettings.catch')) {
+        return { data: [], error: null };
+      }
       console.error('getSettings dashboard_settings:', e);
       return { data: [], error: e };
     }

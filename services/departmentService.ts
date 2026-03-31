@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import { Department, UserDepartment, ModuleName } from '../types';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 function mapRowToDepartment(row: any): Department {
   const slugs = row.module_slugs;
@@ -31,6 +32,7 @@ export class DepartmentService {
    * Liste des départements d'une organisation
    */
   static async getDepartmentsByOrganizationId(organizationId: string): Promise<Department[]> {
+    if (isTableUnavailable('departments')) return [];
     try {
       const { data, error } = await supabase
         .from('departments')
@@ -40,11 +42,17 @@ export class DepartmentService {
         .order('name', { ascending: true });
 
       if (error) {
+        if (handleOptionalTableError(error, 'departments', 'DepartmentService.getDepartmentsByOrganizationId')) {
+          return [];
+        }
         console.error('❌ Erreur getDepartmentsByOrganizationId:', error);
         return [];
       }
       return (data || []).map(mapRowToDepartment);
     } catch (error) {
+      if (handleOptionalTableError(error, 'departments', 'DepartmentService.getDepartmentsByOrganizationId.catch')) {
+        return [];
+      }
       console.error('❌ Erreur getDepartmentsByOrganizationId:', error);
       return [];
     }
@@ -55,13 +63,20 @@ export class DepartmentService {
    * userId = auth user id (profiles.user_id)
    */
   static async getUserDepartments(userId: string): Promise<Department[]> {
+    if (isTableUnavailable('user_departments') || isTableUnavailable('departments')) return [];
     try {
       const { data: links, error: linkError } = await supabase
         .from('user_departments')
         .select('department_id')
         .eq('user_id', userId);
 
-      if (linkError || !links?.length) {
+      if (linkError) {
+        if (handleOptionalTableError(linkError, 'user_departments', 'DepartmentService.getUserDepartments.links')) {
+          return [];
+        }
+        return [];
+      }
+      if (!links?.length) {
         return [];
       }
 
@@ -74,11 +89,20 @@ export class DepartmentService {
         .order('sequence', { ascending: true });
 
       if (error) {
+        if (handleOptionalTableError(error, 'departments', 'DepartmentService.getUserDepartments.departments')) {
+          return [];
+        }
         console.error('❌ Erreur getUserDepartments (fetch departments):', error);
         return [];
       }
       return (depts || []).map(mapRowToDepartment);
     } catch (error) {
+      if (
+        handleOptionalTableError(error, 'user_departments', 'DepartmentService.getUserDepartments.catch') ||
+        handleOptionalTableError(error, 'departments', 'DepartmentService.getUserDepartments.catch')
+      ) {
+        return [];
+      }
       console.error('❌ Erreur getUserDepartments:', error);
       return [];
     }

@@ -1,5 +1,6 @@
 // Helper pour les appels API REST Supabase
 import { supabase } from './supabaseService';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 export class ApiHelper {
   private static baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tdwbqgyubigaurnjzbfv.supabase.co';
@@ -21,6 +22,10 @@ export class ApiHelper {
   // GET request
   static async get(endpoint: string, params?: Record<string, any>, customTimeout?: number) {
     try {
+      if (isTableUnavailable(endpoint)) {
+        return { data: [], error: null };
+      }
+
       let url = `${this.baseUrl}/rest/v1/${endpoint}`;
       
       if (params) {
@@ -63,6 +68,16 @@ export class ApiHelper {
       clearTimeout(timeoutId);
       
       if (!response.ok) {
+        let parsedError: any = null;
+        try {
+          parsedError = await response.json();
+        } catch {
+          parsedError = { status: response.status, message: `HTTP error ${response.status}` };
+        }
+        parsedError.status = response.status;
+        if (handleOptionalTableError(parsedError, endpoint, `ApiHelper.get(${endpoint})`)) {
+          return { data: [], error: null };
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       

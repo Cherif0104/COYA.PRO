@@ -24,6 +24,7 @@ const PayrollTab: React.FC<PayrollTabProps> = ({ users, employees = [] }) => {
     currencyCode: 'XOF',
     notes: '',
   });
+  const [simulationInfo, setSimulationInfo] = useState<string>('');
 
   const load = async () => {
     setLoading(true);
@@ -58,6 +59,27 @@ const PayrollTab: React.FC<PayrollTabProps> = ({ users, employees = [] }) => {
     } else {
       alert(fr ? 'Erreur lors de la création du bulletin.' : 'Error creating pay slip.');
     }
+  };
+
+  const handleAutoCompute = async () => {
+    if (!form.profileId || !form.periodStart || !form.periodEnd) {
+      alert(fr ? 'Sélectionnez salarié + période.' : 'Select employee + period.');
+      return;
+    }
+    const sim = await payrollService.simulatePaySlipFromAttendance(form.profileId, form.periodStart, form.periodEnd);
+    if (!sim) {
+      setSimulationInfo(fr ? 'Aucune simulation disponible pour cette période.' : 'No simulation available for this period.');
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      grossAmount: Number(sim.grossAmount.toFixed(2)),
+      netAmount: Number(sim.netAmount.toFixed(2)),
+      notes: `${fr ? 'Simulation présence' : 'Attendance simulation'}: ${sim.payableHours.toFixed(2)}h, ${fr ? 'retards' : 'delays'} ${sim.delayMinutes} min, ${fr ? 'absences NA' : 'unauthorized absences'} ${sim.unauthorizedAbsenceMinutes} min.`,
+    }));
+    setSimulationInfo(
+      `${fr ? 'Calcul auto' : 'Auto computed'}: ${sim.payableHours.toFixed(2)}h × ${sim.hourlyRate.toLocaleString()} = ${sim.netAmount.toLocaleString()} ${form.currencyCode}.`
+    );
   };
 
   const handleStatusChange = async (id: string, status: 'draft' | 'validated' | 'paid') => {
@@ -178,8 +200,10 @@ const PayrollTab: React.FC<PayrollTabProps> = ({ users, employees = [] }) => {
           </div>
           <div className="flex gap-2">
             <button type="submit" className="px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800">{fr ? 'Créer' : 'Create'}</button>
+            <button type="button" onClick={handleAutoCompute} className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-100">{fr ? 'Auto-calcul présence' : 'Auto-calc attendance'}</button>
             <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-100">{fr ? 'Annuler' : 'Cancel'}</button>
           </div>
+          {simulationInfo && <p className="text-xs text-slate-600">{simulationInfo}</p>}
         </form>
       )}
 

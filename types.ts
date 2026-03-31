@@ -656,6 +656,55 @@ export interface OrganizationAccountingSettings {
   updatedAt?: string;
 }
 
+/** Lettrage (matching) de lignes comptables */
+export interface AccountingMatchingGroup {
+  id: string;
+  organizationId: string;
+  code: string;
+  accountId: string;
+  matchedAt?: string | null;
+  note?: string | null;
+  createdById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lineIds?: string[];
+}
+
+/** Rapprochement bancaire / caisse */
+export interface AccountingReconciliation {
+  id: string;
+  organizationId: string;
+  journalId: string;
+  accountId: string;
+  statementReference: string;
+  statementDate: string;
+  statementBalance: number;
+  bookBalance: number;
+  variance: number;
+  status: 'draft' | 'validated';
+  notes?: string | null;
+  createdById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Cloture de periode comptable */
+export interface AccountingPeriodClosure {
+  id: string;
+  organizationId: string;
+  periodStart: string;
+  periodEnd: string;
+  closureType: 'month' | 'quarter' | 'semester' | 'year';
+  status: 'closed' | 'reopened';
+  reason?: string | null;
+  closedById?: string | null;
+  closedAt?: string | null;
+  reopenedById?: string | null;
+  reopenedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Bénéficiaire (Phase 3) : thème, cible, secteur, lien programme/projet, optionnellement Collecte */
 export interface Beneficiaire {
   id: string;
@@ -900,7 +949,42 @@ export interface PresenceSession {
   status: PresenceStatus;
   meetingId?: string | null; // FK meetings.id – si "en réunion" non lié = non rémunéré
   pauseMinutes: number;
+  hourlyRate?: number | null;
+  startedIp?: string | null;
+  endedIp?: string | null;
+  workMode?: WorkMode;
   notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type WorkMode = 'office' | 'remote' | 'hybrid';
+
+export interface PresenceStatusEvent {
+  id: string;
+  presenceSessionId: string;
+  organizationId: string;
+  userId: string;
+  status: PresenceStatus;
+  startedAt: string;
+  endedAt?: string | null;
+  durationMinutes?: number | null;
+  source?: 'selector' | 'widget' | 'system';
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface HrAttendancePolicy {
+  id: string;
+  organizationId: string;
+  payrollPeriodStartDay: number;
+  expectedDailyMinutes: number;
+  expectedWorkStartTime: string;
+  monthlyDelayToleranceMinutes: number;
+  monthlyUnjustifiedAbsenceToleranceMinutes: number;
+  defaultWorkMode: WorkMode;
+  enforceOfficeIp: boolean;
+  officeIpAllowlist: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -930,6 +1014,9 @@ export interface Employee {
   organizationId: string;
   profileId: string;
   position?: string | null;
+  workMode?: WorkMode | null;
+  hourlyRate?: number | null;
+  expectedDailyMinutes?: number | null;
   managerId?: string | null;
   mentorId?: string | null;
   cnss?: string | null;
@@ -940,6 +1027,51 @@ export interface Employee {
   familySituation?: string | null;
   photoUrl?: string | null;
   cvUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PresencePeriodMetric {
+  profileId: string;
+  period: 'day' | 'week' | 'month' | 'quarter' | 'year';
+  label: string;
+  totalMinutes: number;
+  totalHours: number;
+  expectedHours: number;
+  assiduityRate: number;
+  hourlyRate?: number | null;
+  estimatedAmount?: number | null;
+}
+
+export interface HrAbsenceEvent {
+  id: string;
+  organizationId: string;
+  profileId: string;
+  absenceDate: string;
+  durationMinutes: number;
+  isAuthorized: boolean;
+  reason?: string | null;
+  createdById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TriniteScore {
+  id: string;
+  organizationId: string;
+  profileId: string;
+  periodStart: string;
+  periodEnd: string;
+  ndiguelScore: number;
+  yarScore: number;
+  barkeScore: number;
+  globalScore: number;
+  presenceScore: number;
+  performanceScore: number;
+  objectiveScore: number;
+  qualityScore: number;
+  sourceSnapshot?: Record<string, any> | null;
+  generatedById?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -56,27 +56,32 @@ export const PresenceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const setStatus = useCallback(async (newStatus: PresenceStatus): Promise<boolean> => {
+    const nowIso = new Date().toISOString();
     const isLocalSession = currentSession?.id?.startsWith?.('local-');
     if (currentSession?.id && isLocalSession) {
       setCurrentSessionState({
         ...currentSession,
         status: newStatus,
-        startedAt: new Date().toISOString(),
+        endedAt: newStatus === 'absent' ? nowIso : currentSession.endedAt,
       });
       return true;
     }
     if (currentSession?.id) {
       const { data, error } = await DataService.updatePresenceSession(currentSession.id, {
         status: newStatus,
-        startedAt: new Date().toISOString(),
+        endedAt: newStatus === 'absent' ? nowIso : undefined,
       });
       if (error || !data) return false;
-      setCurrentSessionState(data);
+      setCurrentSessionState(newStatus === 'absent' ? null : data);
+      return true;
+    }
+    if (newStatus === 'absent') {
+      setCurrentSessionState(null);
       return true;
     }
     const { data, error } = await DataService.createPresenceSession({
       status: newStatus,
-      startedAt: new Date().toISOString(),
+      startedAt: nowIso,
     });
     if (data) {
       setCurrentSessionState(data);

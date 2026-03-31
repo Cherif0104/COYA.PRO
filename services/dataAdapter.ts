@@ -1,8 +1,9 @@
 import { DataService } from './dataService';
 import { AuthService } from './authService';
 import * as programmeService from './programmeService';
+import { handleOptionalTableError } from './optionalTableGuard';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
-import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot } from '../types';
+import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot, PresenceStatusEvent, HrAttendancePolicy } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
@@ -1684,6 +1685,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       if (error) throw error;
       return data || [];
     } catch (e) {
+      if (handleOptionalTableError(e, 'presence_sessions', 'DataAdapter.getPresenceSessions')) {
+        return [];
+      }
       console.error('❌ DataAdapter.getPresenceSessions:', e);
       return [];
     }
@@ -1722,6 +1726,20 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
   }
 
+  static async listPresenceStatusEvents(params: { organizationId?: string; userId?: string; sessionId?: string; from?: string; to?: string }): Promise<PresenceStatusEvent[]> {
+    try {
+      const { data, error } = await DataService.listPresenceStatusEvents(params);
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      if (handleOptionalTableError(e, 'presence_status_events', 'DataAdapter.listPresenceStatusEvents')) {
+        return [];
+      }
+      console.error('❌ DataAdapter.listPresenceStatusEvents:', e);
+      return [];
+    }
+  }
+
   static async listEmployees(organizationId?: string | null): Promise<Employee[]> {
     try {
       return await DataService.listEmployees(organizationId);
@@ -1737,6 +1755,9 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       if (error) throw error;
       return data ?? null;
     } catch (e) {
+      if (handleOptionalTableError(e, 'employees', 'DataAdapter.getEmployeeByProfileId')) {
+        return null;
+      }
       console.error('❌ DataAdapter.getEmployeeByProfileId:', e);
       return null;
     }
@@ -1749,6 +1770,34 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       return data ?? null;
     } catch (e) {
       console.error('❌ DataAdapter.upsertEmployee:', e);
+      return null;
+    }
+  }
+
+  static async getHrAttendancePolicy(organizationId?: string | null): Promise<HrAttendancePolicy | null> {
+    try {
+      const { data, error } = await DataService.getHrAttendancePolicy(organizationId);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      if (handleOptionalTableError(e, 'hr_attendance_policies', 'DataAdapter.getHrAttendancePolicy')) {
+        return null;
+      }
+      console.error('❌ DataAdapter.getHrAttendancePolicy:', e);
+      return null;
+    }
+  }
+
+  static async upsertHrAttendancePolicy(policy: Partial<HrAttendancePolicy>): Promise<HrAttendancePolicy | null> {
+    try {
+      const { data, error } = await DataService.upsertHrAttendancePolicy(policy);
+      if (error) throw error;
+      return data ?? null;
+    } catch (e) {
+      if (handleOptionalTableError(e, 'hr_attendance_policies', 'DataAdapter.upsertHrAttendancePolicy')) {
+        return null;
+      }
+      console.error('❌ DataAdapter.upsertHrAttendancePolicy:', e);
       return null;
     }
   }

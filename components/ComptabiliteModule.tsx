@@ -3,7 +3,7 @@ import StructuredModulePage from './common/StructuredModulePage';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Language, ChartOfAccount, AccountingJournal, JournalEntry, JournalEntryStatus, ChartAccountType, AccountingFramework, CostCenter, FiscalRule, Budget, ChartAccountFramework } from '../types';
+import { Language, ChartOfAccount, AccountingJournal, JournalEntry, JournalEntryStatus, ChartAccountType, AccountingFramework, CostCenter, FiscalRule, Budget, ChartAccountFramework, AccountingMatchingGroup, AccountingReconciliation, AccountingPeriodClosure } from '../types';
 import * as comptabiliteService from '../services/comptabiliteService';
 import OrganizationService from '../services/organizationService';
 
@@ -53,13 +53,15 @@ const ComptabiliteModule: React.FC = () => {
   const canRead = !!comptabilitePerms?.canRead;
   const isReadOnly = canRead && !canWrite;
 
-  const tabKeys = useMemo(() => {
-    const all: Array<'parametres' | 'plan' | 'journaux' | 'ecritures' | 'rapports' | 'centres' | 'budgets' | 'fiscale'> = ['parametres', 'plan', 'journaux', 'ecritures', 'rapports', 'centres', 'budgets', 'fiscale'];
-    return canWrite ? all : all.filter((t) => t !== 'parametres');
-  }, [canWrite]);
-
   const [organizationId, setOrganizationId] = useState<string | null>(null);
-  type TabKey = 'parametres' | 'plan' | 'journaux' | 'ecritures' | 'rapports' | 'centres' | 'budgets' | 'fiscale';
+  type TabKey = 'parametres' | 'plan' | 'journaux' | 'ecritures' | 'rapports' | 'centres' | 'budgets' | 'fiscale' | 'lettrage' | 'rapprochement' | 'cloture';
+  const [displayMode, setDisplayMode] = useState<'essentiel' | 'avance'>('essentiel');
+  const tabKeys = useMemo(() => {
+    const essential: TabKey[] = ['plan', 'ecritures', 'rapports', 'cloture'];
+    const all: TabKey[] = ['parametres', 'plan', 'journaux', 'ecritures', 'rapports', 'centres', 'budgets', 'fiscale', 'lettrage', 'rapprochement', 'cloture'];
+    const selected = displayMode === 'essentiel' ? essential : all;
+    return canWrite ? selected : selected.filter((t) => t !== 'parametres');
+  }, [canWrite, displayMode]);
   const [activeTab, setActiveTab] = useState<TabKey>('plan');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,9 @@ const ComptabiliteModule: React.FC = () => {
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [fiscalRules, setFiscalRules] = useState<FiscalRule[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [matchingGroups, setMatchingGroups] = useState<AccountingMatchingGroup[]>([]);
+  const [reconciliations, setReconciliations] = useState<AccountingReconciliation[]>([]);
+  const [closures, setClosures] = useState<AccountingPeriodClosure[]>([]);
   const [reportDateFrom, setReportDateFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -96,6 +101,7 @@ const ComptabiliteModule: React.FC = () => {
   const [showFiscalForm, setShowFiscalForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const currentUserId = (currentUser as any)?.id ?? (currentUser as any)?.user_id ?? null;
 
   useEffect(() => {
@@ -163,6 +169,36 @@ const ComptabiliteModule: React.FC = () => {
     }
   }, [organizationId]);
 
+  const loadMatching = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const list = await comptabiliteService.listMatchingGroups(organizationId);
+      setMatchingGroups(list);
+    } catch (e: any) {
+      setError(e?.message || 'Erreur lettrage');
+    }
+  }, [organizationId]);
+
+  const loadReconciliations = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const list = await comptabiliteService.listReconciliations(organizationId);
+      setReconciliations(list);
+    } catch (e: any) {
+      setError(e?.message || 'Erreur rapprochements');
+    }
+  }, [organizationId]);
+
+  const loadClosures = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const list = await comptabiliteService.listPeriodClosures(organizationId);
+      setClosures(list);
+    } catch (e: any) {
+      setError(e?.message || 'Erreur clôtures');
+    }
+  }, [organizationId]);
+
   const loadJournals = useCallback(async () => {
     if (!organizationId) return;
     try {
@@ -211,6 +247,21 @@ const ComptabiliteModule: React.FC = () => {
   useEffect(() => {
     if (organizationId && activeTab === 'budgets') loadBudgets();
   }, [organizationId, activeTab, loadBudgets]);
+  useEffect(() => {
+    if (organizationId && activeTab === 'lettrage') loadMatching();
+  }, [organizationId, activeTab, loadMatching]);
+  useEffect(() => {
+    if (organizationId && activeTab === 'rapprochement') loadReconciliations();
+  }, [organizationId, activeTab, loadReconciliations]);
+  useEffect(() => {
+    if (organizationId && activeTab === 'cloture') loadClosures();
+  }, [organizationId, activeTab, loadClosures]);
+
+  useEffect(() => {
+    if (!tabKeys.includes(activeTab)) {
+      setActiveTab(tabKeys[0] ?? 'plan');
+    }
+  }, [activeTab, tabKeys]);
 
   useEffect(() => {
     if (organizationId && activeTab === 'ecritures') loadEntries();
@@ -312,6 +363,28 @@ const ComptabiliteModule: React.FC = () => {
     }
   };
 
+  const handleSeedGeneralPlan = async () => {
+    if (!organizationId) return;
+    setSubmitting(true);
+    setSeedMessage(null);
+    try {
+      const result = await comptabiliteService.seedGeneralChartOfAccounts({
+        organizationId,
+        framework: accountingFramework,
+      });
+      await loadAccounts();
+      setSeedMessage(
+        isFr
+          ? `Plan général chargé : ${result.inserted} compte(s) ajouté(s), ${result.skipped} déjà existant(s).`
+          : `General chart loaded: ${result.inserted} inserted, ${result.skipped} skipped.`
+      );
+    } catch (e: any) {
+      setError(e?.message || (isFr ? 'Erreur chargement plan général' : 'Failed to load general chart'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSaveCostCenter = async (form: { code: string; label: string }) => {
     if (!organizationId) return;
     setSubmitting(true);
@@ -359,6 +432,20 @@ const ComptabiliteModule: React.FC = () => {
       ? { asset: 'Actif', liability: 'Passif', equity: 'Capitaux propres', income: 'Produit', expense: 'Charge' }[t]
       : { asset: 'Asset', liability: 'Liability', equity: 'Equity', income: 'Income', expense: 'Expense' }[t];
 
+  const tabLabel = (tab: TabKey) => {
+    if (tab === 'parametres') return isFr ? 'Paramètres' : 'Settings';
+    if (tab === 'plan') return isFr ? 'Plan comptable' : 'Chart of accounts';
+    if (tab === 'journaux') return isFr ? 'Journaux' : 'Journals';
+    if (tab === 'ecritures') return isFr ? 'Écritures' : 'Entries';
+    if (tab === 'rapports') return isFr ? 'Rapports' : 'Reports';
+    if (tab === 'centres') return isFr ? 'Centres de coûts' : 'Cost centers';
+    if (tab === 'budgets') return isFr ? 'Budgets' : 'Budgets';
+    if (tab === 'fiscale') return isFr ? 'Fiscal' : 'Fiscal';
+    if (tab === 'lettrage') return isFr ? 'Lettrage' : 'Matching';
+    if (tab === 'rapprochement') return isFr ? 'Rapprochement' : 'Reconciliation';
+    return isFr ? 'Clôture' : 'Period close';
+  };
+
   return (
     <StructuredModulePage
       moduleKey="comptabilite"
@@ -380,6 +467,57 @@ const ComptabiliteModule: React.FC = () => {
         </div>
       )}
 
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{isFr ? 'Comptes' : 'Accounts'}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{accounts.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{isFr ? 'Journaux' : 'Journals'}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{journals.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{isFr ? 'Écritures période' : 'Entries period'}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{entries.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{isFr ? 'À valider' : 'To validate'}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{entries.filter((e) => (e.status || 'draft') === 'draft').length}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+          <button
+            type="button"
+            className={`px-3 py-1.5 text-sm rounded-lg ${displayMode === 'essentiel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => setDisplayMode('essentiel')}
+          >
+            {isFr ? 'Vue essentielle' : 'Essential view'}
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-1.5 text-sm rounded-lg ${displayMode === 'avance' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => setDisplayMode('avance')}
+          >
+            {isFr ? 'Vue avancée' : 'Advanced view'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          {displayMode === 'essentiel'
+            ? (isFr ? 'Parcours simplifié inspiré Odoo/Sage.' : 'Simplified Odoo/Sage-inspired flow.')
+            : (isFr ? 'Mode expert avec tous les sous-modules.' : 'Expert mode with all sub-modules.')}
+        </p>
+      </div>
+
+      {seedMessage && (
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {seedMessage}
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-2 border-b border-coya-border">
         {tabKeys.map((tab) => (
           <button
@@ -388,14 +526,7 @@ const ComptabiliteModule: React.FC = () => {
             className={`px-3 py-2 text-sm font-medium ${activeTab === tab ? 'border-b-2 border-coya-primary text-coya-primary' : 'text-coya-text-muted'}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'parametres' && (isFr ? 'Paramètres' : 'Settings')}
-            {tab === 'plan' && (isFr ? 'Plan comptable' : 'Chart of accounts')}
-            {tab === 'journaux' && (isFr ? 'Journaux' : 'Journals')}
-            {tab === 'ecritures' && (isFr ? 'Écritures' : 'Entries')}
-            {tab === 'rapports' && (isFr ? 'Rapports' : 'Reports')}
-            {tab === 'centres' && (isFr ? 'Centres de coûts' : 'Cost centers')}
-            {tab === 'budgets' && (isFr ? 'Budgets' : 'Budgets')}
-            {tab === 'fiscale' && (isFr ? 'Fiscal' : 'Fiscal')}
+            {tabLabel(tab)}
           </button>
         ))}
       </div>
@@ -434,7 +565,15 @@ const ComptabiliteModule: React.FC = () => {
       {!loading && organizationId && activeTab === 'plan' && (
         <div className="space-y-4">
           {canWrite && (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-coya border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+                onClick={handleSeedGeneralPlan}
+                disabled={submitting}
+              >
+                {isFr ? 'Charger plan général OHADA' : 'Load OHADA general chart'}
+              </button>
               <button
                 type="button"
                 className="rounded-coya bg-coya-primary px-4 py-2 text-sm font-medium text-white"
@@ -898,6 +1037,61 @@ const ComptabiliteModule: React.FC = () => {
         </div>
       )}
 
+      {!loading && organizationId && activeTab === 'lettrage' && (
+        <AdvancedAccountingPanel
+          isFr={isFr}
+          mode="matching"
+          accounts={accounts}
+          journals={journals}
+          entries={entries}
+          matchingGroups={matchingGroups}
+          reconciliations={reconciliations}
+          closures={closures}
+          canWrite={canWrite}
+          currentUserId={currentUserId}
+          organizationId={organizationId}
+          refreshMatching={loadMatching}
+          refreshReconciliations={loadReconciliations}
+          refreshClosures={loadClosures}
+        />
+      )}
+      {!loading && organizationId && activeTab === 'rapprochement' && (
+        <AdvancedAccountingPanel
+          isFr={isFr}
+          mode="reconciliation"
+          accounts={accounts}
+          journals={journals}
+          entries={entries}
+          matchingGroups={matchingGroups}
+          reconciliations={reconciliations}
+          closures={closures}
+          canWrite={canWrite}
+          currentUserId={currentUserId}
+          organizationId={organizationId}
+          refreshMatching={loadMatching}
+          refreshReconciliations={loadReconciliations}
+          refreshClosures={loadClosures}
+        />
+      )}
+      {!loading && organizationId && activeTab === 'cloture' && (
+        <AdvancedAccountingPanel
+          isFr={isFr}
+          mode="closure"
+          accounts={accounts}
+          journals={journals}
+          entries={entries}
+          matchingGroups={matchingGroups}
+          reconciliations={reconciliations}
+          closures={closures}
+          canWrite={canWrite}
+          currentUserId={currentUserId}
+          organizationId={organizationId}
+          refreshMatching={loadMatching}
+          refreshReconciliations={loadReconciliations}
+          refreshClosures={loadClosures}
+        />
+      )}
+
       {!organizationId && !loading && (
         <p className="text-coya-text-muted py-4">{isFr ? 'Aucune organisation associée.' : 'No organization linked.'}</p>
       )}
@@ -1286,6 +1480,283 @@ function EntryForm({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function AdvancedAccountingPanel({
+  isFr,
+  mode,
+  accounts,
+  journals,
+  entries,
+  matchingGroups,
+  reconciliations,
+  closures,
+  canWrite,
+  currentUserId,
+  organizationId,
+  refreshMatching,
+  refreshReconciliations,
+  refreshClosures,
+}: {
+  isFr: boolean;
+  mode: 'matching' | 'reconciliation' | 'closure';
+  accounts: ChartOfAccount[];
+  journals: AccountingJournal[];
+  entries: JournalEntry[];
+  matchingGroups: AccountingMatchingGroup[];
+  reconciliations: AccountingReconciliation[];
+  closures: AccountingPeriodClosure[];
+  canWrite: boolean;
+  currentUserId: string | null;
+  organizationId: string;
+  refreshMatching: () => Promise<void>;
+  refreshReconciliations: () => Promise<void>;
+  refreshClosures: () => Promise<void>;
+}) {
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
+  const [statementReference, setStatementReference] = useState('');
+  const [statementDate, setStatementDate] = useState(new Date().toISOString().slice(0, 10));
+  const [statementBalance, setStatementBalance] = useState('');
+  const [closureStart, setClosureStart] = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10));
+  const [closureEnd, setClosureEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [closureType, setClosureType] = useState<'month' | 'quarter' | 'semester' | 'year'>('month');
+  const [busy, setBusy] = useState(false);
+
+  const allLines = useMemo(() => entries.flatMap((entry) => (entry.lines || []).map((line) => ({ ...line, entryId: entry.id }))), [entries]);
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (mode === 'matching') {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-coya border border-coya-border bg-coya-card p-4">
+          <h3 className="font-semibold text-coya-text mb-2">{isFr ? 'Lettrage des comptes tiers' : 'Ledger matching'}</h3>
+          <p className="text-sm text-coya-text-muted mb-3">
+            {isFr ? 'Associez les lignes ouvertes d’un même compte pour tracer les soldes apurés.' : 'Group open lines for the same account to reconcile balances.'}
+          </p>
+          {canWrite && (
+            <div className="flex flex-wrap items-end gap-2">
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="rounded-coya border border-coya-border px-3 py-2 text-sm">
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} - {a.label}</option>)}
+              </select>
+              <button
+                type="button"
+                disabled={busy || !accountId}
+                className="rounded-coya bg-coya-primary px-4 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => run(async () => {
+                  const lineIds = allLines.filter((l) => l.accountId === accountId).slice(0, 8).map((l) => l.id);
+                  if (lineIds.length < 2) return;
+                  await comptabiliteService.createMatchingGroup({
+                    organizationId,
+                    accountId,
+                    lineIds,
+                    createdById: currentUserId,
+                  });
+                  await refreshMatching();
+                })}
+              >
+                {isFr ? 'Créer un lot de lettrage' : 'Create matching batch'}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="rounded-coya border border-coya-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-coya-bg">
+              <tr>
+                <th className="text-left p-3">{isFr ? 'Code' : 'Code'}</th>
+                <th className="text-left p-3">{isFr ? 'Compte' : 'Account'}</th>
+                <th className="text-left p-3">{isFr ? 'Date' : 'Date'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matchingGroups.map((g) => {
+                const account = accounts.find((a) => a.id === g.accountId);
+                return (
+                  <tr key={g.id} className="border-t border-coya-border">
+                    <td className="p-3 font-mono">{g.code}</td>
+                    <td className="p-3">{account?.code} {account?.label}</td>
+                    <td className="p-3">{g.matchedAt?.slice(0, 10) || '—'}</td>
+                  </tr>
+                );
+              })}
+              {matchingGroups.length === 0 && <tr><td colSpan={3} className="p-6 text-center text-coya-text-muted">{isFr ? 'Aucun lot de lettrage.' : 'No matching batch.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'reconciliation') {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-coya border border-coya-border bg-coya-card p-4">
+          <h3 className="font-semibold text-coya-text mb-3">{isFr ? 'Rapprochement bancaire/caisse' : 'Bank/cash reconciliation'}</h3>
+          {canWrite && (
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="rounded-coya border border-coya-border px-3 py-2 text-sm">
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} - {a.label}</option>)}
+              </select>
+              <select className="rounded-coya border border-coya-border px-3 py-2 text-sm" defaultValue={journals[0]?.id}>
+                {journals.map((j) => <option key={j.id} value={j.id}>{j.code}</option>)}
+              </select>
+              <input value={statementReference} onChange={(e) => setStatementReference(e.target.value)} placeholder={isFr ? 'Référence relevé' : 'Statement ref'} className="rounded-coya border border-coya-border px-3 py-2 text-sm" />
+              <input type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} className="rounded-coya border border-coya-border px-3 py-2 text-sm" />
+              <input value={statementBalance} onChange={(e) => setStatementBalance(e.target.value)} placeholder={isFr ? 'Solde relevé' : 'Statement balance'} className="rounded-coya border border-coya-border px-3 py-2 text-sm" />
+              <button
+                type="button"
+                disabled={busy || !accountId || !statementReference.trim() || !statementBalance}
+                className="md:col-span-5 rounded-coya bg-coya-primary px-4 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => run(async () => {
+                  const journalId = journals[0]?.id;
+                  if (!journalId) return;
+                  await comptabiliteService.createReconciliation({
+                    organizationId,
+                    journalId,
+                    accountId,
+                    statementReference: statementReference.trim(),
+                    statementDate,
+                    statementBalance: Number(statementBalance),
+                    createdById: currentUserId,
+                  });
+                  setStatementReference('');
+                  setStatementBalance('');
+                  await refreshReconciliations();
+                })}
+              >
+                {isFr ? 'Créer rapprochement' : 'Create reconciliation'}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="rounded-coya border border-coya-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-coya-bg">
+              <tr>
+                <th className="text-left p-3">{isFr ? 'Référence' : 'Reference'}</th>
+                <th className="text-right p-3">{isFr ? 'Solde relevé' : 'Statement'}</th>
+                <th className="text-right p-3">{isFr ? 'Solde comptable' : 'Book'}</th>
+                <th className="text-right p-3">{isFr ? 'Écart' : 'Variance'}</th>
+                <th className="text-left p-3">{isFr ? 'Statut' : 'Status'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliations.map((r) => (
+                <tr key={r.id} className="border-t border-coya-border">
+                  <td className="p-3">{r.statementReference}</td>
+                  <td className="p-3 text-right font-mono">{r.statementBalance.toLocaleString('fr-FR')}</td>
+                  <td className="p-3 text-right font-mono">{r.bookBalance.toLocaleString('fr-FR')}</td>
+                  <td className="p-3 text-right font-mono">{r.variance.toLocaleString('fr-FR')}</td>
+                  <td className="p-3">
+                    {r.status === 'validated' ? (
+                      <span className="text-xs rounded px-2 py-0.5 bg-emerald-100 text-emerald-700">{isFr ? 'Validé' : 'Validated'}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!canWrite || busy}
+                        className="text-xs text-coya-primary hover:underline disabled:opacity-50"
+                        onClick={() => run(async () => {
+                          await comptabiliteService.setReconciliationStatus(r.id, 'validated');
+                          await refreshReconciliations();
+                        })}
+                      >
+                        {isFr ? 'Valider' : 'Validate'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {reconciliations.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-coya-text-muted">{isFr ? 'Aucun rapprochement.' : 'No reconciliation.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-coya border border-coya-border bg-coya-card p-4">
+        <h3 className="font-semibold text-coya-text mb-2">{isFr ? 'Clôture de période' : 'Period close'}</h3>
+        <p className="text-sm text-coya-text-muted mb-3">
+          {isFr ? 'Bloque la modification des écritures sur la plage clôturée. Réouverture possible pour correction contrôlée.' : 'Locks entry modifications on closed periods. Reopen for controlled corrections.'}
+        </p>
+        {canWrite && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input type="date" value={closureStart} onChange={(e) => setClosureStart(e.target.value)} className="rounded-coya border border-coya-border px-3 py-2 text-sm" />
+            <input type="date" value={closureEnd} onChange={(e) => setClosureEnd(e.target.value)} className="rounded-coya border border-coya-border px-3 py-2 text-sm" />
+            <select value={closureType} onChange={(e) => setClosureType(e.target.value as any)} className="rounded-coya border border-coya-border px-3 py-2 text-sm">
+              <option value="month">{isFr ? 'Mensuelle' : 'Monthly'}</option>
+              <option value="quarter">{isFr ? 'Trimestrielle' : 'Quarterly'}</option>
+              <option value="semester">{isFr ? 'Semestrielle' : 'Semester'}</option>
+              <option value="year">{isFr ? 'Annuelle' : 'Yearly'}</option>
+            </select>
+            <button
+              type="button"
+              disabled={busy}
+              className="md:col-span-2 rounded-coya bg-coya-primary px-4 py-2 text-sm text-white disabled:opacity-50"
+              onClick={() => run(async () => {
+                await comptabiliteService.closeAccountingPeriod({
+                  organizationId,
+                  periodStart: closureStart,
+                  periodEnd: closureEnd,
+                  closureType,
+                  actorId: currentUserId,
+                });
+                await refreshClosures();
+              })}
+            >
+              {isFr ? 'Clôturer la période' : 'Close period'}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="rounded-coya border border-coya-border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-coya-bg">
+            <tr>
+              <th className="text-left p-3">{isFr ? 'Période' : 'Period'}</th>
+              <th className="text-left p-3">{isFr ? 'Type' : 'Type'}</th>
+              <th className="text-left p-3">{isFr ? 'Statut' : 'Status'}</th>
+              <th className="text-left p-3">{isFr ? 'Action' : 'Action'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {closures.map((c) => (
+              <tr key={c.id} className="border-t border-coya-border">
+                <td className="p-3">{c.periodStart} {'->'} {c.periodEnd}</td>
+                <td className="p-3">{c.closureType}</td>
+                <td className="p-3">{c.status === 'closed' ? (isFr ? 'Clôturée' : 'Closed') : (isFr ? 'Réouverte' : 'Reopened')}</td>
+                <td className="p-3">
+                  {c.status === 'closed' && canWrite ? (
+                    <button
+                      type="button"
+                      className="text-xs text-coya-primary hover:underline"
+                      onClick={() => run(async () => {
+                        await comptabiliteService.reopenAccountingPeriod(c.id, currentUserId);
+                        await refreshClosures();
+                      })}
+                    >
+                      {isFr ? 'Réouvrir' : 'Reopen'}
+                    </button>
+                  ) : '—'}
+                </td>
+              </tr>
+            ))}
+            {closures.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-coya-text-muted">{isFr ? 'Aucune clôture.' : 'No closure.'}</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

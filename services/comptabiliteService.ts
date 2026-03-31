@@ -16,7 +16,11 @@ import {
   BudgetLine,
   OrganizationAccountingSettings,
   JournalEntryAttachment,
+  AccountingMatchingGroup,
+  AccountingReconciliation,
+  AccountingPeriodClosure,
 } from '../types';
+import { getGeneralAccountsTemplate } from './accountingTemplates';
 
 const CHART = 'chart_of_accounts';
 const JOURNALS = 'accounting_journals';
@@ -31,6 +35,10 @@ const BUDGET_LINES = 'budget_lines';
 const BUCKET_ACCOUNTING = 'accounting-attachments';
 const ACCOUNTING_PERMISSIONS = 'accounting_permissions';
 const FISCAL_YEARS = 'fiscal_years';
+const MATCHING_GROUPS = 'accounting_matching_groups';
+const MATCHING_LINES = 'accounting_matching_lines';
+const RECONCILIATIONS = 'accounting_reconciliations';
+const PERIOD_CLOSURES = 'accounting_period_closures';
 
 function mapAccount(r: any): ChartOfAccount {
   return {
@@ -99,6 +107,59 @@ function mapLine(r: any): JournalEntryLine {
     updatedAt: r.updated_at,
     accountCode: r.chart_of_accounts?.code,
     accountLabel: r.chart_of_accounts?.label,
+  };
+}
+
+function mapMatchingGroup(r: any): AccountingMatchingGroup {
+  return {
+    id: r.id,
+    organizationId: r.organization_id,
+    code: r.code,
+    accountId: r.account_id,
+    matchedAt: r.matched_at ?? null,
+    note: r.note ?? null,
+    createdById: r.created_by_id ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function mapReconciliation(r: any): AccountingReconciliation {
+  const statementBalance = Number(r.statement_balance ?? 0);
+  const bookBalance = Number(r.book_balance ?? 0);
+  return {
+    id: r.id,
+    organizationId: r.organization_id,
+    journalId: r.journal_id,
+    accountId: r.account_id,
+    statementReference: r.statement_reference,
+    statementDate: r.statement_date,
+    statementBalance,
+    bookBalance,
+    variance: Number(r.variance ?? statementBalance - bookBalance),
+    status: r.status ?? 'draft',
+    notes: r.notes ?? null,
+    createdById: r.created_by_id ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function mapPeriodClosure(r: any): AccountingPeriodClosure {
+  return {
+    id: r.id,
+    organizationId: r.organization_id,
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    closureType: r.closure_type,
+    status: r.status,
+    reason: r.reason ?? null,
+    closedById: r.closed_by_id ?? null,
+    closedAt: r.closed_at ?? null,
+    reopenedById: r.reopened_by_id ?? null,
+    reopenedAt: r.reopened_at ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 
@@ -192,6 +253,163 @@ export async function listFiscalYears(organizationId: string): Promise<FiscalYea
   }
 }
 
+export async function listMatchingGroups(organizationId: string, accountId?: string): Promise<AccountingMatchingGroup[]> {
+  try {
+    let query = supabase.from(MATCHING_GROUPS).select('*').eq('organization_id', organizationId).order('created_at', { ascending: false });
+    if (accountId) query = query.eq('account_id', accountId);
+    const { data, error } = await query;
+    if (error) return [];
+    return (data || []).map(mapMatchingGroup);
+  } catch {
+    return [];
+  }
+}
+
+export async function createMatchingGroup(params: {
+  organizationId: string;
+  accountId: string;
+  lineIds: string[];
+  note?: string | null;
+  createdById?: string | null;
+}): Promise<AccountingMatchingGroup> {
+  const code = `LTR-${Date.now()}`;
+  const { data, error } = await supabase
+    .from(MATCHING_GROUPS)
+    .insert({
+      organization_id: params.organizationId,
+      account_id: params.accountId,
+      code,
+      note: params.note ?? null,
+      matched_at: new Date().toISOString(),
+      created_by_id: params.createdById ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+
+  if (params.lineIds.length > 0) {
+    const rows = params.lineIds.map((lineId) => ({ matching_group_id: data.id, line_id: lineId }));
+    const { error: linesErr } = await supabase.from(MATCHING_LINES).insert(rows);
+    if (linesErr) throw linesErr;
+  }
+
+  return { ...mapMatchingGroup(data), lineIds: params.lineIds };
+}
+
+export async function listReconciliations(organizationId: string): Promise<AccountingReconciliation[]> {
+  try {
+    const { data, error } = await supabase
+      .from(RECONCILIATIONS)
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('statement_date', { ascending: false });
+    if (error) return [];
+    return (data || []).map(mapReconciliation);
+  } catch {
+    return [];
+  }
+}
+
+export async function createReconciliation(params: {
+  organizationId: string;
+  journalId: string;
+  accountId: string;
+  statementReference: string;
+  statementDate: string;
+  statementBalance: number;
+  notes?: string | null;
+  createdById?: string | null;
+}): Promise<AccountingReconciliation> {
+  const { data: balanceRows } = await supabase
+    .from(LINES)
+    .select('debit, credit, entry:journal_entries!inner(entry_date, organization_id)')
+    .eq('account_id', params.accountId);
+  const bookBalance = (balanceRows || [])
+    .filter((row: any) => row.entry?.organization_id === params.organizationId && row.entry?.entry_date <= params.statementDate)
+    .reduce((acc: number, row: any) => acc + Number(row.debit || 0) - Number(row.credit || 0), 0);
+  const variance = Number(params.statementBalance) - bookBalance;
+
+  const { data, error } = await supabase
+    .from(RECONCILIATIONS)
+    .insert({
+      organization_id: params.organizationId,
+      journal_id: params.journalId,
+      account_id: params.accountId,
+      statement_reference: params.statementReference,
+      statement_date: params.statementDate,
+      statement_balance: params.statementBalance,
+      book_balance: bookBalance,
+      variance,
+      status: 'draft',
+      notes: params.notes ?? null,
+      created_by_id: params.createdById ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapReconciliation(data);
+}
+
+export async function setReconciliationStatus(id: string, status: 'draft' | 'validated'): Promise<void> {
+  const { error } = await supabase.from(RECONCILIATIONS).update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function listPeriodClosures(organizationId: string): Promise<AccountingPeriodClosure[]> {
+  try {
+    const { data, error } = await supabase
+      .from(PERIOD_CLOSURES)
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('period_start', { ascending: false });
+    if (error) return [];
+    return (data || []).map(mapPeriodClosure);
+  } catch {
+    return [];
+  }
+}
+
+export async function closeAccountingPeriod(params: {
+  organizationId: string;
+  periodStart: string;
+  periodEnd: string;
+  closureType: 'month' | 'quarter' | 'semester' | 'year';
+  reason?: string | null;
+  actorId?: string | null;
+}): Promise<AccountingPeriodClosure> {
+  const { data, error } = await supabase
+    .from(PERIOD_CLOSURES)
+    .upsert({
+      organization_id: params.organizationId,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      closure_type: params.closureType,
+      status: 'closed',
+      reason: params.reason ?? null,
+      closed_by_id: params.actorId ?? null,
+      closed_at: new Date().toISOString(),
+      reopened_by_id: null,
+      reopened_at: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'organization_id,period_start,period_end' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapPeriodClosure(data);
+}
+
+export async function reopenAccountingPeriod(id: string, actorId?: string | null): Promise<void> {
+  const { error } = await supabase.from(PERIOD_CLOSURES).update({
+    status: 'reopened',
+    reopened_by_id: actorId ?? null,
+    reopened_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', id);
+  if (error) throw error;
+}
+
 // ---------- Plan comptable ----------
 export async function listChartOfAccounts(
   organizationId: string,
@@ -249,6 +467,34 @@ export async function createChartOfAccount(params: {
     .single();
   if (error) throw error;
   return mapAccount(data);
+}
+
+export async function seedGeneralChartOfAccounts(params: {
+  organizationId: string;
+  framework: AccountingFramework;
+}): Promise<{ inserted: number; skipped: number }> {
+  const templates = getGeneralAccountsTemplate(params.framework);
+  const existing = await listChartOfAccounts(params.organizationId, { framework: params.framework });
+  const existingCodes = new Set(existing.map((a) => a.code));
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const item of templates) {
+    if (existingCodes.has(item.code)) {
+      skipped += 1;
+      continue;
+    }
+    await createChartOfAccount({
+      organizationId: params.organizationId,
+      code: item.code,
+      label: item.label,
+      accountType: item.accountType,
+      framework: item.framework,
+      isCashFlowRegister: item.isCashFlowRegister ?? false,
+    });
+    inserted += 1;
+  }
+  return { inserted, skipped };
 }
 
 export async function updateChartOfAccount(

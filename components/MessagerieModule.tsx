@@ -3,9 +3,11 @@ import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { Language, User } from '../types';
 import OrganizationService from '../services/organizationService';
-import DataAdapter from '../services/dataAdapter';
 import { FileService } from '../services/fileService';
 import * as messagingService from '../services/messagingService';
+import { NotificationService } from '../services/notificationService';
+import { DataService } from '../services/dataService';
+import { supabase } from '../services/supabaseService';
 
 type Tab = 'channels' | 'direct';
 const TAB_PREF_KEY = 'coya_messaging_default_tab';
@@ -27,12 +29,11 @@ const MessagerieModule: React.FC = () => {
   });
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [profiles, setProfiles] = useState<Array<{ id: string; email?: string; fullName?: string; role?: string }>>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [currentProfileId, setCurrentProfileId] = useState<string>('');
 
-  const currentProfileId = useMemo(
-    () => String((currentUser as any)?.profileId || currentUser?.id || ''),
-    [currentUser],
-  );
   const isAdminMessaging = useMemo(
     () => ['super_administrator', 'administrator'].includes(String(currentUser?.role || '')),
     [currentUser?.role],
@@ -44,6 +45,7 @@ const MessagerieModule: React.FC = () => {
   const [channelMessages, setChannelMessages] = useState<messagingService.ChatMessage[]>([]);
   const [channelText, setChannelText] = useState('');
   const [channelVoiceFile, setChannelVoiceFile] = useState<File | null>(null);
+  const [channelFile, setChannelFile] = useState<File | null>(null);
 
   const [createName, setCreateName] = useState('');
   const [createDesc, setCreateDesc] = useState('');
@@ -57,6 +59,7 @@ const MessagerieModule: React.FC = () => {
   const [directMessages, setDirectMessages] = useState<messagingService.ChatMessage[]>([]);
   const [directText, setDirectText] = useState('');
   const [directVoiceFile, setDirectVoiceFile] = useState<File | null>(null);
+  const [directFile, setDirectFile] = useState<File | null>(null);
   const [directSearch, setDirectSearch] = useState('');
 
   const userByProfileId = useMemo(() => {
@@ -91,6 +94,68 @@ const MessagerieModule: React.FC = () => {
       .slice(0, 12);
   }, [users, currentProfileId, directSearch]);
 
+  const getDisplayName = useCallback((profileId: string) => {
+    const u = userByProfileId.get(profileId);
+    if (u) return u.fullName || u.name || u.email || profileId;
+    const p = profiles.find((x) => x.id === profileId);
+    return p?.fullName || p?.email || profileId;
+  }, [profiles, userByProfileId]);
+
+  const dedupeIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
+  const renderContentWithMentions = useCallback((content: string) => {
+    const parts = content.split(/(\s+)/);
+    return (
+      <>
+        {parts.map((part, idx) => {
+          if (/^@[a-zA-Z0-9._-]+$/.test(part.trim())) {
+            return (
+              <span key={`${part}-${idx}`} className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 mr-1">
+                {part}
+              </span>
+            );
+          }
+          return <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>;
+        })}
+      </>
+    );
+  }, []);
+  const appendMessageUnique = useCallback((setter: React.Dispatch<React.SetStateAction<messagingService.ChatMessage[]>>, next: messagingService.ChatMessage) => {
+    setter((prev) => (prev.some((m) => m.id === next.id) ? prev : [...prev, next]));
+  }, []);
+
+  const extractMentionedProfileIds = useCallback((content: string) => {
+    const mentionTokens = Array.from(content.matchAll(/@([a-zA-Z0-9._-]+)/g)).map((m) => m[1].toLowerCase());
+    if (mentionTokens.length === 0) return [];
+    const mentioned = profiles
+      .filter((p) => {
+        const full = String(p.fullName || '').toLowerCase().replace(/\s+/g, '');
+        const emailPrefix = String(p.email || '').toLowerCase().split('@')[0];
+        return mentionTokens.some((t) => t === full || t === emailPrefix);
+      })
+      .map((p) => p.id);
+    return dedupeIds(mentioned);
+  }, [profiles]);
+
+  const notifyRecipients = useCallback(async (
+    recipientIds: string[],
+    action: 'created' | 'updated' | 'assigned' | 'requested_changes',
+    title: string,
+    message: string,
+    metadata?: Record<string, unknown>,
+  ) => {
+    const recipients = dedupeIds(recipientIds).filter((id) => id !== currentProfileId);
+    if (recipients.length === 0) return;
+    await NotificationService.notifyUsers(
+      recipients,
+      'info',
+      'system',
+      action,
+      title,
+      message,
+      { entityType: 'messaging', metadata },
+    );
+  }, [currentProfileId]);
+
   const loadChannels = useCallback(async () => {
     if (!organizationId || !currentProfileId) return;
     const list = await messagingService.listChannels({ organizationId, profileId: currentProfileId });
@@ -113,17 +178,53 @@ const MessagerieModule: React.FC = () => {
     const init = async () => {
       if (!currentUser) return;
       setLoading(true);
+      setError(null);
       try {
         const org = await OrganizationService.getCurrentUserOrganizationId();
-        setOrganizationId(org || (currentUser as any).organizationId || null);
-        const list = await DataAdapter.getUsers();
-        setUsers(list || []);
+        const { data: profile } = await DataService.getProfile(String((currentUser as any).id || currentUser.id));
+        const resolvedProfileId = String((currentUser as any)?.profileId || profile?.id || '');
+        setCurrentProfileId(resolvedProfileId);
+        setOrganizationId(org || profile?.organization_id || (currentUser as any).organizationId || null);
+
+        const { data: allProfiles } = await DataService.getProfiles();
+        const currentOrg = org || profile?.organization_id || (currentUser as any).organizationId || null;
+        const inOrg = (allProfiles || []).filter((p: any) => !currentOrg || p.organization_id === currentOrg);
+        setProfiles(inOrg.map((p: any) => ({
+          id: String(p.id),
+          fullName: p.full_name || '',
+          email: p.email || '',
+          role: p.role || '',
+        })));
+        const mappedUsers: User[] = inOrg.map((p: any) => ({
+          id: p.user_id || p.id,
+          profileId: p.id,
+          email: p.email || '',
+          name: p.full_name || p.email || '',
+          fullName: p.full_name || p.email || '',
+          role: (p.role || 'user') as any,
+          avatar: p.avatar_url || '',
+          phone: p.phone_number || '',
+          phoneNumber: p.phone_number || '',
+          skills: [],
+          bio: '',
+          location: '',
+          website: '',
+          linkedinUrl: '',
+          githubUrl: '',
+          isActive: p.is_active ?? true,
+          lastLogin: p.last_login || new Date().toISOString(),
+          createdAt: p.created_at || new Date().toISOString(),
+          updatedAt: p.updated_at || new Date().toISOString(),
+        }));
+        setUsers(mappedUsers);
+      } catch (e: any) {
+        setError(e?.message || (isFr ? 'Erreur de chargement messagerie.' : 'Messaging loading error.'));
       } finally {
         setLoading(false);
       }
     };
     init();
-  }, [currentUser]);
+  }, [currentUser, isFr]);
 
   useEffect(() => {
     loadChannels();
@@ -167,9 +268,57 @@ const MessagerieModule: React.FC = () => {
     run();
   }, [activeThreadId]);
 
+  useEffect(() => {
+    if (!organizationId || !currentProfileId) return;
+    const channel = supabase.channel(`messagerie-${organizationId}-${currentProfileId}`);
+    channel
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `organization_id=eq.${organizationId}`,
+      }, async (payload: any) => {
+        const row = payload?.new;
+        if (!row) return;
+        if (row.channel_id && String(row.channel_id) === activeChannelId) {
+          const msgs = await messagingService.listChannelMessages(activeChannelId);
+          setChannelMessages(msgs);
+        }
+        if (row.direct_thread_id && String(row.direct_thread_id) === activeThreadId) {
+          const msgs = await messagingService.listDirectMessages(activeThreadId);
+          setDirectMessages(msgs);
+        }
+        if (row.channel_id || row.direct_thread_id) {
+          await Promise.all([loadChannels(), loadThreads()]);
+        }
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chat_channels',
+        filter: `organization_id=eq.${organizationId}`,
+      }, async () => {
+        await loadChannels();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chat_direct_threads',
+        filter: `organization_id=eq.${organizationId}`,
+      }, async () => {
+        await loadThreads();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [organizationId, currentProfileId, activeChannelId, activeThreadId, loadChannels, loadThreads]);
+
   const handleCreateChannel = async () => {
     if (!organizationId || !currentProfileId || !createName.trim()) return;
     setSavingChannel(true);
+    setError(null);
     try {
       const allMembers = users
         .map((u) => String((u as any).profileId || u.id || ''))
@@ -190,6 +339,20 @@ const MessagerieModule: React.FC = () => {
       setCreateMemberIds([]);
       await loadChannels();
       setActiveChannelId(created.id);
+      await notifyRecipients(
+        memberIds,
+        'created',
+        isFr ? 'Nouveau canal créé' : 'New channel created',
+        isFr ? `Vous avez été ajouté au canal "${created.name}".` : `You were added to channel "${created.name}".`,
+        { channelId: created.id, channelName: created.name },
+      );
+    } catch (e: any) {
+      const message = String(e?.message || '');
+      if (message.toLowerCase().includes('duplicate') || String(e?.code || '') === '23505') {
+        setError(isFr ? 'Un canal avec ce nom existe déjà.' : 'A channel with this name already exists.');
+      } else {
+        setError(e?.message || (isFr ? 'Impossible de créer le canal.' : 'Unable to create channel.'));
+      }
     } finally {
       setSavingChannel(false);
     }
@@ -214,6 +377,7 @@ const MessagerieModule: React.FC = () => {
     if (!organizationId || !activeChannelId || !currentProfileId || !channelText.trim()) return;
     const content = channelText.trim();
     const messageType: messagingService.ChatMessageType = linkRegex.test(content) ? 'link' : 'text';
+    setError(null);
     const created = await messagingService.sendChannelMessage({
       organizationId,
       channelId: activeChannelId,
@@ -221,8 +385,16 @@ const MessagerieModule: React.FC = () => {
       content,
       messageType,
     });
-    setChannelMessages((prev) => [...prev, created]);
+    appendMessageUnique(setChannelMessages, created);
     setChannelText('');
+    const mentionIds = extractMentionedProfileIds(content);
+    await notifyRecipients(
+      dedupeIds([...activeChannelMembers, ...mentionIds]),
+      mentionIds.length > 0 ? 'requested_changes' : 'updated',
+      mentionIds.length > 0 ? (isFr ? 'Vous avez été mentionné' : 'You were mentioned') : (isFr ? 'Nouveau message canal' : 'New channel message'),
+      isFr ? `Nouveau message dans "${activeChannel?.name || 'canal'}".` : `New message in "${activeChannel?.name || 'channel'}".`,
+      { channelId: activeChannelId, messageId: created.id },
+    );
   };
 
   const sendChannelVoice = async () => {
@@ -237,12 +409,43 @@ const MessagerieModule: React.FC = () => {
       messageType: 'voice',
       attachmentUrl: data?.url || null,
     });
-    setChannelMessages((prev) => [...prev, created]);
+    appendMessageUnique(setChannelMessages, created);
     setChannelVoiceFile(null);
+    await notifyRecipients(
+      activeChannelMembers,
+      'updated',
+      isFr ? 'Nouveau vocal canal' : 'New channel voice message',
+      isFr ? `Un message vocal a été envoyé dans "${activeChannel?.name || 'canal'}".` : `A voice message was sent in "${activeChannel?.name || 'channel'}".`,
+      { channelId: activeChannelId, messageId: created.id },
+    );
+  };
+
+  const sendChannelFile = async () => {
+    if (!organizationId || !activeChannelId || !currentProfileId || !channelFile) return;
+    const path = `messaging/channels/${activeChannelId}/${Date.now()}-${channelFile.name}`;
+    const { data } = await FileService.uploadFile('documents', channelFile, path);
+    const created = await messagingService.sendChannelMessage({
+      organizationId,
+      channelId: activeChannelId,
+      senderId: currentProfileId,
+      content: `${isFr ? 'Fichier' : 'File'}: ${channelFile.name}`,
+      messageType: 'link',
+      attachmentUrl: data?.url || null,
+    });
+    appendMessageUnique(setChannelMessages, created);
+    setChannelFile(null);
+    await notifyRecipients(
+      activeChannelMembers,
+      'updated',
+      isFr ? 'Nouveau fichier canal' : 'New channel file',
+      isFr ? `Un fichier a été partagé dans "${activeChannel?.name || 'canal'}".` : `A file was shared in "${activeChannel?.name || 'channel'}".`,
+      { channelId: activeChannelId, messageId: created.id },
+    );
   };
 
   const openDirectThread = async (otherProfileId: string) => {
     if (!organizationId || !currentProfileId) return;
+    setError(null);
     const thread = await messagingService.createOrGetDirectThread({
       organizationId,
       createdById: currentProfileId,
@@ -250,6 +453,7 @@ const MessagerieModule: React.FC = () => {
     });
     await loadThreads();
     setActiveThreadId(thread.id);
+    setTab('direct');
   };
 
   const sendDirectText = async () => {
@@ -263,8 +467,16 @@ const MessagerieModule: React.FC = () => {
       content,
       messageType,
     });
-    setDirectMessages((prev) => [...prev, created]);
+    appendMessageUnique(setDirectMessages, created);
     setDirectText('');
+    const recipients = activeThread?.memberIds || [];
+    await notifyRecipients(
+      recipients,
+      'updated',
+      isFr ? 'Nouveau message direct' : 'New direct message',
+      isFr ? `Vous avez un nouveau message de ${getDisplayName(currentProfileId)}.` : `You have a new message from ${getDisplayName(currentProfileId)}.`,
+      { threadId: activeThreadId, messageId: created.id },
+    );
   };
 
   const sendDirectVoice = async () => {
@@ -279,8 +491,40 @@ const MessagerieModule: React.FC = () => {
       messageType: 'voice',
       attachmentUrl: data?.url || null,
     });
-    setDirectMessages((prev) => [...prev, created]);
+    appendMessageUnique(setDirectMessages, created);
     setDirectVoiceFile(null);
+    const recipients = activeThread?.memberIds || [];
+    await notifyRecipients(
+      recipients,
+      'updated',
+      isFr ? 'Nouveau vocal direct' : 'New direct voice message',
+      isFr ? `Vous avez un nouveau message vocal de ${getDisplayName(currentProfileId)}.` : `You have a new voice message from ${getDisplayName(currentProfileId)}.`,
+      { threadId: activeThreadId, messageId: created.id },
+    );
+  };
+
+  const sendDirectFile = async () => {
+    if (!organizationId || !activeThreadId || !currentProfileId || !directFile) return;
+    const path = `messaging/direct/${activeThreadId}/${Date.now()}-${directFile.name}`;
+    const { data } = await FileService.uploadFile('documents', directFile, path);
+    const created = await messagingService.sendDirectMessage({
+      organizationId,
+      directThreadId: activeThreadId,
+      senderId: currentProfileId,
+      content: `${isFr ? 'Fichier' : 'File'}: ${directFile.name}`,
+      messageType: 'link',
+      attachmentUrl: data?.url || null,
+    });
+    appendMessageUnique(setDirectMessages, created);
+    setDirectFile(null);
+    const recipients = activeThread?.memberIds || [];
+    await notifyRecipients(
+      recipients,
+      'updated',
+      isFr ? 'Nouveau fichier direct' : 'New direct file',
+      isFr ? `Vous avez reçu un fichier de ${getDisplayName(currentProfileId)}.` : `You received a file from ${getDisplayName(currentProfileId)}.`,
+      { threadId: activeThreadId, messageId: created.id },
+    );
   };
 
   const threadLabel = (thread: messagingService.ChatDirectThread) => {
@@ -302,6 +546,11 @@ const MessagerieModule: React.FC = () => {
             : 'Dynamic channels, direct threads, text/link/voice messaging.'}
         </p>
       </header>
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex gap-1">
         {[
@@ -418,7 +667,7 @@ const MessagerieModule: React.FC = () => {
                   disabled={savingChannel || !createName.trim()}
                   className="w-full rounded-xl bg-slate-900 text-white px-3 py-2 text-sm disabled:opacity-50"
                 >
-                  {savingChannel ? (isFr ? 'Création…' : 'Creating…') : (isFr ? 'Créer canal' : 'Create channel')}
+                  {savingChannel ? (isFr ? 'Création…' : 'Creating…') : (isFr ? 'Créer le canal' : 'Create channel')}
                 </button>
               </div>
             )}
@@ -456,7 +705,7 @@ const MessagerieModule: React.FC = () => {
                     {m.messageType === 'voice' && m.attachmentUrl ? (
                       <audio controls src={m.attachmentUrl} className="w-full" />
                     ) : (
-                      <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                      <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(m.content)}</p>
                     )}
                     {m.messageType !== 'voice' && m.attachmentUrl && (
                       <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className={`text-xs underline ${isMe ? 'text-white/90' : 'text-slate-700'}`}>
@@ -480,13 +729,26 @@ const MessagerieModule: React.FC = () => {
                   className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   disabled={!activeChannelId}
                 />
-                <button type="button" onClick={sendChannelText} disabled={!activeChannelId || !channelText.trim()} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm disabled:opacity-50">
-                  {isFr ? 'Envoyer' : 'Send'}
+                <button type="button" onClick={sendChannelText} disabled={!activeChannelId || !channelText.trim()} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 hover:bg-emerald-700">
+                  <i className="fas fa-paper-plane mr-2" />
+                  {isFr ? 'Messager' : 'Message'}
                 </button>
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <input type="file" accept="audio/*" onChange={(e) => setChannelVoiceFile(e.target.files?.[0] || null)} />
-                <button type="button" onClick={sendChannelVoice} disabled={!activeChannelId || !channelVoiceFile} className="rounded-lg border border-slate-200 px-3 py-1.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
+                  <i className="fas fa-paperclip mr-1.5" />
+                  {isFr ? 'Ajouter fichier' : 'Add file'}
+                  <input type="file" className="hidden" onChange={(e) => setChannelFile(e.target.files?.[0] || null)} />
+                </label>
+                <button type="button" onClick={sendChannelFile} disabled={!activeChannelId || !channelFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
+                  {isFr ? 'Envoyer fichier' : 'Send file'}
+                </button>
+                <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
+                  <i className="fas fa-microphone mr-1.5" />
+                  {isFr ? 'Ajouter vocal' : 'Add voice'}
+                  <input type="file" accept="audio/*" className="hidden" onChange={(e) => setChannelVoiceFile(e.target.files?.[0] || null)} />
+                </label>
+                <button type="button" onClick={sendChannelVoice} disabled={!activeChannelId || !channelVoiceFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
                   {isFr ? 'Envoyer vocal' : 'Send voice'}
                 </button>
               </div>
@@ -559,7 +821,7 @@ const MessagerieModule: React.FC = () => {
                     {m.messageType === 'voice' && m.attachmentUrl ? (
                       <audio controls src={m.attachmentUrl} className="w-full" />
                     ) : (
-                      <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                      <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(m.content)}</p>
                     )}
                   </div>
                 );
@@ -578,13 +840,26 @@ const MessagerieModule: React.FC = () => {
                   className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   disabled={!activeThreadId}
                 />
-                <button type="button" onClick={sendDirectText} disabled={!activeThreadId || !directText.trim()} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm disabled:opacity-50">
-                  {isFr ? 'Envoyer' : 'Send'}
+                <button type="button" onClick={sendDirectText} disabled={!activeThreadId || !directText.trim()} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 hover:bg-emerald-700">
+                  <i className="fas fa-paper-plane mr-2" />
+                  {isFr ? 'Messager' : 'Message'}
                 </button>
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <input type="file" accept="audio/*" onChange={(e) => setDirectVoiceFile(e.target.files?.[0] || null)} />
-                <button type="button" onClick={sendDirectVoice} disabled={!activeThreadId || !directVoiceFile} className="rounded-lg border border-slate-200 px-3 py-1.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
+                  <i className="fas fa-paperclip mr-1.5" />
+                  {isFr ? 'Ajouter fichier' : 'Add file'}
+                  <input type="file" className="hidden" onChange={(e) => setDirectFile(e.target.files?.[0] || null)} />
+                </label>
+                <button type="button" onClick={sendDirectFile} disabled={!activeThreadId || !directFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
+                  {isFr ? 'Envoyer fichier' : 'Send file'}
+                </button>
+                <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
+                  <i className="fas fa-microphone mr-1.5" />
+                  {isFr ? 'Ajouter vocal' : 'Add voice'}
+                  <input type="file" accept="audio/*" className="hidden" onChange={(e) => setDirectVoiceFile(e.target.files?.[0] || null)} />
+                </label>
+                <button type="button" onClick={sendDirectVoice} disabled={!activeThreadId || !directVoiceFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
                   {isFr ? 'Envoyer vocal' : 'Send voice'}
                 </button>
               </div>

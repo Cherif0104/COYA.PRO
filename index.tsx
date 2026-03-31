@@ -38,17 +38,23 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const root = ReactDOM.createRoot(rootElement);
+declare global {
+  interface Window {
+    __COYA_APP_ROOT__?: ReactDOM.Root;
+  }
+}
+
+const root = window.__COYA_APP_ROOT__ || ReactDOM.createRoot(rootElement);
+window.__COYA_APP_ROOT__ = root;
+
 root.render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <AuthProvider>
-        <LocalizationProvider>
-          <ThemeProvider>
-            <App />
-          </ThemeProvider>
-        </LocalizationProvider>
-      </AuthProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
+  <ErrorBoundary>
+    <AuthProvider>
+      <LocalizationProvider>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </LocalizationProvider>
+    </AuthProvider>
+  </ErrorBoundary>
 );

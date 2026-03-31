@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import { ModuleName } from '../types';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 export interface ModuleLabelRow {
   id: string;
@@ -19,12 +20,16 @@ export interface ModuleLabelDisplay {
 
 /** Récupère les libellés des modules : globaux + organisation (org écrase global). */
 export async function getModuleLabels(organizationId: string | null): Promise<ModuleLabelDisplay[]> {
+  if (isTableUnavailable('module_labels')) return [];
   try {
     const { data: globalRows, error: globalErr } = await supabase
       .from('module_labels')
       .select('module_key, display_name_fr, display_name_en')
       .is('organization_id', null);
-    if (globalErr) return [];
+    if (globalErr) {
+      if (handleOptionalTableError(globalErr, 'module_labels', 'moduleLabelsService.getModuleLabels.global')) return [];
+      return [];
+    }
     const byKey = new Map<string, ModuleLabelDisplay>();
     (globalRows || []).forEach((r: any) => byKey.set(r.module_key, { moduleKey: r.module_key, displayNameFr: r.display_name_fr, displayNameEn: r.display_name_en }));
     if (organizationId) {
@@ -32,10 +37,15 @@ export async function getModuleLabels(organizationId: string | null): Promise<Mo
         .from('module_labels')
         .select('module_key, display_name_fr, display_name_en')
         .eq('organization_id', organizationId);
-      if (!orgErr && orgRows) orgRows.forEach((r: any) => byKey.set(r.module_key, { moduleKey: r.module_key, displayNameFr: r.display_name_fr, displayNameEn: r.display_name_en }));
+      if (orgErr) {
+        handleOptionalTableError(orgErr, 'module_labels', 'moduleLabelsService.getModuleLabels.org');
+      } else if (orgRows) {
+        orgRows.forEach((r: any) => byKey.set(r.module_key, { moduleKey: r.module_key, displayNameFr: r.display_name_fr, displayNameEn: r.display_name_en }));
+      }
     }
     return Array.from(byKey.values());
-  } catch {
+  } catch (e) {
+    handleOptionalTableError(e, 'module_labels', 'moduleLabelsService.getModuleLabels.catch');
     return [];
   }
 }

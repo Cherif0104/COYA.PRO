@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { User, Job } from '../types';
-import { runAIAgent } from '../services/geminiService';
 import { useModulePermissions } from '../hooks/useModulePermissions';
 import AccessDenied from './common/AccessDenied';
 
@@ -32,7 +31,6 @@ const TalentAnalytics: React.FC<TalentAnalyticsProps> = ({ setView, users, jobs 
     const { t } = useLocalization();
     const { user: currentUser } = useAuth();
     const { canAccessModule, hasPermission } = useModulePermissions();
-    const [isPredicting, setIsPredicting] = useState(false);
     const [forecast, setForecast] = useState<string>('');
 
     // Extraction des compétences depuis les utilisateurs et les jobs
@@ -89,40 +87,28 @@ const TalentAnalytics: React.FC<TalentAnalyticsProps> = ({ setView, users, jobs 
 
     const handlePredictTalents = async () => {
         if (!canWriteModule) return;
-        setIsPredicting(true);
-        try {
-            // Construire un contexte concis depuis les données réelles
-            const topAvailable = skillsData.available.slice(0, 10).join(', ');
-            const topDemanded = skillsData.demanded.slice(0, 10).join(', ');
-            const gaps = skillsGap.slice(0, 10).join(', ');
-            const jobsSummary = jobs
-                .filter(j => j.status === 'published')
-                .slice(0, 10)
-                .map(j => `- ${j.title}${j.sector ? ' ('+j.sector+')' : ''}${(j.requiredSkills && j.requiredSkills.length) ? ': '+j.requiredSkills.slice(0,5).join(', ') : ''}`)
-                .join('\n');
+        const priorities = skillsGap.slice(0, 8).map((s, idx) => `${idx + 1}. ${s}`).join('\n') || '1. Renforcer les compétences cœur métier';
+        const formations = skillsGap.slice(0, 3).map((s) => `- Parcours de montée en compétence: ${s}`).join('\n') || '- Parcours transversal support + delivery';
+        const roles = jobs
+          .filter((j) => j.status === 'published')
+          .slice(0, 3)
+          .map((j) => `- ${j.title} (${(j.requiredSkills || []).slice(0, 4).join(', ') || 'skills à détailler'})`)
+          .join('\n') || '- Analyste opérationnel (coordination, qualité, reporting)';
+        setForecast(
+`## Priorités 3-6 mois
+${priorities}
 
-            const prompt = `Contexte:
-Disponibles (Top): ${topAvailable || '—'}
-Demandées (Top): ${topDemanded || '—'}
-Écarts (Gaps): ${gaps || '—'}
-Offres publiées (échantillon):\n${jobsSummary || '—'}
+## Formations recommandées
+${formations}
 
-Objectif: Proposer une prévision (3-6 mois) des besoins en talents pour l'organisation.
-Exigences:
-- Dresser 5 à 8 compétences prioritaires à acquérir/recruter (avec justification courte)
-- Donner 3 pistes de formation (cours ou parcours) alignées
-- Proposer 2-3 rôles émergents à ouvrir avec compétences associées
-- Fournir un plan d'action en étapes courtes (1-2-3)
-Format: Markdown clair avec sections et listes. Ton professionnel, concis.`;
+## Rôles à ouvrir/renforcer
+${roles}
 
-            const result = await runAIAgent(prompt, 'talent_analytics');
-            setForecast(result || 'Prévision indisponible.');
-        } catch (e) {
-            console.error('Talent forecasting error:', e);
-            setForecast("⚠️ L'IA n'a pas pu générer la prévision. Réessayez plus tard.");
-        } finally {
-            setIsPredicting(false);
-        }
+## Plan d'action
+1. Cartographier les écarts et assigner les référents.
+2. Lancer un sprint de formation ciblé (4 à 8 semaines).
+3. Mesurer impact recrutement/performance et ajuster.`
+        );
     };
 
     // Données pour le graphique de compétences
@@ -210,9 +196,9 @@ Format: Markdown clair avec sections et listes. Ton professionnel, concis.`;
                 <p className="text-sm text-slate-600 mb-4">Analyse IA basée sur vos compétences et les offres publiées.</p>
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <span className="text-sm text-slate-700"><i className="fas fa-magic text-emerald-600 mr-2" />Prévoir les besoins (3-6 mois)</span>
-                    <button type="button" onClick={handlePredictTalents} disabled={isPredicting || !canWriteModule}
+                    <button type="button" onClick={handlePredictTalents} disabled={!canWriteModule}
                         className="px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-50">
-                        {isPredicting ? 'Analyse…' : t('forecast_needs')}
+                        {t('forecast_needs')}
                     </button>
                 </div>
                 {forecast && (
