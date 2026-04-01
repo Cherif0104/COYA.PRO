@@ -59,6 +59,7 @@ const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; vi
   { icon: 'fas fa-chart-line', labelKey: 'programme', labelFallback: 'Programme & Budget', view: 'programme' },
   { icon: 'fas fa-book-open', labelKey: 'courses', labelFallback: 'Cours', view: 'courses' },
   { icon: 'fas fa-users', labelKey: 'crm_sales', labelFallback: 'CRM & Ventes', view: 'crm_sales' },
+  { icon: 'fas fa-handshake', labelKey: 'partenariat', labelFallback: 'Partenariat', view: 'partenariat' },
   { icon: 'fas fa-gavel', labelKey: 'juridique', labelFallback: 'Juridique', view: 'juridique' },
   { icon: 'fas fa-video', labelKey: 'studio', labelFallback: 'Studio', view: 'studio' },
   { icon: 'fas fa-clipboard-list', labelKey: 'collecte', labelFallback: 'Collecte de données', view: 'collecte' },

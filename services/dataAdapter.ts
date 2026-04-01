@@ -2415,7 +2415,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     };
   }
 
-  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string }): Promise<PlanningSlot[]> {
+  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string; userIds?: string[] }): Promise<PlanningSlot[]> {
     const { data, error } = await DataService.getPlanningSlots(params);
     if (error) return [];
     return (data || []).map((row: any) => this.mapPlanningSlotRow(row));

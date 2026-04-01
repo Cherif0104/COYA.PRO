@@ -435,8 +435,69 @@ export interface Programme {
   bailleurName?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  /** Si false, pas de création / mise en avant de projets pour ce programme */
+  allowProjects?: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type ProgrammeStakeholderType =
+  | 'facilitator'
+  | 'implementation_partner'
+  | 'donor_contact'
+  | 'technical'
+  | 'other';
+
+export interface ProgrammeStakeholder {
+  id: string;
+  programmeId: string;
+  stakeholderType: ProgrammeStakeholderType;
+  profileId?: string | null;
+  externalName?: string | null;
+  externalRole?: string | null;
+  externalContact?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type ProgrammeActionStatus =
+  | 'draft'
+  | 'pending_validation'
+  | 'validated'
+  | 'done'
+  | 'cancelled';
+
+export interface ProgrammeAction {
+  id: string;
+  programmeId: string;
+  title: string;
+  actionType: string;
+  status: ProgrammeActionStatus;
+  executorProfileId?: string | null;
+  validatedByProfileId?: string | null;
+  validatedAt?: string | null;
+  dueDate?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ProgrammeDataRow {
+  id: string;
+  programmeId: string;
+  section: string;
+  rowData: Record<string, string>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ProgrammeBailleurLink {
+  id: string;
+  programmeId: string;
+  bailleurId: string;
+  bailleurName?: string | null;
+  createdAt?: string;
 }
 
 /** Ligne budgétaire au niveau programme (poste de dépense) */

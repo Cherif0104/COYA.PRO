@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import StructuredModulePage from './common/StructuredModulePage';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
@@ -97,6 +97,7 @@ const ComptabiliteModule: React.FC = () => {
   const [editAccount, setEditAccount] = useState<ChartOfAccount | null>(null);
   const [showJournalForm, setShowJournalForm] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
+  const entryFormAnchorRef = useRef<HTMLDivElement>(null);
   const [showCostCenterForm, setShowCostCenterForm] = useState(false);
   const [showFiscalForm, setShowFiscalForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
@@ -432,6 +433,16 @@ const ComptabiliteModule: React.FC = () => {
       ? { asset: 'Actif', liability: 'Passif', equity: 'Capitaux propres', income: 'Produit', expense: 'Charge' }[t]
       : { asset: 'Asset', liability: 'Liability', equity: 'Equity', income: 'Income', expense: 'Expense' }[t];
 
+  const entryPrerequisitesMet = journals.length > 0 && accounts.length > 0;
+
+  useEffect(() => {
+    if (!showEntryForm || !entryPrerequisitesMet) return;
+    const id = requestAnimationFrame(() => {
+      entryFormAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showEntryForm, entryPrerequisitesMet]);
+
   const tabLabel = (tab: TabKey) => {
     if (tab === 'parametres') return isFr ? 'Paramètres' : 'Settings';
     if (tab === 'plan') return isFr ? 'Plan comptable' : 'Chart of accounts';
@@ -717,7 +728,47 @@ const ComptabiliteModule: React.FC = () => {
               </button>
             )}
           </div>
-          {showEntryForm && journals.length > 0 && accounts.length > 0 && (
+          {showEntryForm && !entryPrerequisitesMet && (
+            <div
+              className="rounded-coya border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+              role="alert"
+            >
+              <p className="font-semibold mb-2">{isFr ? 'Prérequis manquants' : 'Missing prerequisites'}</p>
+              <p className="mb-3 text-amber-800">
+                {isFr
+                  ? 'Pour saisir une écriture, il faut au moins un compte dans le plan comptable et au moins un journal.'
+                  : 'To post an entry, you need at least one chart account and one journal.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-coya bg-white border border-amber-400 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                  onClick={() => setActiveTab('plan')}
+                >
+                  {isFr ? 'Ouvrir le plan comptable' : 'Open chart of accounts'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-coya bg-white border border-amber-400 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                  onClick={() => {
+                    setDisplayMode('avance');
+                    setActiveTab('journaux');
+                  }}
+                >
+                  {isFr ? 'Créer un journal (vue avancée)' : 'Create a journal (advanced view)'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-coya px-3 py-1.5 text-sm text-amber-800 underline"
+                  onClick={() => setShowEntryForm(false)}
+                >
+                  {isFr ? 'Fermer' : 'Dismiss'}
+                </button>
+              </div>
+            </div>
+          )}
+          {showEntryForm && entryPrerequisitesMet && (
+            <div ref={entryFormAnchorRef}>
             <EntryForm
               isFr={isFr}
               organizationId={organizationId}
@@ -750,6 +801,7 @@ const ComptabiliteModule: React.FC = () => {
               onCancel={() => setShowEntryForm(false)}
               submitting={submitting}
             />
+            </div>
           )}
           <div className="rounded-coya border border-coya-border overflow-hidden">
             <table className="w-full text-sm">

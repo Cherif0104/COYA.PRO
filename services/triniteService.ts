@@ -2,6 +2,7 @@ import { supabase } from './supabaseService';
 import { PresenceSession, TriniteScore } from '../types';
 
 const TRINITE_TABLE = 'trinite_scores';
+const TRINITE_SELF_NOTES = 'trinite_self_notes';
 
 function bounded(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, value));
@@ -113,4 +114,47 @@ export function buildTriniteScore(params: {
       qualityIncidents: params.qualityIncidents,
     },
   };
+}
+
+export async function getTriniteSelfNote(
+  organizationId: string,
+  profileId: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from(TRINITE_SELF_NOTES)
+      .select('note')
+      .eq('organization_id', organizationId)
+      .eq('profile_id', profileId)
+      .eq('period_start', periodStart)
+      .eq('period_end', periodEnd)
+      .maybeSingle();
+    if (error) return null;
+    return (data as { note?: string } | null)?.note ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertTriniteSelfNote(params: {
+  organizationId: string;
+  profileId: string;
+  periodStart: string;
+  periodEnd: string;
+  note: string | null;
+}): Promise<void> {
+  const { error } = await supabase.from(TRINITE_SELF_NOTES).upsert(
+    {
+      organization_id: params.organizationId,
+      profile_id: params.profileId,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      note: params.note,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organization_id,profile_id,period_start,period_end' },
+  );
+  if (error) throw error;
 }

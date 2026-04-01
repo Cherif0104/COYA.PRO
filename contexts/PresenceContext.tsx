@@ -26,6 +26,49 @@ const STATUS_LABEL_KEYS: Record<PresenceStatus, string> = {
   technical_issue: 'status_technical_issue',
 };
 
+const LOCAL_SESSION_KEY = 'coya_presence_local_session_v1';
+const LOCAL_STATUS_HISTORY_KEY = 'coya_presence_status_history_v1';
+
+function readLocalSession(): PresenceSession | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.id || !parsed?.userId || !parsed?.startedAt) return null;
+    return parsed as PresenceSession;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalSession(session: PresenceSession | null): void {
+  try {
+    if (!session) {
+      localStorage.removeItem(LOCAL_SESSION_KEY);
+      return;
+    }
+    localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // ignore
+  }
+}
+
+function appendLocalStatusHistory(userId: string, status: PresenceStatus): void {
+  try {
+    const raw = localStorage.getItem(LOCAL_STATUS_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const next = Array.isArray(parsed) ? parsed : [];
+    next.push({
+      userId,
+      status,
+      at: new Date().toISOString(),
+    });
+    localStorage.setItem(LOCAL_STATUS_HISTORY_KEY, JSON.stringify(next.slice(-200)));
+  } catch {
+    // ignore
+  }
+}
+
 export function statusLabelKey(status: PresenceStatus): string {
   return STATUS_LABEL_KEYS[status] ?? 'status_present';
 }
@@ -45,25 +88,35 @@ export const PresenceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const { data } = await DataService.getCurrentPresenceSession(user.id);
     if (data) {
       setCurrentSessionState(data);
+      writeLocalSession(data);
     } else {
-      setCurrentSessionState(prev => (prev?.id?.startsWith?.('local-') ? prev : null));
+      const local = readLocalSession();
+      if (local && String(local.userId) === String(user.id)) {
+        setCurrentSessionState(local);
+      } else {
+        setCurrentSessionState(prev => (prev?.id?.startsWith?.('local-') ? prev : null));
+      }
     }
     setLoading(false);
   }, [user?.id]);
 
   const setCurrentSession = useCallback((session: PresenceSession | null) => {
     setCurrentSessionState(session);
+    writeLocalSession(session);
   }, []);
 
   const setStatus = useCallback(async (newStatus: PresenceStatus): Promise<boolean> => {
     const nowIso = new Date().toISOString();
     const isLocalSession = currentSession?.id?.startsWith?.('local-');
     if (currentSession?.id && isLocalSession) {
-      setCurrentSessionState({
+      const next = {
         ...currentSession,
         status: newStatus,
         endedAt: newStatus === 'absent' ? nowIso : currentSession.endedAt,
-      });
+      };
+      setCurrentSessionState(next);
+      writeLocalSession(newStatus === 'absent' ? null : next);
+      if (user?.id) appendLocalStatusHistory(String(user.id), newStatus);
       return true;
     }
     if (currentSession?.id) {
@@ -73,10 +126,14 @@ export const PresenceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       if (error || !data) return false;
       setCurrentSessionState(newStatus === 'absent' ? null : data);
+      writeLocalSession(newStatus === 'absent' ? null : data);
+      if (user?.id) appendLocalStatusHistory(String(user.id), newStatus);
       return true;
     }
     if (newStatus === 'absent') {
       setCurrentSessionState(null);
+      writeLocalSession(null);
+      if (user?.id) appendLocalStatusHistory(String(user.id), newStatus);
       return true;
     }
     const { data, error } = await DataService.createPresenceSession({
@@ -85,18 +142,23 @@ export const PresenceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
     if (data) {
       setCurrentSessionState(data);
+      writeLocalSession(data);
+      if (user?.id) appendLocalStatusHistory(String(user.id), newStatus);
       return true;
     }
     // Bypass : si l'API échoue (ex. table absente, RLS), session locale pour que l'UI fonctionne
     if (user?.id) {
-      setCurrentSessionState({
+      const fallback = {
         id: 'local-' + Date.now(),
         userId: user.id,
         organizationId: 'local',
         status: newStatus,
         startedAt: new Date().toISOString(),
         pauseMinutes: 0,
-      });
+      };
+      setCurrentSessionState(fallback);
+      writeLocalSession(fallback);
+      appendLocalStatusHistory(String(user.id), newStatus);
       return true;
     }
     return false;

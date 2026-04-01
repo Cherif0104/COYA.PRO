@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { usePresence } from '../contexts/PresenceContext';
@@ -15,12 +15,34 @@ interface StatusSelectorModalProps {
 const StatusSelectorModal: React.FC<StatusSelectorModalProps> = ({ onConfirm }) => {
   const { user } = useAuth();
   const { t } = useLocalization();
-  const { setCurrentSession } = usePresence();
-  const [selected, setSelected] = useState<PresenceStatus>('present');
+  const { currentSession, setCurrentSession } = usePresence();
+  const [selected, setSelected] = useState<PresenceStatus>('absent');
   const [skipNextTime, setSkipNextTime] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const defaultAbsentAppliedRef = useRef(false);
+
+  useEffect(() => {
+    const applyDefaultAbsent = async () => {
+      if (!user?.id || currentSession || defaultAbsentAppliedRef.current) return;
+      defaultAbsentAppliedRef.current = true;
+      try {
+        const { data: existing } = await DataService.getCurrentPresenceSession(String(user.id));
+        if (existing) return;
+        // Absent par défaut au login si aucun statut actif n'a encore été choisi.
+        await DataService.createPresenceSession({
+          status: 'absent',
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          notes: 'auto-absent-at-login',
+        });
+      } catch {
+        // silent: le fallback local du contexte prendra le relais.
+      }
+    };
+    applyDefaultAbsent();
+  }, [user?.id, currentSession]);
 
   const handleConfirm = async () => {
     setLoading(true);

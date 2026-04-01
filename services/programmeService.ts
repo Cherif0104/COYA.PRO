@@ -7,6 +7,12 @@ import {
   CurrencyCode,
   ExpenseRequest,
   ExpenseRequestStatus,
+  ProgrammeStakeholder,
+  ProgrammeStakeholderType,
+  ProgrammeAction,
+  ProgrammeActionStatus,
+  ProgrammeDataRow,
+  ProgrammeBailleurLink,
 } from '../types';
 
 const BAILLEURS = 'bailleurs';
@@ -15,6 +21,10 @@ const PROGRAMME_BUDGET_LINES = 'programme_budget_lines';
 const BENEFICIAIRES = 'beneficiaires';
 const PROGRAMME_AUDITORS = 'programme_auditors';
 const EXPENSE_REQUESTS = 'expense_requests';
+const PROGRAMME_BAILLEURS = 'programme_bailleurs';
+const PROGRAMME_STAKEHOLDERS = 'programme_stakeholders';
+const PROGRAMME_ACTIONS = 'programme_actions';
+const PROGRAMME_DATA_ROWS = 'programme_data_rows';
 
 function mapBailleur(r: any): Bailleur {
   return {
@@ -40,6 +50,7 @@ function mapProgramme(r: any): Programme {
     bailleurName: r.bailleur_name ?? null,
     startDate: r.start_date ?? null,
     endDate: r.end_date ?? null,
+    allowProjects: r.allow_projects !== false,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -184,6 +195,7 @@ export async function createProgramme(params: {
   bailleurId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  allowProjects?: boolean;
 }): Promise<Programme> {
   const { data, error } = await supabase
     .from(PROGRAMMES)
@@ -195,6 +207,7 @@ export async function createProgramme(params: {
       bailleur_id: params.bailleurId ?? null,
       start_date: params.startDate ?? null,
       end_date: params.endDate ?? null,
+      allow_projects: params.allowProjects !== false,
       updated_at: new Date().toISOString(),
     })
     .select()
@@ -203,7 +216,10 @@ export async function createProgramme(params: {
   return mapProgramme(data);
 }
 
-export async function updateProgramme(id: string, updates: Partial<Pick<Programme, 'name' | 'code' | 'description' | 'bailleurId' | 'startDate' | 'endDate'>>): Promise<void> {
+export async function updateProgramme(
+  id: string,
+  updates: Partial<Pick<Programme, 'name' | 'code' | 'description' | 'bailleurId' | 'startDate' | 'endDate' | 'allowProjects'>>,
+): Promise<void> {
   const row: any = { updated_at: new Date().toISOString() };
   if (updates.name !== undefined) row.name = updates.name;
   if (updates.code !== undefined) row.code = updates.code;
@@ -211,12 +227,284 @@ export async function updateProgramme(id: string, updates: Partial<Pick<Programm
   if (updates.bailleurId !== undefined) row.bailleur_id = updates.bailleurId;
   if (updates.startDate !== undefined) row.start_date = updates.startDate;
   if (updates.endDate !== undefined) row.end_date = updates.endDate;
+  if (updates.allowProjects !== undefined) row.allow_projects = updates.allowProjects;
   const { error } = await supabase.from(PROGRAMMES).update(row).eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteProgramme(id: string): Promise<void> {
   const { error } = await supabase.from(PROGRAMMES).delete().eq('id', id);
+  if (error) throw error;
+}
+
+function mapProgrammeStakeholder(r: any): ProgrammeStakeholder {
+  return {
+    id: r.id,
+    programmeId: r.programme_id,
+    stakeholderType: (r.stakeholder_type as ProgrammeStakeholderType) || 'other',
+    profileId: r.profile_id ?? null,
+    externalName: r.external_name ?? null,
+    externalRole: r.external_role ?? null,
+    externalContact: r.external_contact ?? null,
+    notes: r.notes ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function mapProgrammeAction(r: any): ProgrammeAction {
+  return {
+    id: r.id,
+    programmeId: r.programme_id,
+    title: r.title,
+    actionType: r.action_type ?? 'other',
+    status: (r.status as ProgrammeActionStatus) || 'draft',
+    executorProfileId: r.executor_profile_id ?? null,
+    validatedByProfileId: r.validated_by_profile_id ?? null,
+    validatedAt: r.validated_at ?? null,
+    dueDate: r.due_date ?? null,
+    notes: r.notes ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function mapProgrammeDataRow(r: any): ProgrammeDataRow {
+  const raw = r.row_data;
+  const rowData =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? Object.fromEntries(
+          Object.entries(raw).map(([k, v]) => [k, v == null ? '' : String(v)]),
+        )
+      : {};
+  return {
+    id: r.id,
+    programmeId: r.programme_id,
+    section: r.section ?? 'default',
+    rowData,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+// ---------- Programme bailleurs additionnels (N-N) ----------
+export async function listProgrammeBailleurs(programmeId: string): Promise<ProgrammeBailleurLink[]> {
+  try {
+    const { data, error } = await supabase
+      .from(PROGRAMME_BAILLEURS)
+      .select('*, bailleurs(name)')
+      .eq('programme_id', programmeId);
+    if (error) return [];
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      programmeId: r.programme_id,
+      bailleurId: r.bailleur_id,
+      bailleurName: r.bailleurs?.name ?? null,
+      createdAt: r.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function addProgrammeBailleur(programmeId: string, bailleurId: string): Promise<void> {
+  const { error } = await supabase.from(PROGRAMME_BAILLEURS).insert({
+    programme_id: programmeId,
+    bailleur_id: bailleurId,
+  });
+  if (error) throw error;
+}
+
+export async function removeProgrammeBailleur(linkId: string): Promise<void> {
+  const { error } = await supabase.from(PROGRAMME_BAILLEURS).delete().eq('id', linkId);
+  if (error) throw error;
+}
+
+// ---------- Parties prenantes (facilitateurs, partenaires, etc.) ----------
+export async function listProgrammeStakeholders(programmeId: string): Promise<ProgrammeStakeholder[]> {
+  try {
+    const { data, error } = await supabase
+      .from(PROGRAMME_STAKEHOLDERS)
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return (data || []).map(mapProgrammeStakeholder);
+  } catch {
+    return [];
+  }
+}
+
+export async function createProgrammeStakeholder(params: {
+  programmeId: string;
+  stakeholderType: ProgrammeStakeholderType;
+  profileId?: string | null;
+  externalName?: string | null;
+  externalRole?: string | null;
+  externalContact?: string | null;
+  notes?: string | null;
+}): Promise<ProgrammeStakeholder> {
+  const { data, error } = await supabase
+    .from(PROGRAMME_STAKEHOLDERS)
+    .insert({
+      programme_id: params.programmeId,
+      stakeholder_type: params.stakeholderType,
+      profile_id: params.profileId ?? null,
+      external_name: params.externalName ?? null,
+      external_role: params.externalRole ?? null,
+      external_contact: params.externalContact ?? null,
+      notes: params.notes ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapProgrammeStakeholder(data);
+}
+
+export async function updateProgrammeStakeholder(
+  id: string,
+  updates: Partial<
+    Pick<
+      ProgrammeStakeholder,
+      'stakeholderType' | 'profileId' | 'externalName' | 'externalRole' | 'externalContact' | 'notes'
+    >
+  >,
+): Promise<void> {
+  const row: any = { updated_at: new Date().toISOString() };
+  if (updates.stakeholderType !== undefined) row.stakeholder_type = updates.stakeholderType;
+  if (updates.profileId !== undefined) row.profile_id = updates.profileId;
+  if (updates.externalName !== undefined) row.external_name = updates.externalName;
+  if (updates.externalRole !== undefined) row.external_role = updates.externalRole;
+  if (updates.externalContact !== undefined) row.external_contact = updates.externalContact;
+  if (updates.notes !== undefined) row.notes = updates.notes;
+  const { error } = await supabase.from(PROGRAMME_STAKEHOLDERS).update(row).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProgrammeStakeholder(id: string): Promise<void> {
+  const { error } = await supabase.from(PROGRAMME_STAKEHOLDERS).delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---------- Plans d'action ----------
+export async function listProgrammeActions(programmeId: string): Promise<ProgrammeAction[]> {
+  try {
+    const { data, error } = await supabase
+      .from(PROGRAMME_ACTIONS)
+      .select('*')
+      .eq('programme_id', programmeId)
+      .order('due_date', { ascending: true, nullsFirst: false });
+    if (error) return [];
+    return (data || []).map(mapProgrammeAction);
+  } catch {
+    return [];
+  }
+}
+
+export async function createProgrammeAction(params: {
+  programmeId: string;
+  title: string;
+  actionType?: string;
+  status?: ProgrammeActionStatus;
+  executorProfileId?: string | null;
+  dueDate?: string | null;
+  notes?: string | null;
+}): Promise<ProgrammeAction> {
+  const { data, error } = await supabase
+    .from(PROGRAMME_ACTIONS)
+    .insert({
+      programme_id: params.programmeId,
+      title: params.title,
+      action_type: params.actionType ?? 'other',
+      status: params.status ?? 'draft',
+      executor_profile_id: params.executorProfileId ?? null,
+      due_date: params.dueDate ?? null,
+      notes: params.notes ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapProgrammeAction(data);
+}
+
+export async function updateProgrammeAction(
+  id: string,
+  updates: Partial<
+    Pick<
+      ProgrammeAction,
+      | 'title'
+      | 'actionType'
+      | 'status'
+      | 'executorProfileId'
+      | 'validatedByProfileId'
+      | 'validatedAt'
+      | 'dueDate'
+      | 'notes'
+    >
+  >,
+): Promise<void> {
+  const row: any = { updated_at: new Date().toISOString() };
+  if (updates.title !== undefined) row.title = updates.title;
+  if (updates.actionType !== undefined) row.action_type = updates.actionType;
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.executorProfileId !== undefined) row.executor_profile_id = updates.executorProfileId;
+  if (updates.validatedByProfileId !== undefined) row.validated_by_profile_id = updates.validatedByProfileId;
+  if (updates.validatedAt !== undefined) row.validated_at = updates.validatedAt;
+  if (updates.dueDate !== undefined) row.due_date = updates.dueDate;
+  if (updates.notes !== undefined) row.notes = updates.notes;
+  const { error } = await supabase.from(PROGRAMME_ACTIONS).update(row).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProgrammeAction(id: string): Promise<void> {
+  const { error } = await supabase.from(PROGRAMME_ACTIONS).delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---------- Collecte (lignes type tableur) ----------
+export async function listProgrammeDataRows(programmeId: string, section?: string): Promise<ProgrammeDataRow[]> {
+  try {
+    let q = supabase.from(PROGRAMME_DATA_ROWS).select('*').eq('programme_id', programmeId).order('updated_at', { ascending: false });
+    if (section) q = q.eq('section', section);
+    const { data, error } = await q;
+    if (error) return [];
+    return (data || []).map(mapProgrammeDataRow);
+  } catch {
+    return [];
+  }
+}
+
+export async function createProgrammeDataRow(params: {
+  programmeId: string;
+  section?: string;
+  rowData?: Record<string, string>;
+}): Promise<ProgrammeDataRow> {
+  const { data, error } = await supabase
+    .from(PROGRAMME_DATA_ROWS)
+    .insert({
+      programme_id: params.programmeId,
+      section: params.section ?? 'default',
+      row_data: params.rowData ?? {},
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapProgrammeDataRow(data);
+}
+
+export async function updateProgrammeDataRow(id: string, updates: Partial<Pick<ProgrammeDataRow, 'section' | 'rowData'>>): Promise<void> {
+  const row: any = { updated_at: new Date().toISOString() };
+  if (updates.section !== undefined) row.section = updates.section;
+  if (updates.rowData !== undefined) row.row_data = updates.rowData;
+  const { error } = await supabase.from(PROGRAMME_DATA_ROWS).update(row).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProgrammeDataRow(id: string): Promise<void> {
+  const { error } = await supabase.from(PROGRAMME_DATA_ROWS).delete().eq('id', id);
   if (error) throw error;
 }
 

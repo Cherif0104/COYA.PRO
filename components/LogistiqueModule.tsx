@@ -16,6 +16,7 @@ const LogistiqueModule: React.FC = () => {
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEquipForm, setShowEquipForm] = useState(false);
+  const [editEquipment, setEditEquipment] = useState<Equipment | null>(null);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [formEquip, setFormEquip] = useState({ name: '', brand: '', model: '', location: '' });
   const [formRequest, setFormRequest] = useState({ equipmentId: '', notes: '' });
@@ -39,15 +40,56 @@ const LogistiqueModule: React.FC = () => {
     load();
   }, []);
 
-  const handleCreateEquipment = async (e: React.FormEvent) => {
+  const resetEquipForm = () => {
+    setEditEquipment(null);
+    setFormEquip({ name: '', brand: '', model: '', location: '' });
+    setShowEquipForm(false);
+  };
+
+  const openNewEquipmentForm = () => {
+    setEditEquipment(null);
+    setFormEquip({ name: '', brand: '', model: '', location: '' });
+    setShowEquipForm(true);
+  };
+
+  const openEditEquipment = (eq: Equipment) => {
+    setEditEquipment(eq);
+    setFormEquip({
+      name: eq.name,
+      brand: eq.brand || '',
+      model: eq.model || '',
+      location: eq.location || '',
+    });
+    setShowEquipForm(true);
+  };
+
+  const handleSaveEquipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formEquip.name.trim()) return;
+    if (editEquipment) {
+      const ok = await logistiqueService.updateEquipment(editEquipment.id, {
+        name: formEquip.name,
+        brand: formEquip.brand,
+        model: formEquip.model,
+        location: formEquip.location,
+      });
+      if (ok) {
+        await load();
+        resetEquipForm();
+      }
+      return;
+    }
     const created = await logistiqueService.createEquipment(formEquip);
     if (created) {
       setEquipments((prev) => [created, ...prev]);
-      setShowEquipForm(false);
-      setFormEquip({ name: '', brand: '', model: '', location: '' });
+      resetEquipForm();
     }
+  };
+
+  const handleArchiveEquipment = async (eq: Equipment) => {
+    if (!confirm(isFr ? `Archiver « ${eq.name} » ? Il disparaîtra de la liste.` : `Archive "${eq.name}"? It will be hidden from the list.`)) return;
+    const ok = await logistiqueService.archiveEquipment(eq.id);
+    if (ok) await load();
   };
 
   const handleCreateRequest = async (e: React.FormEvent) => {
@@ -106,7 +148,7 @@ const LogistiqueModule: React.FC = () => {
             {isFr ? 'Équipements' : 'Equipment'}
           </h2>
           {isManager && (
-            <button type="button" onClick={() => setShowEquipForm(true)} className="btn-3d-primary">
+            <button type="button" onClick={openNewEquipmentForm} className="btn-3d-primary">
               <i className="fas fa-plus mr-2" />
               {isFr ? 'Nouvel équipement' : 'New equipment'}
             </button>
@@ -114,7 +156,7 @@ const LogistiqueModule: React.FC = () => {
         </div>
         <div className="p-4">
         {showEquipForm && (
-          <form onSubmit={handleCreateEquipment} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+          <form onSubmit={handleSaveEquipment} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             <input
               type="text"
               placeholder={isFr ? 'Nom' : 'Name'}
@@ -129,8 +171,8 @@ const LogistiqueModule: React.FC = () => {
               <input type="text" placeholder={isFr ? 'Emplacement' : 'Location'} value={formEquip.location} onChange={(e) => setFormEquip((f) => ({ ...f, location: e.target.value }))} className="border rounded px-3 py-2" />
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="btn-3d-primary">{isFr ? 'Créer' : 'Create'}</button>
-              <button type="button" onClick={() => setShowEquipForm(false)} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
+              <button type="submit" className="btn-3d-primary">{editEquipment ? (isFr ? 'Enregistrer' : 'Save') : (isFr ? 'Créer' : 'Create')}</button>
+              <button type="button" onClick={resetEquipForm} className="btn-3d-secondary">{isFr ? 'Annuler' : 'Cancel'}</button>
             </div>
           </form>
         )}
@@ -145,6 +187,7 @@ const LogistiqueModule: React.FC = () => {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Marque' : 'Brand'}</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Modèle' : 'Model'}</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isFr ? 'Emplacement' : 'Location'}</th>
+                  {isManager && <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">{isFr ? 'Actions' : 'Actions'}</th>}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -154,6 +197,16 @@ const LogistiqueModule: React.FC = () => {
                     <td className="px-4 py-2 text-sm text-gray-500">{e.brand || '—'}</td>
                     <td className="px-4 py-2 text-sm text-gray-500">{e.model || '—'}</td>
                     <td className="px-4 py-2 text-sm text-gray-500">{e.location || '—'}</td>
+                    {isManager && (
+                      <td className="px-4 py-2 text-right text-sm whitespace-nowrap">
+                        <button type="button" onClick={() => openEditEquipment(e)} className="text-emerald-600 hover:text-emerald-800 mr-3">
+                          {isFr ? 'Modifier' : 'Edit'}
+                        </button>
+                        <button type="button" onClick={() => handleArchiveEquipment(e)} className="text-red-600 hover:text-red-800">
+                          {isFr ? 'Archiver' : 'Archive'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

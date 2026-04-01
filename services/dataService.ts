@@ -2897,7 +2897,7 @@ export class DataService {
   }
 
   // ===== PLANNING SLOTS (Phase 3) =====
-  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string }) {
+  static async getPlanningSlots(params: { dateFrom: string; dateTo: string; userId?: string; userIds?: string[] }) {
     if (isTableUnavailable('planning_slots')) return { data: [], error: null };
     try {
       const orgId = await this.getCurrentUserOrganizationId();
@@ -2910,7 +2910,11 @@ export class DataService {
         .lte('slot_date', params.dateTo)
         .order('slot_date', { ascending: true })
         .order('start_time', { ascending: true, nullsFirst: false });
-      if (params.userId) query = query.eq('user_id', params.userId);
+      if (params.userIds && params.userIds.length > 0) {
+        query = query.in('user_id', params.userIds);
+      } else if (params.userId) {
+        query = query.eq('user_id', params.userId);
+      }
       const { data, error } = await query;
       if (error) {
         if (handleOptionalTableError(error, 'planning_slots', 'DataService.getPlanningSlots')) {

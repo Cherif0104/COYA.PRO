@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { LeaveRequest, User, Job, Employee, HrAbsenceEvent, HrAttendancePolicy } from '../types';
+import { LeaveRequest, User, Job, Employee, HrAbsenceEvent, HrAttendancePolicy, PresenceSession, PresenceStatus, PresenceStatusEvent } from '../types';
 import DataAdapter from '../services/dataAdapter';
 import OrganizationService from '../services/organizationService';
 import LeaveManagement from './LeaveManagement';
@@ -35,6 +35,28 @@ interface RhModuleProps {
 
 const SLA_DAYS_WARNING = 2;
 
+type PresenceLiveRow = {
+  profileId: string;
+  displayName: string;
+  currentStatus: PresenceStatus | 'absent';
+  lastConnectionAt: string | null;
+  todayMinutes: number;
+  currentHourMinutes: number;
+  weekMinutes: number;
+  monthMinutes: number;
+  dayRate: number;
+};
+
+function overlapMinutes(session: PresenceSession, rangeStartMs: number, rangeEndMs: number): number {
+  const start = new Date(session.startedAt).getTime();
+  const end = session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  const overlapStart = Math.max(start, rangeStartMs);
+  const overlapEnd = Math.min(end, rangeEndMs);
+  if (overlapEnd <= overlapStart) return 0;
+  return Math.round((overlapEnd - overlapStart) / 60000);
+}
+
 const RhModule: React.FC<RhModuleProps> = ({
   leaveRequests,
   users,
@@ -66,6 +88,10 @@ const RhModule: React.FC<RhModuleProps> = ({
   const [policySaving, setPolicySaving] = useState(false);
   const [userIdByProfile, setUserIdByProfile] = useState<Record<string, string>>({});
   const [complianceRows, setComplianceRows] = useState<hrAnalyticsService.PresenceComplianceMetric[]>([]);
+  const [presenceSessions, setPresenceSessions] = useState<PresenceSession[]>([]);
+  const [presenceStatusEvents, setPresenceStatusEvents] = useState<PresenceStatusEvent[]>([]);
+  const [statusHistoryProfileFilter, setStatusHistoryProfileFilter] = useState<string>('all');
+  const fr = language === 'fr';
 
   const loadEmployees = useCallback(async () => {
     const orgId = await OrganizationService.getCurrentUserOrganizationId();
@@ -91,6 +117,8 @@ const RhModule: React.FC<RhModuleProps> = ({
       return acc;
     }, {});
     setUserIdByProfile(profileMap);
+    setPresenceSessions(sessions || []);
+    setPresenceStatusEvents(statusEvents || []);
     const metrics = hrAnalyticsService.computePresenceMetrics({
       sessions: sessions || [],
       profileIds: employees.map((e) => e.profileId),
@@ -114,13 +142,115 @@ const RhModule: React.FC<RhModuleProps> = ({
     setComplianceRows(compliance);
   }, [employees, presencePeriod]);
 
+  const livePresenceRows = useMemo<PresenceLiveRow[]>(() => {
+    const now = new Date();
+    const nowMs = now.getTime();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayOfWeek = (now.getDay() + 6) % 7;
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
+    const expectedDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 480);
+
+    return employees.map((employee) => {
+      const profileId = String(employee.profileId);
+      const authUserId = userIdByProfile[profileId] || profileId;
+      const sessions = presenceSessions
+        .filter((s) => String(s.userId) === authUserId)
+        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      const active = sessions.find((s) => !s.endedAt);
+      const latest = sessions[0];
+      const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
+      const displayName = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId.slice(0, 8);
+
+      const todayMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfDay, nowMs), 0);
+      const currentHourMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfHour, nowMs), 0);
+      const weekMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfWeek, nowMs), 0);
+      const monthMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfMonth, nowMs), 0);
+      const dayRate = Math.min(100, (todayMinutes / expectedDailyMinutes) * 100);
+
+      return {
+        profileId,
+        displayName,
+        currentStatus: (active?.status || 'absent') as PresenceStatus | 'absent',
+        lastConnectionAt: latest?.startedAt || null,
+        todayMinutes,
+        currentHourMinutes,
+        weekMinutes,
+        monthMinutes,
+        dayRate,
+      };
+    });
+  }, [employees, presenceSessions, userIdByProfile, policy?.expectedDailyMinutes, users]);
+
+  const profileIdByUserId = useMemo(() => {
+    const reverse: Record<string, string> = {};
+    Object.entries(userIdByProfile).forEach(([profileId, userId]) => {
+      reverse[String(userId)] = String(profileId);
+    });
+    return reverse;
+  }, [userIdByProfile]);
+
+  const statusHistoryRows = useMemo(() => {
+    const targetProfile = statusHistoryProfileFilter === 'all' ? null : statusHistoryProfileFilter;
+    const base = (presenceStatusEvents || []).map((evt) => {
+      const profileId = profileIdByUserId[String(evt.userId)] || '';
+      const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
+      return {
+        ...evt,
+        profileId,
+        displayName: linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId || String(evt.userId).slice(0, 8),
+      };
+    });
+    const filtered = targetProfile ? base.filter((r) => r.profileId === targetProfile) : base;
+    return filtered
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .slice(0, 120);
+  }, [presenceStatusEvents, profileIdByUserId, users, statusHistoryProfileFilter]);
+
+  const statusLabel = useCallback((status: PresenceStatus | 'absent') => {
+    if (status === 'absent') return fr ? 'Absent' : 'Absent';
+    if (status === 'in_meeting') return fr ? 'En réunion' : 'In meeting';
+    if (status === 'pause' || status === 'pause_coffee' || status === 'pause_lunch') return fr ? 'En pause' : 'On break';
+    if (status === 'brief_team') return fr ? 'Brief équipe' : 'Team brief';
+    if (status === 'technical_issue') return fr ? 'Incident technique' : 'Technical issue';
+    if (status === 'away_mission') return fr ? 'Mission' : 'Mission';
+    return fr ? 'Présent' : 'Present';
+  }, [fr]);
+
+  const statusBadgeClass = useCallback((status: PresenceStatus | 'absent') => {
+    if (status === 'absent') return 'bg-red-100 text-red-700';
+    if (status === 'in_meeting' || status === 'brief_team') return 'bg-blue-100 text-blue-700';
+    if (status === 'pause' || status === 'pause_coffee' || status === 'pause_lunch') return 'bg-amber-100 text-amber-700';
+    if (status === 'technical_issue') return 'bg-rose-100 text-rose-700';
+    if (status === 'away_mission') return 'bg-purple-100 text-purple-700';
+    return 'bg-emerald-100 text-emerald-700';
+  }, []);
+
+  const formatDateTime = useCallback((iso: string | null | undefined) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(fr ? 'fr-FR' : 'en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [fr]);
+
+  const liveCounters = useMemo(() => {
+    const present = livePresenceRows.filter((r) => ['online', 'present'].includes(r.currentStatus)).length;
+    const meeting = livePresenceRows.filter((r) => ['in_meeting', 'brief_team'].includes(r.currentStatus)).length;
+    const pause = livePresenceRows.filter((r) => ['pause', 'pause_coffee', 'pause_lunch'].includes(r.currentStatus)).length;
+    const absent = livePresenceRows.filter((r) => r.currentStatus === 'absent').length;
+    return { present, meeting, pause, absent };
+  }, [livePresenceRows]);
+
   useEffect(() => {
     if (employees.length > 0) {
       loadPresenceAndAbsences();
     }
   }, [employees, loadPresenceAndAbsences]);
 
-  const fr = language === 'fr';
   const showSalaries = canAccessModule('rh');
   const showLeave = canAccessModule('leave_management') || canAccessModule('leave_management_admin');
   const showDemandes = showLeave || canAccessModule('rh');
@@ -293,6 +423,127 @@ const RhModule: React.FC<RhModuleProps> = ({
               />
               <label htmlFor="enforceIp">{fr ? 'Bloquer les sessions "bureau" hors IP autorisées' : 'Block "office" sessions outside allowed IPs'}</label>
             </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-xs uppercase text-emerald-700">{fr ? 'Présents maintenant' : 'Present now'}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{liveCounters.present}</p>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs uppercase text-blue-700">{fr ? 'En réunion' : 'In meeting'}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{liveCounters.meeting}</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs uppercase text-amber-700">{fr ? 'En pause' : 'On break'}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{liveCounters.pause}</p>
+            </div>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-xs uppercase text-red-700">{fr ? 'Absents' : 'Absent'}</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">{liveCounters.absent}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Présence en direct par salarié' : 'Live attendance by employee'}</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Statut actuel' : 'Current status'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Dernière connexion' : 'Last connection'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Cette heure' : 'This hour'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Aujourd’hui' : 'Today'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Semaine' : 'Week'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Mois' : 'Month'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Taux jour' : 'Day rate'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {livePresenceRows.map((row) => (
+                  <tr key={row.profileId} className="border-b border-slate-100">
+                    <td className="px-4 py-3">{row.displayName}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadgeClass(row.currentStatus)}`}>
+                        {statusLabel(row.currentStatus)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {row.lastConnectionAt
+                        ? new Date(row.lastConnectionAt).toLocaleString(fr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{(row.currentHourMinutes / 60).toFixed(2)} h</td>
+                    <td className="px-4 py-3 text-right font-mono">{(row.todayMinutes / 60).toFixed(2)} h</td>
+                    <td className="px-4 py-3 text-right font-mono">{(row.weekMinutes / 60).toFixed(2)} h</td>
+                    <td className="px-4 py-3 text-right font-mono">{(row.monthMinutes / 60).toFixed(2)} h</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${row.dayRate >= 90 ? 'bg-emerald-100 text-emerald-700' : row.dayRate >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                        {row.dayRate.toFixed(1)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {livePresenceRows.length === 0 && (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence en direct.' : 'No live attendance data.'}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts' : 'Status history timeline'}</h3>
+              <select
+                value={statusHistoryProfileFilter}
+                onChange={(e) => setStatusHistoryProfileFilter(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="all">{fr ? 'Tous les salariés' : 'All employees'}</option>
+                {employees.map((emp) => {
+                  const linkedUser = users.find((u) => String((u as any).profileId || '') === String(emp.profileId));
+                  const name = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || String(emp.profileId).slice(0, 8);
+                  return (
+                    <option key={emp.id} value={String(emp.profileId)}>
+                      {name}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Statut' : 'Status'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Début' : 'Start'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Fin' : 'End'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Durée' : 'Duration'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Source' : 'Source'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusHistoryRows.map((row) => {
+                  const duration = row.durationMinutes ?? (row.endedAt ? Math.max(0, Math.round((new Date(row.endedAt).getTime() - new Date(row.startedAt).getTime()) / 60000)) : null);
+                  return (
+                    <tr key={row.id} className="border-b border-slate-100">
+                      <td className="px-4 py-3">{row.displayName}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadgeClass(row.status as PresenceStatus)}`}>
+                          {statusLabel(row.status as PresenceStatus)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{formatDateTime(row.startedAt)}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatDateTime(row.endedAt ?? null)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{duration !== null ? `${(duration / 60).toFixed(2)} h` : '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{row.source || 'system'}</td>
+                    </tr>
+                  );
+                })}
+                {statusHistoryRows.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucun historique de statut pour le moment.' : 'No status history yet.'}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <table className="w-full text-sm">

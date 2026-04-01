@@ -111,6 +111,39 @@ export async function createEquipment(params: {
   }
 }
 
+export async function updateEquipment(
+  id: string,
+  params: Partial<Pick<Equipment, 'name' | 'brand' | 'model' | 'location' | 'responsibleId'>>,
+): Promise<boolean> {
+  try {
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (params.name !== undefined) row.name = params.name.trim();
+    if (params.brand !== undefined) row.brand = params.brand?.trim() || null;
+    if (params.model !== undefined) row.model = params.model?.trim() || null;
+    if (params.location !== undefined) row.location = params.location?.trim() || null;
+    if (params.responsibleId !== undefined) row.responsible_id = params.responsibleId || null;
+    const { error } = await supabase.from('equipments').update(row).eq('id', id);
+    return !error;
+  } catch (e) {
+    console.error('logistiqueService.updateEquipment:', e);
+    return false;
+  }
+}
+
+/** Soft delete: hides from default list (is_active = false). */
+export async function archiveEquipment(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('equipments')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    return !error;
+  } catch (e) {
+    console.error('logistiqueService.archiveEquipment:', e);
+    return false;
+  }
+}
+
 export async function listEquipmentRequests(organizationId?: string | null): Promise<EquipmentRequest[]> {
   try {
     const orgId = organizationId || (await OrganizationService.getCurrentUserOrganizationId());

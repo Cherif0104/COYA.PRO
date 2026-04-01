@@ -61,6 +61,7 @@ const MessagerieModule: React.FC = () => {
   const [directVoiceFile, setDirectVoiceFile] = useState<File | null>(null);
   const [directFile, setDirectFile] = useState<File | null>(null);
   const [directSearch, setDirectSearch] = useState('');
+  const [openingThread, setOpeningThread] = useState(false);
 
   const userByProfileId = useMemo(() => {
     const m = new Map<string, User>();
@@ -181,13 +182,28 @@ const MessagerieModule: React.FC = () => {
       setError(null);
       try {
         const org = await OrganizationService.getCurrentUserOrganizationId();
-        const { data: profile } = await DataService.getProfile(String((currentUser as any).id || currentUser.id));
-        const resolvedProfileId = String((currentUser as any)?.profileId || profile?.id || '');
+        const authUserId = String((currentUser as any).id || currentUser.id || '');
+        const { data: profile } = await DataService.getProfile(authUserId);
+        let resolvedProfileId = String((currentUser as any)?.profileId || profile?.id || '');
+        let orgResolved = org || profile?.organization_id || (currentUser as any).organizationId || null;
+        if (!resolvedProfileId && authUserId) {
+          try {
+            const { data: authData } = await supabase.auth.getUser();
+            const uid = authData?.user?.id || authUserId;
+            const { data: row } = await supabase.from('profiles').select('id, organization_id').eq('user_id', uid).maybeSingle();
+            if (row?.id) {
+              resolvedProfileId = String(row.id);
+              if (!orgResolved && row.organization_id) orgResolved = row.organization_id;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
         setCurrentProfileId(resolvedProfileId);
-        setOrganizationId(org || profile?.organization_id || (currentUser as any).organizationId || null);
+        setOrganizationId(orgResolved);
 
         const { data: allProfiles } = await DataService.getProfiles();
-        const currentOrg = org || profile?.organization_id || (currentUser as any).organizationId || null;
+        const currentOrg = orgResolved;
         const inOrg = (allProfiles || []).filter((p: any) => !currentOrg || p.organization_id === currentOrg);
         setProfiles(inOrg.map((p: any) => ({
           id: String(p.id),
@@ -444,16 +460,36 @@ const MessagerieModule: React.FC = () => {
   };
 
   const openDirectThread = async (otherProfileId: string) => {
-    if (!organizationId || !currentProfileId) return;
     setError(null);
-    const thread = await messagingService.createOrGetDirectThread({
-      organizationId,
-      createdById: currentProfileId,
-      memberIds: [currentProfileId, otherProfileId],
-    });
-    await loadThreads();
-    setActiveThreadId(thread.id);
-    setTab('direct');
+    if (!organizationId) {
+      setError(isFr ? 'Organisation introuvable. Vérifiez votre profil.' : 'Organization not found. Check your profile.');
+      return;
+    }
+    if (!currentProfileId) {
+      setError(isFr ? 'Profil utilisateur introuvable. Reconnectez-vous ou contactez un administrateur.' : 'User profile not found. Sign in again or contact an administrator.');
+      return;
+    }
+    setOpeningThread(true);
+    try {
+      const thread = await messagingService.createOrGetDirectThread({
+        organizationId,
+        createdById: currentProfileId,
+        memberIds: [currentProfileId, otherProfileId],
+      });
+      await loadThreads();
+      setActiveThreadId(thread.id);
+      setTab('direct');
+    } catch (e: any) {
+      console.error('openDirectThread', e);
+      const msg = String(e?.message || e?.error_description || e || '');
+      setError(
+        msg
+          ? (isFr ? `Impossible d’ouvrir la conversation : ${msg}` : `Could not open conversation: ${msg}`)
+          : (isFr ? 'Impossible d’ouvrir la conversation directe.' : 'Could not open direct conversation.'),
+      );
+    } finally {
+      setOpeningThread(false);
+    }
   };
 
   const sendDirectText = async () => {
@@ -776,8 +812,9 @@ const MessagerieModule: React.FC = () => {
                     <button
                       key={pid}
                       type="button"
+                      disabled={openingThread || !currentProfileId || !organizationId}
                       onClick={() => openDirectThread(pid)}
-                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-100"
+                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {u.fullName || u.name || u.email}
                     </button>

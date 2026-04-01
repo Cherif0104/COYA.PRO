@@ -7,6 +7,7 @@ import DataAdapter from '../services/dataAdapter';
 import * as triniteService from '../services/triniteService';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { supabase } from '../services/supabaseService';
+import { DataService } from '../services/dataService';
 
 /** Trinité : scoring Ndiguel, Yar, Barké – liens vers RH et parc pour alimenter les indicateurs */
 const TriniteModule: React.FC = () => {
@@ -19,10 +20,37 @@ const TriniteModule: React.FC = () => {
   const [periodEnd, setPeriodEnd] = useState<string>(new Date().toISOString().slice(0, 10));
   const [scores, setScores] = useState<Awaited<ReturnType<typeof triniteService.listTriniteScores>>>([]);
   const [loading, setLoading] = useState(false);
+  const [myProfileId, setMyProfileId] = useState('');
+  const [selfNote, setSelfNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  const isManager = useMemo(
+    () => ['super_administrator', 'administrator', 'manager'].includes(String((user as any)?.role || '')),
+    [user],
+  );
 
   useEffect(() => {
     OrganizationService.getCurrentUserOrganizationId().then((id) => setOrganizationId(id ?? null));
   }, []);
+
+  useEffect(() => {
+    const uid = String((user as any)?.id || user?.id || '');
+    if (!uid) return;
+    (async () => {
+      const { data } = await DataService.getProfile(uid);
+      let pid = String((user as any)?.profileId || data?.id || '');
+      if (!pid) {
+        const { data: row } = await supabase.from('profiles').select('id').eq('user_id', uid).maybeSingle();
+        if (row?.id) pid = String(row.id);
+      }
+      setMyProfileId(pid);
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!organizationId || !myProfileId) return;
+    triniteService.getTriniteSelfNote(organizationId, myProfileId, periodStart, periodEnd).then((n) => setSelfNote(n || ''));
+  }, [organizationId, myProfileId, periodStart, periodEnd]);
 
   const loadScores = useCallback(async () => {
     if (!organizationId) return;
@@ -40,7 +68,7 @@ const TriniteModule: React.FC = () => {
   }, [loadScores]);
 
   const recompute = useCallback(async () => {
-    if (!organizationId) return;
+    if (!organizationId || !isManager) return;
     setLoading(true);
     try {
       const employees = await DataAdapter.listEmployees(organizationId);
@@ -79,9 +107,10 @@ const TriniteModule: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [organizationId, periodStart, periodEnd, user?.id, loadScores]);
+  }, [organizationId, periodStart, periodEnd, user?.id, loadScores, isManager]);
 
   const top = useMemo(() => scores.slice(0, 3), [scores]);
+  const myScore = useMemo(() => scores.find((s) => s.profileId === myProfileId) || null, [scores, myProfileId]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 text-slate-900">
@@ -98,6 +127,73 @@ const TriniteModule: React.FC = () => {
       </header>
 
       <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-slate-700">{isFr ? 'Période' : 'Period'}</span>
+          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          <span className="text-slate-500">→</span>
+          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+
+        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+            <i className="fas fa-user text-slate-600" />
+            {isFr ? 'Ma fiche' : 'My record'}
+          </h2>
+          {!myProfileId ? (
+            <p className="text-sm text-slate-500">{isFr ? 'Profil non résolu.' : 'Profile not resolved.'}</p>
+          ) : myScore ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-lg border border-slate-200 p-3 text-center">
+                <p className="text-xs text-slate-500">Ndiguel</p>
+                <p className="text-lg font-semibold">{myScore.ndiguelScore.toFixed(1)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 text-center">
+                <p className="text-xs text-slate-500">Yar</p>
+                <p className="text-lg font-semibold">{myScore.yarScore.toFixed(1)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 text-center">
+                <p className="text-xs text-slate-500">Barké</p>
+                <p className="text-lg font-semibold">{myScore.barkeScore.toFixed(1)}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
+                <p className="text-xs text-emerald-700">{isFr ? 'Global' : 'Global'}</p>
+                <p className="text-lg font-semibold text-emerald-900">{myScore.globalScore.toFixed(1)}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600 mb-4">{isFr ? 'Pas encore de score calculé pour vous sur cette période.' : 'No score computed for you on this period yet.'}</p>
+          )}
+          <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Commentaire / auto-évaluation' : 'Self-assessment note'}</label>
+          <textarea
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-[100px] mb-2"
+            value={selfNote}
+            onChange={(e) => setSelfNote(e.target.value)}
+            placeholder={isFr ? 'Votre retour sur la période…' : 'Your feedback on the period…'}
+          />
+          <button
+            type="button"
+            disabled={!organizationId || !myProfileId || savingNote}
+            onClick={async () => {
+              if (!organizationId || !myProfileId) return;
+              setSavingNote(true);
+              try {
+                await triniteService.upsertTriniteSelfNote({
+                  organizationId,
+                  profileId: myProfileId,
+                  periodStart,
+                  periodEnd,
+                  note: selfNote.trim() || null,
+                });
+              } finally {
+                setSavingNote(false);
+              }
+            }}
+            className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-50"
+          >
+            {savingNote ? '…' : (isFr ? 'Enregistrer ma note' : 'Save my note')}
+          </button>
+        </section>
+
         <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
             <i className="fas fa-chart-line text-slate-600" />
@@ -134,13 +230,15 @@ const TriniteModule: React.FC = () => {
             {isFr ? 'Scores Trinité' : 'Trinity scores'}
           </h2>
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            <span className="text-slate-500">→</span>
-            <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            <button type="button" onClick={recompute} disabled={loading || !organizationId} className="ml-auto px-4 py-2 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-50">
-              {loading ? (isFr ? 'Calcul…' : 'Computing…') : (isFr ? 'Recalculer les scores' : 'Recompute scores')}
-            </button>
+            {isManager && (
+              <button type="button" onClick={recompute} disabled={loading || !organizationId} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-50">
+                {loading ? (isFr ? 'Calcul…' : 'Computing…') : (isFr ? 'Recalculer les scores' : 'Recompute scores')}
+              </button>
+            )}
           </div>
+          {!isManager && (
+            <p className="text-xs text-slate-500 mb-3">{isFr ? 'Le recalcul global est réservé aux managers / administrateurs.' : 'Global recompute is limited to managers / administrators.'}</p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             {top.map((score) => (
               <div key={score.id} className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
@@ -155,6 +253,11 @@ const TriniteModule: React.FC = () => {
               </div>
             )}
           </div>
+          <p className="text-xs text-slate-500 mb-2">
+            {isFr
+              ? 'Le tableau respecte vos droits : les membres ne voient que leur ligne ; les managers voient l’équipe.'
+              : 'The table follows your permissions: members see only their row; managers see the team.'}
+          </p>
           <div className="rounded-xl border border-slate-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
