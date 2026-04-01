@@ -6,11 +6,20 @@ import OrganizationService from '../services/organizationService';
 import { FileService } from '../services/fileService';
 import * as messagingService from '../services/messagingService';
 import { NotificationService } from '../services/notificationService';
+import type { NotificationAction, NotificationType } from '../services/notificationService';
 import { DataService } from '../services/dataService';
 import { supabase } from '../services/supabaseService';
+import * as messagingMentions from '../services/messagingMentions';
 
 type Tab = 'channels' | 'direct';
 const TAB_PREF_KEY = 'coya_messaging_default_tab';
+const DEEPLINK_KEY = 'coya.messaging.deeplink';
+
+function snippetText(s: string, max = 140): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
 
 const linkRegex = /https?:\/\/\S+/i;
 
@@ -62,6 +71,10 @@ const MessagerieModule: React.FC = () => {
   const [directFile, setDirectFile] = useState<File | null>(null);
   const [directSearch, setDirectSearch] = useState('');
   const [openingThread, setOpeningThread] = useState(false);
+  const [channelMemberDraft, setChannelMemberDraft] = useState<string[]>([]);
+  const [showChannelMembersEditor, setShowChannelMembersEditor] = useState(false);
+  const [savingChannelMembers, setSavingChannelMembers] = useState(false);
+  const [listSearch, setListSearch] = useState('');
 
   const userByProfileId = useMemo(() => {
     const m = new Map<string, User>();
@@ -84,13 +97,21 @@ const MessagerieModule: React.FC = () => {
 
   const availableDirectUsers = useMemo(() => {
     const q = directSearch.trim().toLowerCase();
+    const matches = (u: User) => {
+      if (!q) return true;
+      const n = String((u.fullName || u.name || '')).toLowerCase();
+      const e = String(u.email || '').toLowerCase();
+      return n.includes(q) || e.includes(q);
+    };
     return users
-      .filter((u) => String((u as any).profileId || u.id) !== currentProfileId)
-      .filter((u) => {
-        if (!q) return true;
-        const n = String((u.fullName || u.name || '')).toLowerCase();
-        const e = String(u.email || '').toLowerCase();
-        return n.includes(q) || e.includes(q);
+      .filter(matches)
+      .sort((a, b) => {
+        const ap = String((a as any).profileId || a.id);
+        const bp = String((b as any).profileId || b.id);
+        const aSelf = ap === currentProfileId;
+        const bSelf = bp === currentProfileId;
+        if (aSelf !== bSelf) return aSelf ? -1 : 1;
+        return String(a.fullName || a.email || '').localeCompare(String(b.fullName || b.email || ''));
       })
       .slice(0, 12);
   }, [users, currentProfileId, directSearch]);
@@ -104,13 +125,16 @@ const MessagerieModule: React.FC = () => {
 
   const dedupeIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
   const renderContentWithMentions = useCallback((content: string) => {
-    const parts = content.split(/(\s+)/);
+    const parts = content.split(/(@[^\s@]+)/g);
     return (
       <>
         {parts.map((part, idx) => {
-          if (/^@[a-zA-Z0-9._-]+$/.test(part.trim())) {
+          if (/^@[^\s@]+$/.test(part)) {
             return (
-              <span key={`${part}-${idx}`} className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 mr-1">
+              <span
+                key={`${part}-${idx}`}
+                className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-800"
+              >
                 {part}
               </span>
             );
@@ -124,38 +148,26 @@ const MessagerieModule: React.FC = () => {
     setter((prev) => (prev.some((m) => m.id === next.id) ? prev : [...prev, next]));
   }, []);
 
-  const extractMentionedProfileIds = useCallback((content: string) => {
-    const mentionTokens = Array.from(content.matchAll(/@([a-zA-Z0-9._-]+)/g)).map((m) => m[1].toLowerCase());
-    if (mentionTokens.length === 0) return [];
-    const mentioned = profiles
-      .filter((p) => {
-        const full = String(p.fullName || '').toLowerCase().replace(/\s+/g, '');
-        const emailPrefix = String(p.email || '').toLowerCase().split('@')[0];
-        return mentionTokens.some((t) => t === full || t === emailPrefix);
-      })
-      .map((p) => p.id);
-    return dedupeIds(mentioned);
-  }, [profiles]);
-
-  const notifyRecipients = useCallback(async (
-    recipientIds: string[],
-    action: 'created' | 'updated' | 'assigned' | 'requested_changes',
-    title: string,
-    message: string,
-    metadata?: Record<string, unknown>,
-  ) => {
-    const recipients = dedupeIds(recipientIds).filter((id) => id !== currentProfileId);
-    if (recipients.length === 0) return;
-    await NotificationService.notifyUsers(
-      recipients,
-      'info',
-      'system',
-      action,
-      title,
-      message,
-      { entityType: 'messaging', metadata },
-    );
-  }, [currentProfileId]);
+  const notifyRecipients = useCallback(
+    async (
+      recipientIds: string[],
+      action: NotificationAction,
+      title: string,
+      message: string,
+      metadata?: Record<string, unknown>,
+      notifType: NotificationType = 'info',
+    ) => {
+      const recipients = dedupeIds(recipientIds).filter((id) => id !== currentProfileId);
+      if (recipients.length === 0) return;
+      const entityId = metadata?.channelId || metadata?.threadId;
+      await NotificationService.notifyUsers(recipients, notifType, 'messagerie', action, title, message, {
+        entityType: 'messaging',
+        entityId: entityId ? String(entityId) : undefined,
+        metadata: { ...metadata, source: 'messagerie' },
+      });
+    },
+    [currentProfileId],
+  );
 
   const loadChannels = useCallback(async () => {
     if (!organizationId || !currentProfileId) return;
@@ -246,6 +258,37 @@ const MessagerieModule: React.FC = () => {
     loadChannels();
     loadThreads();
   }, [loadChannels, loadThreads]);
+
+  useEffect(() => {
+    setChannelMemberDraft([...activeChannelMembers]);
+  }, [activeChannelId, activeChannelMembers]);
+
+  useEffect(() => {
+    if (!organizationId || !currentProfileId || loading) return;
+    try {
+      const raw = sessionStorage.getItem(DEEPLINK_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { ts?: number; tab?: string; channelId?: string; threadId?: string };
+      if (!d.ts || Date.now() - d.ts > 120000) {
+        sessionStorage.removeItem(DEEPLINK_KEY);
+        return;
+      }
+      if (d.tab === 'channels') setTab('channels');
+      if (d.tab === 'direct') setTab('direct');
+      if (d.channelId) setActiveChannelId(String(d.channelId));
+      if (d.threadId) {
+        setTab('direct');
+        setActiveThreadId(String(d.threadId));
+      }
+      sessionStorage.removeItem(DEEPLINK_KEY);
+    } catch {
+      try {
+        sessionStorage.removeItem(DEEPLINK_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [organizationId, currentProfileId, loading, channels.length, threads.length]);
 
   useEffect(() => {
     try {
@@ -359,8 +402,9 @@ const MessagerieModule: React.FC = () => {
         memberIds,
         'created',
         isFr ? 'Nouveau canal créé' : 'New channel created',
-        isFr ? `Vous avez été ajouté au canal "${created.name}".` : `You were added to channel "${created.name}".`,
+        isFr ? `Vous avez été ajouté au canal « ${created.name} ».` : `You were added to channel "${created.name}".`,
         { channelId: created.id, channelName: created.name },
+        'info',
       );
     } catch (e: any) {
       const message = String(e?.message || '');
@@ -389,6 +433,23 @@ const MessagerieModule: React.FC = () => {
     await loadChannels();
   };
 
+  const persistChannelMembers = async () => {
+    if (!activeChannelId || !isAdminMessaging) return;
+    setSavingChannelMembers(true);
+    setError(null);
+    try {
+      const withCreator = dedupeIds([currentProfileId, ...channelMemberDraft]);
+      await messagingService.setChannelMembers(activeChannelId, withCreator);
+      const members = await messagingService.listChannelMembers(activeChannelId);
+      setActiveChannelMembers(members);
+      setShowChannelMembersEditor(false);
+    } catch (e: any) {
+      setError(e?.message || (isFr ? 'Impossible de mettre à jour les membres.' : 'Could not update members.'));
+    } finally {
+      setSavingChannelMembers(false);
+    }
+  };
+
   const sendChannelText = async () => {
     if (!organizationId || !activeChannelId || !currentProfileId || !channelText.trim()) return;
     const content = channelText.trim();
@@ -403,14 +464,55 @@ const MessagerieModule: React.FC = () => {
     });
     appendMessageUnique(setChannelMessages, created);
     setChannelText('');
-    const mentionIds = extractMentionedProfileIds(content);
-    await notifyRecipients(
-      dedupeIds([...activeChannelMembers, ...mentionIds]),
-      mentionIds.length > 0 ? 'requested_changes' : 'updated',
-      mentionIds.length > 0 ? (isFr ? 'Vous avez été mentionné' : 'You were mentioned') : (isFr ? 'Nouveau message canal' : 'New channel message'),
-      isFr ? `Nouveau message dans "${activeChannel?.name || 'canal'}".` : `New message in "${activeChannel?.name || 'channel'}".`,
-      { channelId: activeChannelId, messageId: created.id },
-    );
+    const mentionProfiles: messagingMentions.MentionProfile[] = profiles.map((p) => ({
+      id: p.id,
+      fullName: p.fullName,
+      email: p.email,
+    }));
+    const broadcast = messagingMentions.isBroadcastMention(content);
+    const mentionIds = messagingMentions.extractMentionedProfileIds(content, mentionProfiles, {
+      onlyAmongMemberIds: activeChannelMembers,
+    });
+    const others = activeChannelMembers.filter((id) => id !== currentProfileId);
+    const snip = snippetText(content);
+    const senderLabel = getDisplayName(currentProfileId);
+    const chName = activeChannel?.name || (isFr ? 'canal' : 'channel');
+    const baseMeta = { channelId: activeChannelId, channelName: chName, messageId: created.id };
+
+    if (broadcast) {
+      await notifyRecipients(
+        others,
+        'updated',
+        isFr ? `Canal « ${chName} » — @tous` : `Channel "${chName}" — @all`,
+        `${senderLabel}: ${snip}`,
+        { ...baseMeta, kind: 'channel_broadcast' },
+        'info',
+      );
+    } else {
+      const mentioned = mentionIds.filter((id) => id !== currentProfileId && activeChannelMembers.includes(id));
+      const mentionSet = new Set(mentioned);
+      const rest = others.filter((id) => !mentionSet.has(id));
+      if (mentioned.length > 0) {
+        await notifyRecipients(
+          mentioned,
+          'requested_changes',
+          isFr ? 'Mention dans un canal' : 'Mention in channel',
+          isFr ? `${senderLabel} dans #${chName} : ${snip}` : `${senderLabel} in #${chName}: ${snip}`,
+          { ...baseMeta, kind: 'mention' },
+          'warning',
+        );
+      }
+      if (rest.length > 0) {
+        await notifyRecipients(
+          rest,
+          'updated',
+          isFr ? 'Nouveau message sur le canal' : 'New channel message',
+          isFr ? `#${chName} — ${senderLabel} : ${snip}` : `#${chName} — ${senderLabel}: ${snip}`,
+          { ...baseMeta, kind: 'channel_message' },
+          'info',
+        );
+      }
+    }
   };
 
   const sendChannelVoice = async () => {
@@ -431,8 +533,11 @@ const MessagerieModule: React.FC = () => {
       activeChannelMembers,
       'updated',
       isFr ? 'Nouveau vocal canal' : 'New channel voice message',
-      isFr ? `Un message vocal a été envoyé dans "${activeChannel?.name || 'canal'}".` : `A voice message was sent in "${activeChannel?.name || 'channel'}".`,
-      { channelId: activeChannelId, messageId: created.id },
+      isFr
+        ? `${getDisplayName(currentProfileId)} — vocal dans « ${activeChannel?.name || 'canal'} »`
+        : `${getDisplayName(currentProfileId)} — voice in "${activeChannel?.name || 'channel'}"`,
+      { channelId: activeChannelId, messageId: created.id, kind: 'channel_voice' },
+      'info',
     );
   };
 
@@ -454,8 +559,11 @@ const MessagerieModule: React.FC = () => {
       activeChannelMembers,
       'updated',
       isFr ? 'Nouveau fichier canal' : 'New channel file',
-      isFr ? `Un fichier a été partagé dans "${activeChannel?.name || 'canal'}".` : `A file was shared in "${activeChannel?.name || 'channel'}".`,
-      { channelId: activeChannelId, messageId: created.id },
+      isFr
+        ? `${getDisplayName(currentProfileId)} — fichier dans « ${activeChannel?.name || 'canal'} » : ${channelFile.name}`
+        : `${getDisplayName(currentProfileId)} — file in "${activeChannel?.name || 'channel'}": ${channelFile.name}`,
+      { channelId: activeChannelId, messageId: created.id, kind: 'channel_file' },
+      'info',
     );
   };
 
@@ -506,12 +614,27 @@ const MessagerieModule: React.FC = () => {
     appendMessageUnique(setDirectMessages, created);
     setDirectText('');
     const recipients = activeThread?.memberIds || [];
+    const mp: messagingMentions.MentionProfile[] = profiles.map((p) => ({
+      id: p.id,
+      fullName: p.fullName,
+      email: p.email,
+    }));
+    const mentionInThread = messagingMentions.extractMentionedProfileIds(content, mp, { onlyAmongMemberIds: recipients });
+    const others = recipients.filter((id) => id !== currentProfileId);
+    const mentionHit = others.some((id) => mentionInThread.includes(id));
     await notifyRecipients(
       recipients,
-      'updated',
-      isFr ? 'Nouveau message direct' : 'New direct message',
-      isFr ? `Vous avez un nouveau message de ${getDisplayName(currentProfileId)}.` : `You have a new message from ${getDisplayName(currentProfileId)}.`,
-      { threadId: activeThreadId, messageId: created.id },
+      mentionHit ? 'requested_changes' : 'updated',
+      mentionHit
+        ? isFr
+          ? 'Mention — message direct'
+          : 'Mention — direct message'
+        : isFr
+          ? 'Nouveau message direct'
+          : 'New direct message',
+      `${getDisplayName(currentProfileId)}: ${snippetText(content)}`,
+      { threadId: activeThreadId, messageId: created.id, kind: 'direct_text' },
+      mentionHit ? 'warning' : 'info',
     );
   };
 
@@ -534,8 +657,9 @@ const MessagerieModule: React.FC = () => {
       recipients,
       'updated',
       isFr ? 'Nouveau vocal direct' : 'New direct voice message',
-      isFr ? `Vous avez un nouveau message vocal de ${getDisplayName(currentProfileId)}.` : `You have a new voice message from ${getDisplayName(currentProfileId)}.`,
-      { threadId: activeThreadId, messageId: created.id },
+      `${getDisplayName(currentProfileId)} — ${isFr ? 'message vocal' : 'voice message'}`,
+      { threadId: activeThreadId, messageId: created.id, kind: 'direct_voice' },
+      'info',
     );
   };
 
@@ -558,29 +682,95 @@ const MessagerieModule: React.FC = () => {
       recipients,
       'updated',
       isFr ? 'Nouveau fichier direct' : 'New direct file',
-      isFr ? `Vous avez reçu un fichier de ${getDisplayName(currentProfileId)}.` : `You received a file from ${getDisplayName(currentProfileId)}.`,
-      { threadId: activeThreadId, messageId: created.id },
+      `${getDisplayName(currentProfileId)} — ${directFile.name}`,
+      { threadId: activeThreadId, messageId: created.id, kind: 'direct_file' },
+      'info',
     );
   };
 
   const threadLabel = (thread: messagingService.ChatDirectThread) => {
     const others = thread.memberIds.filter((m) => m !== currentProfileId);
+    if (others.length === 0 && thread.memberIds.length === 1 && thread.memberIds[0] === currentProfileId) {
+      return isFr ? 'Moi — notes / brouillon' : 'Me — notes / draft';
+    }
     const names = others.map((id) => userByProfileId.get(id)?.fullName || userByProfileId.get(id)?.email || id);
     return names.join(', ') || (isFr ? 'Conversation' : 'Conversation');
   };
 
+  const formatMsgTime = useCallback((iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    return sameDay
+      ? d.toLocaleTimeString(isFr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString(isFr ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short' });
+  }, [isFr]);
+
+  const filteredChannels = useMemo(() => {
+    const q = listSearch.trim().toLowerCase();
+    if (!q) return channels;
+    return channels.filter((c) => c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q));
+  }, [channels, listSearch]);
+
+  const filteredThreads = useMemo(() => {
+    const q = listSearch.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((t) => {
+      const others = t.memberIds.filter((m) => m !== currentProfileId);
+      let label: string;
+      if (others.length === 0 && t.memberIds.length === 1 && t.memberIds[0] === currentProfileId) {
+        label = isFr ? 'Moi — notes / brouillon' : 'Me — notes / draft';
+      } else {
+        const names = others.map((id) => userByProfileId.get(id)?.fullName || userByProfileId.get(id)?.email || id);
+        label = names.join(', ') || (isFr ? 'Conversation' : 'Conversation');
+      }
+      return label.toLowerCase().includes(q);
+    });
+  }, [threads, listSearch, currentProfileId, userByProfileId, isFr]);
+
+  const avatarForProfile = useCallback(
+    (profileId: string) => {
+      const u = userByProfileId.get(profileId);
+      const url = u?.avatar;
+      const label = getDisplayName(profileId).slice(0, 2).toUpperCase();
+      if (url) {
+        return (
+          <img src={url} alt="" className="h-10 w-10 rounded-full object-cover border border-slate-200 shrink-0" />
+        );
+      }
+      return (
+        <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/80 flex items-center justify-center text-xs font-semibold shrink-0">
+          {label}
+        </div>
+      );
+    },
+    [userByProfileId, getDisplayName],
+  );
+
+  const directThreadPreviewId = useMemo(() => {
+    if (!activeThread || tab !== 'direct') return null;
+    const others = activeThread.memberIds.filter((m) => m !== currentProfileId);
+    return others[0] || activeThread.memberIds[0] || null;
+  }, [activeThread, currentProfileId, tab]);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 text-slate-900">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
-          <i className="fas fa-envelope text-slate-600" />
-          {isFr ? 'Messagerie' : 'Messaging'}
-        </h1>
-        <p className="text-sm text-slate-600 mt-1">
-          {isFr
-            ? 'Canaux dynamiques, conversations directes, messages texte/liens/vocaux.'
-            : 'Dynamic channels, direct threads, text/link/voice messaging.'}
-        </p>
+    <div className="text-slate-900 px-2 sm:px-4 py-4 sm:py-6 max-w-[1680px] mx-auto">
+      <header className="mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white text-sm">
+              <i className="fas fa-comments" />
+            </span>
+            {isFr ? 'Messagerie' : 'Messaging'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+            {isFr
+              ? 'Canaux, messages directs et mentions — même esprit qu’une inbox moderne, aux couleurs COYA.'
+              : 'Channels, direct messages and mentions — a modern inbox layout with COYA branding.'}
+          </p>
+        </div>
       </header>
       {error && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -588,7 +778,8 @@ const MessagerieModule: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex gap-1">
+      {/* Mobile : onglets */}
+      <div className="flex lg:hidden gap-2 mb-3 p-1 bg-slate-100 rounded-xl border border-slate-200">
         {[
           { id: 'channels' as Tab, label: isFr ? 'Canaux' : 'Channels', icon: 'fa-hashtag' },
           { id: 'direct' as Tab, label: isFr ? 'Direct' : 'Direct', icon: 'fa-comment-dots' },
@@ -597,8 +788,8 @@ const MessagerieModule: React.FC = () => {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-              tab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+              tab === t.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600'
             }`}
           >
             <i className={`fas ${t.icon}`} />
@@ -607,30 +798,151 @@ const MessagerieModule: React.FC = () => {
         ))}
       </div>
 
-      {tab === 'channels' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <aside className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isFr ? 'Canaux' : 'Channels'}</span>
-              {loading && <i className="fas fa-spinner fa-spin text-slate-400" />}
+      <div className="flex rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm min-h-[min(680px,82vh)] flex-col lg:flex-row">
+        {/* Rail — charte COYA : fond slate-900, actif emerald */}
+        <nav
+          className="hidden lg:flex flex-col items-center py-5 gap-1 w-[56px] shrink-0 bg-slate-900 border-r border-slate-800"
+          aria-label={isFr ? 'Navigation messagerie' : 'Messaging navigation'}
+        >
+          <button
+            type="button"
+            onClick={() => setTab('channels')}
+            title={isFr ? 'Canaux' : 'Channels'}
+            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+              tab === 'channels' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <i className="fas fa-hashtag text-lg" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('direct')}
+            title={isFr ? 'Messages directs' : 'Direct messages'}
+            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+              tab === 'direct' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <i className="fas fa-comment-dots text-lg" />
+          </button>
+          <div className="flex-1 min-h-4" />
+          <div className="w-9 h-9 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-[10px] font-semibold text-slate-200">
+            {getDisplayName(currentProfileId).slice(0, 2).toUpperCase() || '?'}
+          </div>
+        </nav>
+
+        {/* Colonne navigation secondaire (style inbox) */}
+        <aside className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-slate-200 bg-slate-50/90">
+          <div className="p-4 border-b border-slate-200">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{isFr ? 'Espace' : 'Workspace'}</p>
+            <p className="text-lg font-semibold text-slate-900 mt-0.5">{isFr ? 'Boîte de réception' : 'Inbox'}</p>
+          </div>
+          <div className="p-2 space-y-0.5 flex-1 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setTab('channels')}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
+                tab === 'channels' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:bg-white/60'
+              }`}
+            >
+              <i className="fas fa-hashtag w-5 text-slate-500" />
+              {isFr ? 'Canaux' : 'Channels'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('direct')}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
+                tab === 'direct' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:bg-white/60'
+              }`}
+            >
+              <i className="fas fa-comment-dots w-5 text-slate-500" />
+              {isFr ? 'Direct' : 'Direct'}
+            </button>
+            <div className="pt-3 mt-2 border-t border-slate-200/80">
+              <p className="px-3 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">{isFr ? 'Raccourcis' : 'Shortcuts'}</p>
+              <p className="px-3 py-2 text-xs text-slate-500 leading-relaxed">
+                {isFr ? 'Utilisez @prénom ou @everyone dans un canal pour notifier.' : 'Use @name or @everyone in channels to notify.'}
+              </p>
             </div>
-            <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-              {channels.map((c) => (
+          </div>
+          <div className="p-3 border-t border-slate-200 bg-white/50">
+            <p className="text-[10px] font-semibold uppercase text-slate-400 mb-2">{isFr ? 'Équipe' : 'Team'}</p>
+            <div className="space-y-1.5 max-h-28 overflow-y-auto">
+              {users.slice(0, 6).map((u) => {
+                const pid = String((u as any).profileId || u.id || '');
+                return (
+                  <button
+                    key={pid}
+                    type="button"
+                    onClick={() => {
+                      setTab('direct');
+                      void openDirectThread(pid);
+                    }}
+                    className="w-full flex items-center gap-2 text-left rounded-lg px-1 py-1 hover:bg-slate-100"
+                  >
+                    {avatarForProfile(pid)}
+                    <span className="text-xs text-slate-700 truncate">{u.fullName || u.email}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+      {tab === 'channels' && (
+        <>
+        <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 lg:max-w-none max-h-[42vh] lg:max-h-none overflow-hidden min-h-0">
+            <div className="px-3 py-2.5 border-b border-slate-200 bg-white/90 space-y-2 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isFr ? 'Canaux' : 'Channels'}</span>
+                <span className="text-[11px] text-slate-400 tabular-nums">{filteredChannels.length}</span>
+              </div>
+              <div className="relative">
+                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                <input
+                  type="search"
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder={isFr ? 'Rechercher un canal…' : 'Search channels…'}
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm"
+                />
+              </div>
+              {loading && (
+                <p className="text-xs text-slate-500 flex items-center gap-2">
+                  <i className="fas fa-spinner fa-spin" /> {isFr ? 'Chargement…' : 'Loading…'}
+                </p>
+              )}
+            </div>
+            <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100/80">
+              {filteredChannels.map((c) => (
                 <li key={c.id}>
                   <button
                     type="button"
                     onClick={() => setActiveChannelId(c.id)}
-                    className={`w-full text-left px-4 py-3 text-sm transition-colors ${
-                      activeChannelId === c.id ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                    className={`w-full text-left px-3 py-2.5 flex gap-3 transition-colors ${
+                      activeChannelId === c.id
+                        ? 'bg-emerald-50/90 border-l-[3px] border-emerald-600 pl-[calc(0.75rem-3px)]'
+                        : 'border-l-[3px] border-transparent hover:bg-white/80'
                     }`}
                   >
-                    {c.name}
-                    <span className="block text-xs text-slate-500 font-normal mt-0.5">{c.description || '—'}</span>
+                    <div className="h-10 w-10 rounded-xl bg-slate-200/90 text-slate-600 flex items-center justify-center shrink-0 text-sm font-bold">
+                      #
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
+                        {c.updatedAt ? (
+                          <span className="text-[11px] text-slate-400 shrink-0 tabular-nums">{formatMsgTime(c.updatedAt)}</span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">{c.description || (isFr ? 'Canal d’équipe' : 'Team channel')}</p>
+                    </div>
                   </button>
                 </li>
               ))}
-              {channels.length === 0 && (
-                <li className="px-4 py-6 text-sm text-slate-500">{isFr ? 'Aucun canal' : 'No channel'}</li>
+              {filteredChannels.length === 0 && (
+                <li className="px-4 py-8 text-sm text-slate-500 text-center">
+                  {channels.length === 0 ? (isFr ? 'Aucun canal' : 'No channel') : isFr ? 'Aucun résultat' : 'No results'}
+                </li>
               )}
             </ul>
             {isAdminMessaging && (
@@ -709,10 +1021,11 @@ const MessagerieModule: React.FC = () => {
             )}
           </aside>
 
-          <main className="lg:col-span-2 bg-white rounded-xl border border-slate-200 flex flex-col min-h-[520px]">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-slate-900">{activeChannel?.name || (isFr ? 'Canal' : 'Channel')}</p>
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[280px] lg:min-h-[min(560px,78vh)]">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Canal' : 'Channel'}</p>
+                <p className="font-semibold text-slate-900 truncate">{activeChannel?.name || (isFr ? 'Canal' : 'Channel')}</p>
                 <p className="text-xs text-slate-500">
                   {activeChannelMembers.length} {isFr ? 'membre(s)' : 'member(s)'}
                 </p>
@@ -728,23 +1041,84 @@ const MessagerieModule: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+            {activeChannel && isAdminMessaging && (
+              <div className="border-b border-slate-200 px-4 py-2 bg-slate-50/90">
+                <button
+                  type="button"
+                  onClick={() => setShowChannelMembersEditor((v) => !v)}
+                  className="text-xs font-semibold text-slate-700 hover:text-slate-900"
+                >
+                  {showChannelMembersEditor ? '▼ ' : '▸ '}
+                  {isFr ? 'Membres du canal' : 'Channel members'} ({activeChannelMembers.length})
+                </button>
+                {showChannelMembersEditor && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-[11px] text-slate-500">
+                      {isFr
+                        ? 'Cochez les personnes ayant accès au canal (les admins peuvent poster selon le type de canal).'
+                        : 'Check people who belong to this channel.'}
+                    </p>
+                    <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 space-y-1">
+                      {users.map((u) => {
+                        const pid = String((u as any).profileId || u.id || '');
+                        return (
+                          <label key={pid} className="flex items-center gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={channelMemberDraft.includes(pid)}
+                              onChange={(e) =>
+                                setChannelMemberDraft((prev) =>
+                                  e.target.checked ? dedupeIds([...prev, pid]) : prev.filter((x) => x !== pid),
+                                )
+                              }
+                            />
+                            <span>{u.fullName || u.name || u.email}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={persistChannelMembers}
+                      disabled={savingChannelMembers}
+                      className="rounded-lg bg-emerald-600 text-white text-xs px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {savingChannelMembers ? (isFr ? 'Enregistrement…' : 'Saving…') : isFr ? 'Enregistrer les membres' : 'Save members'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto bg-slate-50/40">
               {channelMessages.map((m) => {
                 const isMe = m.senderId === currentProfileId;
                 const sender = userByProfileId.get(m.senderId);
                 return (
                   <div
                     key={m.id}
-                    className={`rounded-xl px-3 py-2 max-w-[88%] text-sm ${isMe ? 'ml-auto bg-slate-900 text-white' : 'bg-slate-100 text-slate-800'}`}
+                    className={`rounded-2xl px-3 py-2 max-w-[88%] text-sm shadow-sm ${
+                      isMe
+                        ? 'ml-auto bg-emerald-100 text-slate-900 border border-emerald-200/90'
+                        : 'bg-white text-slate-800 border border-slate-200'
+                    }`}
                   >
-                    <span className="block text-[10px] uppercase opacity-70 mb-1">{sender?.fullName || sender?.email || m.senderId}</span>
+                    <span
+                      className={`block text-[10px] uppercase font-medium mb-1 ${isMe ? 'text-emerald-900/65' : 'text-slate-500'}`}
+                    >
+                      {sender?.fullName || sender?.email || m.senderId}
+                    </span>
                     {m.messageType === 'voice' && m.attachmentUrl ? (
                       <audio controls src={m.attachmentUrl} className="w-full" />
                     ) : (
                       <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(m.content)}</p>
                     )}
                     {m.messageType !== 'voice' && m.attachmentUrl && (
-                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className={`text-xs underline ${isMe ? 'text-white/90' : 'text-slate-700'}`}>
+                      <a
+                        href={m.attachmentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`text-xs underline ${isMe ? 'text-emerald-800' : 'text-slate-700'}`}
+                      >
                         {isFr ? 'Pièce jointe' : 'Attachment'}
                       </a>
                     )}
@@ -755,21 +1129,31 @@ const MessagerieModule: React.FC = () => {
                 <p className="text-sm text-slate-500">{isFr ? 'Aucun message pour le moment.' : 'No message yet.'}</p>
               )}
             </div>
-            <div className="p-3 border-t border-slate-200 space-y-2">
-              <div className="flex gap-2">
+            <div className="p-3 border-t border-slate-200 space-y-2 shrink-0 bg-white">
+              <div className="flex gap-2 items-center">
                 <input
                   type="text"
                   value={channelText}
                   onChange={(e) => setChannelText(e.target.value)}
-                  placeholder={isFr ? 'Écrire un message…' : 'Write a message…'}
-                  className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  placeholder={isFr ? 'Écrivez votre message…' : 'Type your message…'}
+                  className="flex-1 min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
                   disabled={!activeChannelId}
                 />
-                <button type="button" onClick={sendChannelText} disabled={!activeChannelId || !channelText.trim()} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 hover:bg-emerald-700">
-                  <i className="fas fa-paper-plane mr-2" />
-                  {isFr ? 'Messager' : 'Message'}
+                <button
+                  type="button"
+                  onClick={sendChannelText}
+                  disabled={!activeChannelId || !channelText.trim()}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 hover:bg-slate-800"
+                >
+                  <i className="fas fa-paper-plane sm:mr-2" />
+                  <span className="hidden sm:inline">{isFr ? 'Envoyer' : 'Send'}</span>
                 </button>
               </div>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                {isFr
+                  ? 'Mentions : @prénom, partie de l’e-mail avant @, ou @everyone / @canal / @tous pour notifier tout le canal. Chaque message envoie une notification aux membres (temps réel si activé sur la table notifications).'
+                  : 'Mentions: @firstname, email local-part, or @everyone / @channel / @tous to ping the whole channel. Each message notifies members (real-time if notifications replication is on).'}
+              </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                 <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
                   <i className="fas fa-paperclip mr-1.5" />
@@ -790,71 +1174,176 @@ const MessagerieModule: React.FC = () => {
               </div>
             </div>
           </main>
-        </div>
+
+          <aside className="hidden xl:flex flex-col w-[260px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0">
+            {activeChannel ? (
+              <>
+                <div className="p-4 border-b border-slate-200 shrink-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{isFr ? 'À propos' : 'About'}</p>
+                  <h2 className="text-lg font-semibold text-slate-900 mt-1 leading-tight">{activeChannel.name}</h2>
+                  {activeChannel.description ? (
+                    <p className="text-sm text-slate-600 mt-2 leading-relaxed">{activeChannel.description}</p>
+                  ) : null}
+                  <span className="inline-block mt-3 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-200/80">
+                    {activeChannel.type === 'public'
+                      ? isFr
+                        ? 'Public'
+                        : 'Public'
+                      : activeChannel.type === 'private'
+                        ? isFr
+                          ? 'Privé'
+                          : 'Private'
+                        : isFr
+                          ? 'Annonce'
+                          : 'Announcement'}
+                  </span>
+                </div>
+                <div className="p-4 flex-1 min-h-0 overflow-y-auto">
+                  <p className="text-[11px] font-semibold uppercase text-slate-400 mb-3">
+                    {isFr ? 'Membres' : 'Members'} ({activeChannelMembers.length})
+                  </p>
+                  <ul className="space-y-2.5">
+                    {activeChannelMembers.slice(0, 14).map((pid) => (
+                      <li key={pid} className="flex items-center gap-2.5 text-sm text-slate-800">
+                        <div className="scale-90 origin-left">{avatarForProfile(pid)}</div>
+                        <span className="truncate font-medium">{getDisplayName(pid)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <div className="p-4 text-sm text-slate-500">{isFr ? 'Sélectionnez un canal dans la liste.' : 'Select a channel from the list.'}</div>
+            )}
+          </aside>
+        </>
       )}
 
       {tab === 'direct' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <aside className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{isFr ? 'Nouveau direct' : 'New direct'}</p>
-              <input
-                type="text"
-                value={directSearch}
-                onChange={(e) => setDirectSearch(e.target.value)}
-                placeholder={isFr ? 'Rechercher un utilisateur…' : 'Search user…'}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              />
-              <div className="mt-2 max-h-36 overflow-y-auto space-y-1">
-                {availableDirectUsers.map((u) => {
-                  const pid = String((u as any).profileId || u.id || '');
-                  return (
-                    <button
-                      key={pid}
-                      type="button"
-                      disabled={openingThread || !currentProfileId || !organizationId}
-                      onClick={() => openDirectThread(pid)}
-                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {u.fullName || u.name || u.email}
-                    </button>
-                  );
-                })}
+        <>
+          <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 max-h-[42vh] lg:max-h-none overflow-hidden min-h-0">
+            <div className="px-3 py-2.5 border-b border-slate-200 bg-white/90 space-y-3 shrink-0">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{isFr ? 'Nouveau message' : 'New message'}</p>
+                <p className="text-[11px] text-slate-500 mb-2">{isFr ? 'Vous pouvez vous choisir pour des notes perso.' : 'Pick yourself for personal notes.'}</p>
+                <input
+                  type="text"
+                  value={directSearch}
+                  onChange={(e) => setDirectSearch(e.target.value)}
+                  placeholder={isFr ? 'Rechercher une personne…' : 'Search people…'}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                />
+                <div className="mt-2 max-h-28 overflow-y-auto space-y-0.5">
+                  {availableDirectUsers.map((u) => {
+                    const pid = String((u as any).profileId || u.id || '');
+                    const isSelf = pid === currentProfileId;
+                    return (
+                      <button
+                        key={pid}
+                        type="button"
+                        disabled={openingThread || !currentProfileId || !organizationId}
+                        onClick={() => void openDirectThread(pid)}
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        <span className="scale-75 origin-left shrink-0">{avatarForProfile(pid)}</span>
+                        <span className="truncate">
+                          {u.fullName || u.name || u.email}
+                          {isSelf ? <span className="ml-1 text-emerald-600 font-semibold">{isFr ? '(moi)' : '(me)'}</span> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="relative pt-2 border-t border-slate-100">
+                <i className="fas fa-search absolute left-3 top-[calc(50%+4px)] -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1.5 pl-0.5">{isFr ? 'Conversations' : 'Conversations'}</p>
+                <input
+                  type="search"
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder={isFr ? 'Filtrer les fils…' : 'Filter threads…'}
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm"
+                />
               </div>
             </div>
-            <ul className="divide-y divide-slate-100 max-h-[360px] overflow-y-auto">
-              {threads.map((t) => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveThreadId(t.id)}
-                    className={`w-full text-left px-4 py-3 text-sm transition-colors ${
-                      activeThreadId === t.id ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {threadLabel(t)}
-                  </button>
+            <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100/80">
+              {filteredThreads.map((t) => {
+                const primary =
+                  t.memberIds.filter((m) => m !== currentProfileId)[0] || t.memberIds[0] || currentProfileId;
+                const active = activeThreadId === t.id;
+                return (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveThreadId(t.id)}
+                      className={`w-full text-left px-3 py-2.5 flex gap-3 transition-colors ${
+                        active
+                          ? 'bg-emerald-50/90 border-l-[3px] border-emerald-600 pl-[calc(0.75rem-3px)]'
+                          : 'border-l-[3px] border-transparent hover:bg-white/80'
+                      }`}
+                    >
+                      {primary ? (
+                        <div className="shrink-0">{avatarForProfile(primary)}</div>
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs shrink-0">?</div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={`text-sm truncate ${active ? 'font-semibold text-slate-900' : 'font-medium text-slate-800'}`}>
+                            {threadLabel(t)}
+                          </p>
+                          {t.updatedAt ? (
+                            <span className="text-[11px] text-slate-400 shrink-0 tabular-nums">{formatMsgTime(t.updatedAt)}</span>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">
+                          {isFr ? 'Message direct' : 'Direct message'}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+              {filteredThreads.length === 0 && (
+                <li className="px-4 py-8 text-sm text-slate-500 text-center">
+                  {threads.length === 0
+                    ? isFr
+                      ? 'Aucune conversation'
+                      : 'No conversation'
+                    : isFr
+                      ? 'Aucun résultat'
+                      : 'No results'}
                 </li>
-              ))}
-              {threads.length === 0 && (
-                <li className="px-4 py-6 text-sm text-slate-500">{isFr ? 'Aucune conversation directe' : 'No direct conversation'}</li>
               )}
             </ul>
           </aside>
-          <main className="lg:col-span-2 bg-white rounded-xl border border-slate-200 flex flex-col min-h-[520px]">
-            <div className="px-4 py-3 border-b border-slate-200 font-semibold text-slate-900">
-              {activeThread ? threadLabel(activeThread) : (isFr ? 'Conversation directe' : 'Direct conversation')}
+
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[280px] lg:min-h-[min(560px,78vh)]">
+            <div className="px-4 py-3 border-b border-slate-200 shrink-0 bg-white">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Direct' : 'Direct'}</p>
+              <p className="font-semibold text-slate-900 truncate">
+                {activeThread ? threadLabel(activeThread) : isFr ? 'Conversation' : 'Conversation'}
+              </p>
             </div>
-            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto bg-slate-50/40">
               {directMessages.map((m) => {
                 const isMe = m.senderId === currentProfileId;
                 const sender = userByProfileId.get(m.senderId);
                 return (
                   <div
                     key={m.id}
-                    className={`rounded-xl px-3 py-2 max-w-[88%] text-sm ${isMe ? 'ml-auto bg-slate-900 text-white' : 'bg-slate-100 text-slate-800'}`}
+                    className={`rounded-2xl px-3 py-2 max-w-[88%] text-sm shadow-sm ${
+                      isMe
+                        ? 'ml-auto bg-emerald-100 text-slate-900 border border-emerald-200/90'
+                        : 'bg-white text-slate-800 border border-slate-200'
+                    }`}
                   >
-                    <span className="block text-[10px] uppercase opacity-70 mb-1">{sender?.fullName || sender?.email || m.senderId}</span>
+                    <span
+                      className={`block text-[10px] uppercase font-medium mb-1 ${isMe ? 'text-emerald-900/65' : 'text-slate-500'}`}
+                    >
+                      {sender?.fullName || sender?.email || m.senderId}
+                    </span>
                     {m.messageType === 'voice' && m.attachmentUrl ? (
                       <audio controls src={m.attachmentUrl} className="w-full" />
                     ) : (
@@ -867,43 +1356,101 @@ const MessagerieModule: React.FC = () => {
                 <p className="text-sm text-slate-500">{isFr ? 'Pas encore de message.' : 'No message yet.'}</p>
               )}
             </div>
-            <div className="p-3 border-t border-slate-200 space-y-2">
-              <div className="flex gap-2">
+            <div className="p-3 border-t border-slate-200 space-y-2 shrink-0 bg-white">
+              <div className="flex gap-2 items-center">
                 <input
                   type="text"
                   value={directText}
                   onChange={(e) => setDirectText(e.target.value)}
-                  placeholder={isFr ? 'Écrire un message…' : 'Write a message…'}
-                  className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  placeholder={isFr ? 'Écrivez votre message…' : 'Type your message…'}
+                  className="flex-1 min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
                   disabled={!activeThreadId}
                 />
-                <button type="button" onClick={sendDirectText} disabled={!activeThreadId || !directText.trim()} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 hover:bg-emerald-700">
-                  <i className="fas fa-paper-plane mr-2" />
-                  {isFr ? 'Messager' : 'Message'}
+                <button
+                  type="button"
+                  onClick={sendDirectText}
+                  disabled={!activeThreadId || !directText.trim()}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 hover:bg-slate-800"
+                >
+                  <i className="fas fa-paper-plane sm:mr-2" />
+                  <span className="hidden sm:inline">{isFr ? 'Envoyer' : 'Send'}</span>
                 </button>
               </div>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                {isFr
+                  ? 'Les messages directs notifient les autres participants. @prénom ou partie d’e-mail pour une mention prioritaire.'
+                  : 'Direct messages notify others. @firstname or email local-part for a priority mention.'}
+              </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                 <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
                   <i className="fas fa-paperclip mr-1.5" />
-                  {isFr ? 'Ajouter fichier' : 'Add file'}
+                  {isFr ? 'Fichier' : 'File'}
                   <input type="file" className="hidden" onChange={(e) => setDirectFile(e.target.files?.[0] || null)} />
                 </label>
-                <button type="button" onClick={sendDirectFile} disabled={!activeThreadId || !directFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
-                  {isFr ? 'Envoyer fichier' : 'Send file'}
+                <button
+                  type="button"
+                  onClick={sendDirectFile}
+                  disabled={!activeThreadId || !directFile}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium"
+                >
+                  {isFr ? 'Envoyer' : 'Send'}
                 </button>
                 <label className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50 font-medium">
                   <i className="fas fa-microphone mr-1.5" />
-                  {isFr ? 'Ajouter vocal' : 'Add voice'}
+                  {isFr ? 'Vocal' : 'Voice'}
                   <input type="file" accept="audio/*" className="hidden" onChange={(e) => setDirectVoiceFile(e.target.files?.[0] || null)} />
                 </label>
-                <button type="button" onClick={sendDirectVoice} disabled={!activeThreadId || !directVoiceFile} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium">
-                  {isFr ? 'Envoyer vocal' : 'Send voice'}
+                <button
+                  type="button"
+                  onClick={sendDirectVoice}
+                  disabled={!activeThreadId || !directVoiceFile}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-slate-50 font-medium"
+                >
+                  {isFr ? 'Envoyer' : 'Send'}
                 </button>
               </div>
             </div>
           </main>
-        </div>
+
+          <aside className="hidden xl:flex flex-col w-[260px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0">
+            {activeThread && directThreadPreviewId ? (
+              <>
+                <div className="p-4 border-b border-slate-200 flex flex-col items-center text-center shrink-0">
+                  <div className="mb-3 scale-125 origin-center">{avatarForProfile(directThreadPreviewId)}</div>
+                  <h2 className="text-base font-semibold text-slate-900 leading-tight px-1">{threadLabel(activeThread)}</h2>
+                  <p className="text-xs text-slate-500 mt-1 break-all px-1">
+                    {userByProfileId.get(directThreadPreviewId)?.email || ''}
+                  </p>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-900 px-2.5 py-1 font-medium border border-emerald-200/80">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                      {isFr ? 'Actif' : 'Active'}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4 flex-1 overflow-y-auto text-sm text-slate-600 space-y-3">
+                  {activeThread.updatedAt ? (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase text-slate-400">{isFr ? 'Dernière activité' : 'Last activity'}</p>
+                      <p className="mt-1">{formatMsgTime(activeThread.updatedAt)}</p>
+                    </div>
+                  ) : null}
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {isFr
+                      ? 'Les notifications in-app vous alertent des nouveaux messages et mentions.'
+                      : 'In-app notifications alert you to new messages and mentions.'}
+                  </p>
+                </div>
+              </>
+            ) : activeThread ? (
+              <div className="p-4 text-sm text-slate-600">{isFr ? 'Conversation personnelle (notes).' : 'Personal conversation (notes).'}</div>
+            ) : (
+              <div className="p-4 text-sm text-slate-500">{isFr ? 'Choisissez une conversation.' : 'Pick a conversation.'}</div>
+            )}
+          </aside>
+        </>
       )}
+      </div>
     </div>
   );
 };

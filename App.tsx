@@ -489,6 +489,27 @@ const App: React.FC = () => {
       return;
     }
 
+    if (type === 'messaging' || type === 'messagerie') {
+      const meta = (metadata || {}) as Record<string, unknown>;
+      try {
+        sessionStorage.setItem(
+          'coya.messaging.deeplink',
+          JSON.stringify({
+            v: 1,
+            ts: Date.now(),
+            tab: meta.channelId ? 'channels' : 'direct',
+            channelId: meta.channelId ? String(meta.channelId) : undefined,
+            threadId: meta.threadId ? String(meta.threadId) : undefined,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+      setPendingNotification(null);
+      handleSetView('messagerie');
+      return;
+    }
+
     setPendingNotification(null);
     handleSetView('dashboard');
   }, [handleSetView]);
@@ -2709,14 +2730,14 @@ const App: React.FC = () => {
     }
   }
 
-  const handleUpdateDocument = async (updatedDocument: Document) => {
+  const handleUpdateDocument = async (updatedDocument: Partial<Document> & { id: string }) => {
     setLoadingOperation('update_document');
     setIsLoading(true);
     try {
       const result = await DataAdapter.updateDocument(updatedDocument.id, updatedDocument);
       if (result) {
-        setDocuments(prev => prev.map(d => d.id === updatedDocument.id ? result : d));
-        if (user) {
+        setDocuments(prev => prev.map(d => (d.id === updatedDocument.id ? result : d)));
+        if (user && (updatedDocument.title !== undefined || updatedDocument.content !== undefined)) {
           AuditLogService.logAction({
             action: 'update',
             module: 'knowledge',
@@ -2724,7 +2745,7 @@ const App: React.FC = () => {
             entityId: updatedDocument.id,
             actor: user as any,
             metadata: {
-              summary: `${user.name} a mis à jour le document "${updatedDocument.title}"`
+              summary: `${user.name} a mis à jour le document « ${updatedDocument.title ?? result.title} »`
             }
           });
         }
@@ -2895,6 +2916,8 @@ const App: React.FC = () => {
       case 'knowledge_base':
         return <KnowledgeBase 
                     documents={documents} 
+                    users={users}
+                    projects={projects}
                     onAddDocument={handleAddDocument}
                     onUpdateDocument={handleUpdateDocument}
                     onDeleteDocument={handleDeleteDocument}

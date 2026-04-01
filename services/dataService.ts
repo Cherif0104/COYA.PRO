@@ -2309,6 +2309,7 @@ export class DataService {
       startedAt: row.started_at,
       endedAt: row.ended_at ?? null,
       durationMinutes: row.duration_minutes ?? null,
+      durationSeconds: row.duration_seconds ?? null,
       source: row.source ?? 'system',
       notes: row.notes ?? null,
       createdAt: row.created_at,
@@ -2465,7 +2466,15 @@ export class DataService {
     }
   }
 
-  static async listPresenceStatusEvents(params: { organizationId?: string; userId?: string; sessionId?: string; from?: string; to?: string }): Promise<{ data: PresenceStatusEvent[] | null; error: any }> {
+  static async listPresenceStatusEvents(params: {
+    organizationId?: string;
+    userId?: string;
+    sessionId?: string;
+    from?: string;
+    to?: string;
+    /** Si true avec organizationId seul : limite aux 365 derniers jours (évite chargements énormes) */
+    defaultRecentWindow?: boolean;
+  }): Promise<{ data: PresenceStatusEvent[] | null; error: any }> {
     if (isTableUnavailable('presence_status_events')) {
       return { data: [], error: null };
     }
@@ -2476,7 +2485,12 @@ export class DataService {
       if (params.sessionId) query = query.eq('presence_session_id', params.sessionId);
       if (params.from) query = query.gte('started_at', params.from);
       if (params.to) query = query.lte('started_at', params.to);
-      const { data, error } = await query;
+      if (params.organizationId && params.defaultRecentWindow !== false && !params.from && !params.sessionId) {
+        const d = new Date();
+        d.setDate(d.getDate() - 365);
+        query = query.gte('started_at', d.toISOString());
+      }
+      const { data, error } = await query.limit(8000);
       if (error) {
         if (handleOptionalTableError(error, 'presence_status_events', 'DataService.listPresenceStatusEvents')) {
           return { data: [], error: null };
@@ -2516,11 +2530,15 @@ export class DataService {
         .maybeSingle();
 
       if (active) {
+        const deltaMs = new Date(nowIso).getTime() - new Date(active.started_at).getTime();
+        const durationSeconds = Math.max(0, Math.floor(deltaMs / 1000));
+        const durationMinutes = Math.floor(durationSeconds / 60);
         await supabase
           .from('presence_status_events')
           .update({
             ended_at: nowIso,
-            duration_minutes: Math.max(0, Math.round((new Date(nowIso).getTime() - new Date(active.started_at).getTime()) / 60000)),
+            duration_minutes: durationMinutes,
+            duration_seconds: durationSeconds,
           })
           .eq('id', active.id);
       }
@@ -2566,11 +2584,15 @@ export class DataService {
         .limit(1)
         .maybeSingle();
       if (!active) return;
+      const deltaMs = new Date(endIso).getTime() - new Date(active.started_at).getTime();
+      const durationSeconds = Math.max(0, Math.floor(deltaMs / 1000));
+      const durationMinutes = Math.floor(durationSeconds / 60);
       await supabase
         .from('presence_status_events')
         .update({
           ended_at: endIso,
-          duration_minutes: Math.max(0, Math.round((new Date(endIso).getTime() - new Date(active.started_at).getTime()) / 60000)),
+          duration_minutes: durationMinutes,
+          duration_seconds: durationSeconds,
         })
         .eq('id', active.id);
     } catch {
@@ -3912,6 +3934,71 @@ export class DataService {
   }
 
   // ===== DOCUMENTS (KNOWLEDGE BASE) =====
+
+  static async getDocumentAcl(documentId: string): Promise<{
+    profileIds: string[];
+    departmentIds: string[];
+    projectIds: string[];
+  } | null> {
+    try {
+      const [p, d, j] = await Promise.all([
+        supabase.from('document_acl_profiles').select('profile_id').eq('document_id', documentId),
+        supabase.from('document_acl_departments').select('department_id').eq('document_id', documentId),
+        supabase.from('document_acl_projects').select('project_id').eq('document_id', documentId),
+      ]);
+      if (p.error && p.error.code !== 'PGRST116') console.warn('document_acl_profiles:', p.error.message);
+      if (d.error && d.error.code !== 'PGRST116') console.warn('document_acl_departments:', d.error.message);
+      if (j.error && j.error.code !== 'PGRST116') console.warn('document_acl_projects:', j.error.message);
+      return {
+        profileIds: (p.data || []).map((r: any) => String(r.profile_id)),
+        departmentIds: (d.data || []).map((r: any) => String(r.department_id)),
+        projectIds: (j.data || []).map((r: any) => String(r.project_id)),
+      };
+    } catch (e) {
+      console.warn('getDocumentAcl:', e);
+      return null;
+    }
+  }
+
+  static async replaceDocumentAcl(
+    documentId: string,
+    acl: { profileIds?: string[] | undefined; departmentIds?: string[] | undefined; projectIds?: string[] | undefined }
+  ): Promise<void> {
+    const profileIds = [...new Set((acl.profileIds || []).filter(Boolean))];
+    const departmentIds = [...new Set((acl.departmentIds || []).filter(Boolean))];
+    const projectIds = [...new Set((acl.projectIds || []).filter(Boolean))];
+
+    const del = async (table: string) => {
+      const { error } = await supabase.from(table).delete().eq('document_id', documentId);
+      if (error && !String(error.message || '').includes('does not exist') && error.code !== '42P01') {
+        console.warn(`replaceDocumentAcl delete ${table}:`, error.message);
+      }
+    };
+
+    await del('document_acl_profiles');
+    await del('document_acl_departments');
+    await del('document_acl_projects');
+
+    if (profileIds.length) {
+      const { error } = await supabase.from('document_acl_profiles').insert(
+        profileIds.map((profile_id) => ({ document_id: documentId, profile_id }))
+      );
+      if (error) console.warn('document_acl_profiles insert:', error.message);
+    }
+    if (departmentIds.length) {
+      const { error } = await supabase.from('document_acl_departments').insert(
+        departmentIds.map((department_id) => ({ document_id: documentId, department_id }))
+      );
+      if (error) console.warn('document_acl_departments insert:', error.message);
+    }
+    if (projectIds.length) {
+      const { error } = await supabase.from('document_acl_projects').insert(
+        projectIds.map((project_id) => ({ document_id: documentId, project_id }))
+      );
+      if (error) console.warn('document_acl_projects insert:', error.message);
+    }
+  }
+
   static async getDocuments() {
     try {
       const { data: currentUser } = await supabase.auth.getUser();
@@ -3970,7 +4057,7 @@ export class DataService {
       // Récupérer le profile.id et full_name pour created_by_id et created_by_name
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, organization_id')
         .eq('user_id', currentUser.user.id)
         .single();
 
@@ -3989,6 +4076,7 @@ export class DataService {
           category: document.category || null,
           tags: document.tags || null,
           is_public: document.isPublic ?? false,
+          organization_id: profile.organization_id ?? null,
           view_count: 0,
           version: 1,
           created_at: new Date().toISOString(),
@@ -4000,6 +4088,16 @@ export class DataService {
       if (error) {
         console.error('❌ Erreur création document:', error);
         throw error;
+      }
+
+      const docId = data?.id as string | undefined;
+      if (docId) {
+        const pub = document.isPublic ?? false;
+        await DataService.replaceDocumentAcl(docId, {
+          profileIds: pub ? [] : document.sharedProfileIds,
+          departmentIds: pub ? [] : document.sharedDepartmentIds,
+          projectIds: pub ? [] : document.sharedProjectIds,
+        });
       }
 
       console.log('✅ Document créé:', data.id);
@@ -4022,6 +4120,7 @@ export class DataService {
       if (updates.category !== undefined) updateData.category = updates.category || null;
       if (updates.tags !== undefined) updateData.tags = updates.tags || null;
       if (updates.isPublic !== undefined) updateData.is_public = updates.isPublic;
+      if (updates.viewCount !== undefined) updateData.view_count = updates.viewCount;
       // Incrémenter la version si le contenu change
       if (updates.content !== undefined) {
         const { data: currentDoc } = await supabase
@@ -4042,6 +4141,29 @@ export class DataService {
       if (error) {
         console.error('❌ Erreur mise à jour document:', error);
         throw error;
+      }
+
+      const syncAcl =
+        updates.sharedProfileIds !== undefined ||
+        updates.sharedDepartmentIds !== undefined ||
+        updates.sharedProjectIds !== undefined ||
+        (updates.isPublic !== undefined &&
+          (updates.title !== undefined ||
+            updates.content !== undefined ||
+            updates.description !== undefined ||
+            updates.category !== undefined ||
+            updates.tags !== undefined));
+      if (syncAcl && data?.id) {
+        const pub = updates.isPublic ?? (data as any).is_public ?? false;
+        if (pub) {
+          await DataService.replaceDocumentAcl(id, { profileIds: [], departmentIds: [], projectIds: [] });
+        } else {
+          await DataService.replaceDocumentAcl(id, {
+            profileIds: updates.sharedProfileIds,
+            departmentIds: updates.sharedDepartmentIds,
+            projectIds: updates.sharedProjectIds,
+          });
+        }
       }
 
       console.log('✅ Document mis à jour:', data.id);
@@ -4097,23 +4219,26 @@ export class DataService {
       }
 
       // La table notifications pointe vers profiles.id (et non auth.users.id)
-      let targetProfileId = rawUserId;
       const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (uuidLike.test(rawUserId)) {
+      let targetProfileId: string | null = null;
+      if (uuidLike.test(String(rawUserId))) {
         const { data: profileById } = await supabase
           .from('profiles')
           .select('id')
           .eq('id', rawUserId)
           .maybeSingle();
-
-        if (!profileById) {
+        if (profileById?.id) targetProfileId = String(profileById.id);
+        else {
           const { data: profileByUserId } = await supabase
             .from('profiles')
             .select('id')
             .eq('user_id', rawUserId)
             .maybeSingle();
-          if (profileByUserId?.id) targetProfileId = profileByUserId.id;
+          if (profileByUserId?.id) targetProfileId = String(profileByUserId.id);
         }
+      }
+      if (!targetProfileId) {
+        return { data: null, error: new Error('Profil destinataire introuvable (notifications.user_id doit être un profiles.id)') };
       }
 
       const entityId =
@@ -4121,29 +4246,27 @@ export class DataService {
           ? notification.entityId
           : null;
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: targetProfileId,
-          message: notification.message || '',
-          type: notification.type || 'info',
-          module: notification.module || 'system',
-          action: notification.action || 'created',
-          title: notification.title || 'Notification',
-          entity_type: notification.entityType || notification.entity_type || null,
-          entity_id: entityId,
-          entity_title: notification.entityTitle || notification.entity_title || null,
-          created_by: notification.createdBy || notification.created_by || null,
-          created_by_name: notification.createdByName || notification.created_by_name || null,
-          metadata: notification.metadata || null,
-          read: notification.read || false,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
+      const createdAt = new Date().toISOString();
+      // Pas de .select() : le RETURNING échoue souvent en RLS si le créateur n’est pas le destinataire.
+      const { error } = await supabase.from('notifications').insert({
+        user_id: targetProfileId,
+        message: notification.message || '',
+        type: notification.type || 'info',
+        module: notification.module || 'system',
+        action: notification.action || 'created',
+        title: notification.title || 'Notification',
+        entity_type: notification.entityType || notification.entity_type || null,
+        entity_id: entityId,
+        entity_title: notification.entityTitle || notification.entity_title || null,
+        created_by: notification.createdBy || notification.created_by || null,
+        created_by_name: notification.createdByName || notification.created_by_name || null,
+        metadata: notification.metadata || null,
+        read: notification.read || false,
+        created_at: createdAt,
+      });
+
       if (error) throw error;
-      return { data, error: null };
+      return { data: { inserted: true, user_id: targetProfileId, created_at: createdAt }, error: null };
     } catch (error) {
       console.error('Erreur création notification:', error);
       return { data: null, error };

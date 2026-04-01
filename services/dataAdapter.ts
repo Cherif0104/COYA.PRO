@@ -1726,7 +1726,14 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
   }
 
-  static async listPresenceStatusEvents(params: { organizationId?: string; userId?: string; sessionId?: string; from?: string; to?: string }): Promise<PresenceStatusEvent[]> {
+  static async listPresenceStatusEvents(params: {
+    organizationId?: string;
+    userId?: string;
+    sessionId?: string;
+    from?: string;
+    to?: string;
+    defaultRecentWindow?: boolean;
+  }): Promise<PresenceStatusEvent[]> {
     try {
       const { data, error } = await DataService.listPresenceStatusEvents(params);
       if (error) throw error;

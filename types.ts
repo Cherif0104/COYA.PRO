@@ -986,6 +986,11 @@ export interface Document {
   tags?: string[];
   category?: string;
   isPublic?: boolean;
+  /** Partage ciblé si isPublic = false (RLS document_acl_*) */
+  sharedProfileIds?: string[];
+  sharedDepartmentIds?: string[];
+  /** Projets dont les assignés de tâches voient le document */
+  sharedProjectIds?: string[];
   viewCount?: number; // Nombre de consultations
   lastViewedAt?: string; // Dernière consultation
   version?: number; // Version du document
@@ -1030,6 +1035,8 @@ export interface PresenceStatusEvent {
   startedAt: string;
   endedAt?: string | null;
   durationMinutes?: number | null;
+  /** Durée exacte du segment (fin - début), en secondes */
+  durationSeconds?: number | null;
   source?: 'selector' | 'widget' | 'system';
   notes?: string | null;
   createdAt?: string;

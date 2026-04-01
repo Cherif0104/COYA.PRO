@@ -1,6 +1,7 @@
 import { supabase } from './supabaseService';
 import { RealtimeService } from './realtimeService';
 import ApiHelper from './apiHelper';
+import { DataService } from './dataService';
 
 export interface Notification {
   id: string;
@@ -22,7 +23,19 @@ export interface Notification {
 }
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
-export type NotificationModule = 'project' | 'invoice' | 'expense' | 'course' | 'goal' | 'time_tracking' | 'leave' | 'knowledge' | 'user' | 'system' | 'ticket_it';
+export type NotificationModule =
+  | 'project'
+  | 'invoice'
+  | 'expense'
+  | 'course'
+  | 'goal'
+  | 'time_tracking'
+  | 'leave'
+  | 'knowledge'
+  | 'user'
+  | 'system'
+  | 'ticket_it'
+  | 'messagerie';
 export type NotificationAction = 'created' | 'updated' | 'deleted' | 'approved' | 'rejected' | 'assigned' | 'completed' | 'reminder' | 'submitted' | 'requested_changes';
 
 export class NotificationService {
@@ -44,39 +57,34 @@ export class NotificationService {
     }
   ): Promise<Notification | null> {
     try {
-      // Essayer d'abord via la fonction RPC si elle existe
-      try {
-        const { data: rpcResult, error: rpcError } = await supabase.rpc('create_notification', {
-          p_user_id: userId,
-          p_type: type,
-          p_module: module,
-          p_action: action,
-          p_title: title,
-          p_message: message,
-          p_entity_type: options?.entityType || null,
-          p_entity_id: options?.entityId || null,
-          p_entity_title: options?.entityTitle || null,
-          p_metadata: options?.metadata || null
-        });
+      // RPC create_notification : désactivé par défaut (évite 404 console si non déployée).
+      // Pour l’activer : VITE_USE_CREATE_NOTIFICATION_RPC=true + RPC déployée sur Supabase.
+      const useRpc = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_USE_CREATE_NOTIFICATION_RPC === 'true';
+      if (useRpc) {
+        try {
+          const { data: rpcResult, error: rpcError } = await supabase.rpc('create_notification', {
+            p_user_id: userId,
+            p_type: type,
+            p_module: module,
+            p_action: action,
+            p_title: title,
+            p_message: message,
+            p_entity_type: options?.entityType || null,
+            p_entity_id: options?.entityId || null,
+            p_entity_title: options?.entityTitle || null,
+            p_metadata: options?.metadata || null,
+          });
 
-        if (!rpcError && rpcResult) {
-          // Récupérer la notification créée
-          const { data: notification } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('id', rpcResult)
-            .single();
-
-          if (notification) {
-            return this.mapNotification(notification);
+          if (!rpcError && rpcResult) {
+            const { data: notification } = await supabase.from('notifications').select('*').eq('id', rpcResult).single();
+            if (notification) return this.mapNotification(notification);
           }
+        } catch {
+          /* continuer vers INSERT direct */
         }
-      } catch (rpcErr) {
-        // Fonction RPC n'existe pas, utiliser INSERT direct
-        console.log('Fonction RPC create_notification non disponible, utilisation INSERT direct');
       }
 
-      // Fallback: INSERT direct
+      // INSERT direct (chemin principal)
       // Récupérer le profil de l'utilisateur actuel pour created_by
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       let createdByProfileId: string | null = null;
@@ -95,28 +103,41 @@ export class NotificationService {
         }
       }
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          type,
-          module,
-          action,
-          title,
-          message,
-          entity_type: options?.entityType || null,
-          entity_id: options?.entityId || null,
-          entity_title: options?.entityTitle || null,
-          created_by: createdByProfileId,
-          created_by_name: createdByName,
-          metadata: options?.metadata || null,
-          read: false
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return this.mapNotification(data);
+      const { data: ins, error: insErr } = await DataService.createNotification({
+        userId,
+        message,
+        type,
+        module,
+        action,
+        title,
+        entityType: options?.entityType,
+        entityId: options?.entityId,
+        entityTitle: options?.entityTitle,
+        metadata: options?.metadata,
+        read: false,
+        createdBy: createdByProfileId,
+        createdByName,
+      });
+      if (insErr) throw insErr;
+      const createdAt = (ins as { created_at?: string })?.created_at || new Date().toISOString();
+      const resolvedUserId = (ins as { user_id?: string })?.user_id || userId;
+      return {
+        id: '',
+        userId: resolvedUserId,
+        type,
+        module,
+        action,
+        title,
+        message,
+        entityType: options?.entityType,
+        entityId: options?.entityId,
+        entityTitle: options?.entityTitle,
+        createdBy: createdByProfileId || undefined,
+        createdByName: createdByName || undefined,
+        read: false,
+        metadata: options?.metadata,
+        createdAt,
+      };
     } catch (error: any) {
       console.error('Erreur création notification:', error);
       return null;

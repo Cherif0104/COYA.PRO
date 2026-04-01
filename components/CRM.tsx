@@ -30,7 +30,7 @@ const ContactFormModal: React.FC<{
         name: contact?.name || '',
         company: contact?.company || '',
         status: contact?.status || 'Lead',
-        avatar: contact?.avatar || `https://picsum.photos/seed/${Date.now()}/100/100`,
+        avatar: contact?.avatar || `https://picsum.photos/seed/crm-${contact ? String(contact.id) : 'new'}/100/100`,
         officePhone: contact?.officePhone || '',
         mobilePhone: contact?.mobilePhone || '',
         whatsappNumber: contact?.whatsappNumber || '',
@@ -41,6 +41,23 @@ const ContactFormModal: React.FC<{
     useEffect(() => {
         OrganizationService.getCurrentUserOrganizationId().then(setOrganizationId).catch(() => setOrganizationId(null));
     }, []);
+
+    useEffect(() => {
+        setCategoryId(contact?.categoryId ?? '');
+        setFormData({
+            name: contact?.name || '',
+            company: contact?.company || '',
+            status: contact?.status || 'Lead',
+            avatar:
+                contact?.avatar ||
+                `https://picsum.photos/seed/crm-${contact ? String(contact.id) : 'new'}/100/100`,
+            officePhone: contact?.officePhone || '',
+            mobilePhone: contact?.mobilePhone || '',
+            whatsappNumber: contact?.whatsappNumber || '',
+            workEmail: contact?.workEmail || '',
+            personalEmail: contact?.personalEmail || '',
+        });
+    }, [contact]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData(prev => ({...prev, [e.target.name]: e.target.value }));
@@ -185,6 +202,7 @@ const CRM: React.FC<CRMProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('');
+    const [hideCollectePlaceholders, setHideCollectePlaceholders] = useState(true);
     const [categoryOptions, setCategoryOptions] = useState<referentialsService.ReferentialValue[]>([]);
     
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -299,8 +317,13 @@ const CRM: React.FC<CRMProps> = ({
         if (categoryFilter) {
             filtered = filtered.filter(contact => contact.categoryId === categoryFilter);
         }
+        if (hideCollectePlaceholders) {
+            filtered = filtered.filter(
+                (c) => !String(c.workEmail || '').toLowerCase().includes('@placeholder.local')
+            );
+        }
         return filtered;
-    }, [contacts, searchTerm, statusFilter, categoryFilter]);
+    }, [contacts, searchTerm, statusFilter, categoryFilter, hideCollectePlaceholders]);
 
     const handleDraftEmail = async (contact: Contact) => {
         if (!user) return;
@@ -592,7 +615,7 @@ const CRM: React.FC<CRMProps> = ({
                                     placeholder="Rechercher par nom, entreprise ou email..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
                                 />
                             </div>
                         </div>
@@ -600,7 +623,7 @@ const CRM: React.FC<CRMProps> = ({
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
                             >
                                 <option value="all">Tous les statuts</option>
                                 <option value="Lead">Lead</option>
@@ -611,13 +634,21 @@ const CRM: React.FC<CRMProps> = ({
                             <select
                                 value={categoryFilter}
                                 onChange={(e) => setCategoryFilter(e.target.value)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
                             >
                                 <option value="">Toutes catégories</option>
                                 {categoryOptions.map((opt) => (
                                     <option key={opt.id} value={opt.id}>{opt.name}</option>
                                 ))}
                             </select>
+                            <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap">
+                                <input
+                                    type="checkbox"
+                                    checked={hideCollectePlaceholders}
+                                    onChange={(e) => setHideCollectePlaceholders(e.target.checked)}
+                                />
+                                Masquer imports collecte (emails fictifs)
+                            </label>
                         </div>
                     </div>
                 </div>

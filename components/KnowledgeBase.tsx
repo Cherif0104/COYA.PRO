@@ -2,21 +2,24 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { Document, RESOURCE_MANAGEMENT_ROLES } from '../types';
+import { Department, Document, Project, RESOURCE_MANAGEMENT_ROLES, User } from '../types';
 import { summarizeAndCreateDoc, generateKnowledgeDocument, improveKnowledgeContent } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import { supabase } from '../services/supabaseService';
-
+import { DataService } from '../services/dataService';
+import { DepartmentService } from '../services/departmentService';
 interface KnowledgeBaseProps {
     documents: Document[];
+    users?: User[];
+    projects?: Project[];
     onAddDocument: (doc: Omit<Document, 'id'>) => Promise<void> | void;
-    onUpdateDocument: (doc: Document) => Promise<void> | void;
+    onUpdateDocument: (doc: Partial<Document> & { id: string }) => Promise<void> | void;
     onDeleteDocument: (id: string) => Promise<void> | void;
 }
 
-const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument, onUpdateDocument, onDeleteDocument }) => {
+const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, users = [], projects = [], onAddDocument, onUpdateDocument, onDeleteDocument }) => {
     const { t } = useLocalization();
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const { hasPermission } = useModulePermissions();
     const [inputText, setInputText] = useState('');
     // IA Générative – Composer depuis un prompt
@@ -45,7 +48,17 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
     const [editTags, setEditTags] = useState<string[]>([]);
     const [editDescription, setEditDescription] = useState('');
     const [editIsPublic, setEditIsPublic] = useState(false);
+    const [editSharedProfileIds, setEditSharedProfileIds] = useState<string[]>([]);
+    const [editSharedDepartmentIds, setEditSharedDepartmentIds] = useState<string[]>([]);
+    const [editSharedProjectIds, setEditSharedProjectIds] = useState<string[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [tagInput, setTagInput] = useState('');
+
+    useEffect(() => {
+        const oid = profile?.organization_id;
+        if (!oid) return;
+        void DepartmentService.getDepartmentsByOrganizationId(oid).then(setDepartments);
+    }, [profile?.organization_id]);
 
     // Charger les favoris au montage
     useEffect(() => {
@@ -247,9 +260,10 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                     document_uuid: doc.id,
                     viewer_profile_id: user.profileId
                 });
-                // Mettre à jour localement
-                const updatedDoc = { ...doc, viewCount: (doc.viewCount || 0) + 1 };
-                await onUpdateDocument(updatedDoc);
+                await onUpdateDocument({
+                    id: doc.id,
+                    viewCount: (doc.viewCount || 0) + 1,
+                });
             } catch (error) {
                 console.error('Erreur incrément vues:', error);
             }
@@ -294,6 +308,17 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
         setEditTags(doc.tags || []);
         setEditDescription(doc.description || '');
         setEditIsPublic(doc.isPublic || false);
+        setEditSharedProfileIds(doc.sharedProfileIds || []);
+        setEditSharedDepartmentIds(doc.sharedDepartmentIds || []);
+        setEditSharedProjectIds(doc.sharedProjectIds || []);
+        void (async () => {
+            const acl = await DataService.getDocumentAcl(doc.id);
+            if (acl) {
+                setEditSharedProfileIds(acl.profileIds);
+                setEditSharedDepartmentIds(acl.departmentIds);
+                setEditSharedProjectIds(acl.projectIds);
+            }
+        })();
     };
 
     const handleImproveWithAI = async () => {
@@ -327,6 +352,9 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
             tags: editTags,
             description: editDescription || undefined,
             isPublic: editIsPublic,
+            sharedProfileIds: editIsPublic ? [] : editSharedProfileIds,
+            sharedDepartmentIds: editIsPublic ? [] : editSharedDepartmentIds,
+            sharedProjectIds: editIsPublic ? [] : editSharedProjectIds,
             updatedAt: new Date().toISOString().split('T')[0],
         };
         
@@ -338,6 +366,9 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
         setEditTags([]);
         setEditDescription('');
         setEditIsPublic(false);
+        setEditSharedProfileIds([]);
+        setEditSharedDepartmentIds([]);
+        setEditSharedProjectIds([]);
     };
 
     const handleAddTag = () => {
@@ -1043,6 +1074,9 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                     setEditTags([]);
                                     setEditDescription('');
                                     setEditIsPublic(false);
+                                    setEditSharedProfileIds([]);
+                                    setEditSharedDepartmentIds([]);
+                                    setEditSharedProjectIds([]);
                                 }}
                                 className="text-white hover:text-gray-200"
                             >
@@ -1079,8 +1113,8 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                     <p className="text-xs text-gray-500 mt-1">{editDescription.length}/500</p>
                                 </div>
 
-                                {/* Catégorie */}
-                                <div className="grid grid-cols-2 gap-4">
+                                {/* Catégorie + visibilité */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
                                         <input
@@ -1092,19 +1126,88 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                         />
                                     </div>
 
-                                    {/* Public/Privé */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Visibilité</label>
                                         <select
-                                            value={editIsPublic ? 'public' : 'private'}
-                                            onChange={(e) => setEditIsPublic(e.target.value === 'public')}
+                                            value={editIsPublic ? 'org' : 'restricted'}
+                                            onChange={(e) => setEditIsPublic(e.target.value === 'org')}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         >
-                                            <option value="private">Privé (moi et admins)</option>
-                                            <option value="public">Public (tous les utilisateurs)</option>
+                                            <option value="org">Toute l&apos;organisation</option>
+                                            <option value="restricted">Restreint (personnes, départements, projets)</option>
                                         </select>
                                     </div>
                                 </div>
+
+                                {!editIsPublic && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-4">
+                                        <p className="text-sm text-amber-950">
+                                            <i className="fas fa-lock mr-2" />
+                                            Sans sélection ci-dessous, seuls vous et les administrateurs voyez ce document.
+                                            Ajoutez des collaborateurs, un département ou un projet pour partager plus largement
+                                            (les membres d&apos;un projet = personnes assignées à au moins une tâche du projet).
+                                        </p>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-800 mb-1">Collaborateurs</label>
+                                            <select
+                                                multiple
+                                                size={Math.min(6, Math.max(3, users.filter((u) => u.profileId).length || 1))}
+                                                value={editSharedProfileIds}
+                                                onChange={(e) =>
+                                                    setEditSharedProfileIds(Array.from(e.target.selectedOptions, (o) => o.value))
+                                                }
+                                                className="w-full px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                                            >
+                                                {users
+                                                    .filter((u) => u.profileId)
+                                                    .map((u) => (
+                                                        <option key={u.profileId} value={u.profileId!}>
+                                                            {u.fullName || u.name} — {u.email}
+                                                        </option>
+                                                    ))}
+                                            </select>
+                                            <p className="text-xs text-gray-600 mt-1">Ctrl/Cmd + clic pour plusieurs choix</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-800 mb-1">Départements</label>
+                                            <select
+                                                multiple
+                                                size={Math.min(5, Math.max(2, departments.length || 1))}
+                                                value={editSharedDepartmentIds}
+                                                onChange={(e) =>
+                                                    setEditSharedDepartmentIds(Array.from(e.target.selectedOptions, (o) => o.value))
+                                                }
+                                                className="w-full px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                                            >
+                                                {departments.map((d) => (
+                                                    <option key={d.id} value={d.id}>
+                                                        {d.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-800 mb-1">
+                                                Projets (équipe via tâches)
+                                            </label>
+                                            <select
+                                                multiple
+                                                size={Math.min(5, Math.max(2, projects.length || 1))}
+                                                value={editSharedProjectIds}
+                                                onChange={(e) =>
+                                                    setEditSharedProjectIds(Array.from(e.target.selectedOptions, (o) => o.value))
+                                                }
+                                                className="w-full px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                                            >
+                                                {projects.map((p) => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.title}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Tags */}
                                 <div>
@@ -1179,6 +1282,9 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, onAddDocument,
                                     setEditTags([]);
                                     setEditDescription('');
                                     setEditIsPublic(false);
+                                    setEditSharedProfileIds([]);
+                                    setEditSharedDepartmentIds([]);
+                                    setEditSharedProjectIds([]);
                                 }}
                                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
                             >

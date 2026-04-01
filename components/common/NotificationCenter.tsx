@@ -147,6 +147,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigateToEnt
         return 'fas fa-calendar-times';
       case 'knowledge':
         return 'fas fa-book';
+      case 'messagerie':
+        return 'fas fa-comments';
       default:
         return 'fas fa-bell';
     }

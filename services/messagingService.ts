@@ -91,6 +91,17 @@ function makeId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+/** UUID pour colonnes Postgres — insert sans RETURNING (évite RLS SELECT sur la ligne créée). */
+function newUuid(): string {
+  try {
+    const anyCrypto = (globalThis as any).crypto;
+    if (anyCrypto?.randomUUID) return anyCrypto.randomUUID();
+  } catch {
+    // ignore
+  }
+  throw new Error('crypto.randomUUID is required for messaging (HTTPS or secure context).');
+}
+
 function readLocal(): LocalStore {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LOCAL_KEY) : null;
@@ -405,7 +416,13 @@ export async function createOrGetDirectThread(params: {
   memberIds: string[];
 }): Promise<ChatDirectThread> {
   const unique = Array.from(new Set(params.memberIds.filter(Boolean)));
-  if (unique.length < 2) throw new Error('Direct thread requires at least two members.');
+  if (unique.length === 0) throw new Error('Direct thread requires at least one member.');
+  // Fil « avec moi-même » : un seul membre = le créateur (notes, tests, historique perso).
+  if (unique.length === 1) {
+    if (unique[0] !== params.createdById) {
+      throw new Error('A single-member direct thread must be your own profile (personal notes).');
+    }
+  }
 
   const all = await listDirectThreads({ organizationId: params.organizationId, profileId: params.createdById });
   const existing = all.find((t) => {
@@ -415,15 +432,12 @@ export async function createOrGetDirectThread(params: {
   });
   if (existing) return existing;
 
-  const row = {
-    organization_id: params.organizationId,
-    created_by_id: params.createdById,
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  };
-  const { data, error } = await supabase.from(TABLE_DIRECT_THREADS).insert(row).select('*').single();
-  if (error) {
-    if (!shouldUseLocal(TABLE_DIRECT_THREADS, error)) throw error;
+  let threadId: string;
+  let nowIso: string;
+  try {
+    threadId = newUuid();
+    nowIso = new Date().toISOString();
+  } catch {
     const local = readLocal();
     const now = new Date().toISOString();
     const thread: ChatDirectThread = {
@@ -440,17 +454,42 @@ export async function createOrGetDirectThread(params: {
     writeLocal(local);
     return thread;
   }
-  const threadId = String(data.id);
+
+  const row = {
+    id: threadId,
+    organization_id: params.organizationId,
+    created_by_id: params.createdById,
+    is_active: true,
+    updated_at: nowIso,
+  };
+  const { error } = await supabase.from(TABLE_DIRECT_THREADS).insert(row);
+  if (error) {
+    if (!shouldUseLocal(TABLE_DIRECT_THREADS, error)) throw error;
+    const local = readLocal();
+    const thread: ChatDirectThread = {
+      id: makeId('dm'),
+      organizationId: params.organizationId,
+      createdById: params.createdById,
+      isActive: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      memberIds: unique,
+    };
+    local.directThreads.unshift(thread);
+    unique.forEach((profileId) => local.directMembers.push({ threadId: thread.id, profileId }));
+    writeLocal(local);
+    return thread;
+  }
   const memberRows = unique.map((profileId) => ({ thread_id: threadId, profile_id: profileId, created_at: new Date().toISOString() }));
   const { error: membersError } = await supabase.from(TABLE_DIRECT_MEMBERS).insert(memberRows);
   if (membersError) throw membersError;
   return {
     id: threadId,
-    organizationId: String(data.organization_id),
-    createdById: String(data.created_by_id),
-    isActive: data.is_active ?? true,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    organizationId: params.organizationId,
+    createdById: params.createdById,
+    isActive: true,
+    createdAt: nowIso,
+    updatedAt: nowIso,
     memberIds: unique,
   };
 }

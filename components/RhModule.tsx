@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { LeaveRequest, User, Job, Employee, HrAbsenceEvent, HrAttendancePolicy, PresenceSession, PresenceStatus, PresenceStatusEvent } from '../types';
+import { DEFAULT_PRESENCE_POLICY, LeaveRequest, User, Job, Employee, HrAbsenceEvent, HrAttendancePolicy, PresenceSession, PresenceStatus, PresenceStatusEvent } from '../types';
 import DataAdapter from '../services/dataAdapter';
 import OrganizationService from '../services/organizationService';
 import LeaveManagement from './LeaveManagement';
@@ -45,6 +45,8 @@ type PresenceLiveRow = {
   weekMinutes: number;
   monthMinutes: number;
   dayRate: number;
+  /** Segment de statut encore ouvert (pas de ended_at) pour afficher la durée live */
+  openStatusSegment: PresenceStatusEvent | null;
 };
 
 function overlapMinutes(session: PresenceSession, rangeStartMs: number, rangeEndMs: number): number {
@@ -90,8 +92,18 @@ const RhModule: React.FC<RhModuleProps> = ({
   const [complianceRows, setComplianceRows] = useState<hrAnalyticsService.PresenceComplianceMetric[]>([]);
   const [presenceSessions, setPresenceSessions] = useState<PresenceSession[]>([]);
   const [presenceStatusEvents, setPresenceStatusEvents] = useState<PresenceStatusEvent[]>([]);
-  const [statusHistoryProfileFilter, setStatusHistoryProfileFilter] = useState<string>('all');
+  const [historyUserProfileId, setHistoryUserProfileId] = useState<string>('');
+  const [historyRangeMode, setHistoryRangeMode] = useState<'day' | 'month' | 'all'>('month');
+  const [historyFilterDay, setHistoryFilterDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [historyFilterMonth, setHistoryFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<PresenceStatus | 'all'>('all');
+  const [historyLiveTick, setHistoryLiveTick] = useState(0);
   const fr = language === 'fr';
+
+  useEffect(() => {
+    const id = window.setInterval(() => setHistoryLiveTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const loadEmployees = useCallback(async () => {
     const orgId = await OrganizationService.getCurrentUserOrganizationId();
@@ -110,7 +122,7 @@ const RhModule: React.FC<RhModuleProps> = ({
       hrAnalyticsService.listHrAbsenceEvents(orgId),
       DataAdapter.getHrAttendancePolicy(orgId),
       DataService.getProfiles(),
-      DataAdapter.listPresenceStatusEvents({ organizationId: orgId }),
+      DataAdapter.listPresenceStatusEvents({ organizationId: orgId, defaultRecentWindow: true }),
     ]);
     const profileMap = (profileRows.data || []).reduce<Record<string, string>>((acc, row: any) => {
       if (row?.id && row?.user_id) acc[String(row.id)] = String(row.user_id);
@@ -152,6 +164,11 @@ const RhModule: React.FC<RhModuleProps> = ({
     const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
     const expectedDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 480);
 
+    const openSegmentByUserId = new Map<string, PresenceStatusEvent>();
+    (presenceStatusEvents || []).forEach((evt) => {
+      if (!evt.endedAt) openSegmentByUserId.set(String(evt.userId), evt);
+    });
+
     return employees.map((employee) => {
       const profileId = String(employee.profileId);
       const authUserId = userIdByProfile[profileId] || profileId;
@@ -179,9 +196,10 @@ const RhModule: React.FC<RhModuleProps> = ({
         weekMinutes,
         monthMinutes,
         dayRate,
+        openStatusSegment: openSegmentByUserId.get(String(authUserId)) || null,
       };
     });
-  }, [employees, presenceSessions, userIdByProfile, policy?.expectedDailyMinutes, users]);
+  }, [employees, presenceSessions, presenceStatusEvents, userIdByProfile, policy?.expectedDailyMinutes, users]);
 
   const profileIdByUserId = useMemo(() => {
     const reverse: Record<string, string> = {};
@@ -191,8 +209,29 @@ const RhModule: React.FC<RhModuleProps> = ({
     return reverse;
   }, [userIdByProfile]);
 
+  const historyRangeBoundsMs = useMemo(() => {
+    if (historyRangeMode === 'day') {
+      const [y, m, d] = historyFilterDay.split('-').map(Number);
+      const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+      const end = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+      return { startMs: start, endMs: end };
+    }
+    if (historyRangeMode === 'month') {
+      const [y, m] = historyFilterMonth.split('-').map(Number);
+      const start = new Date(y, m - 1, 1, 0, 0, 0, 0).getTime();
+      const end = new Date(y, m, 0, 23, 59, 59, 999).getTime();
+      return { startMs: start, endMs: end };
+    }
+    return { startMs: 0, endMs: Date.now() + 86400000 };
+  }, [historyRangeMode, historyFilterDay, historyFilterMonth]);
+
+  const eventOverlapsHistoryRange = useCallback((evt: PresenceStatusEvent) => {
+    const s = new Date(evt.startedAt).getTime();
+    const e = evt.endedAt ? new Date(evt.endedAt).getTime() : Date.now();
+    return s < historyRangeBoundsMs.endMs && e > historyRangeBoundsMs.startMs;
+  }, [historyRangeBoundsMs.endMs, historyRangeBoundsMs.startMs]);
+
   const statusHistoryRows = useMemo(() => {
-    const targetProfile = statusHistoryProfileFilter === 'all' ? null : statusHistoryProfileFilter;
     const base = (presenceStatusEvents || []).map((evt) => {
       const profileId = profileIdByUserId[String(evt.userId)] || '';
       const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
@@ -202,11 +241,118 @@ const RhModule: React.FC<RhModuleProps> = ({
         displayName: linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId || String(evt.userId).slice(0, 8),
       };
     });
-    const filtered = targetProfile ? base.filter((r) => r.profileId === targetProfile) : base;
-    return filtered
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, 120);
-  }, [presenceStatusEvents, profileIdByUserId, users, statusHistoryProfileFilter]);
+    let filtered = base.filter((r) => eventOverlapsHistoryRange(r));
+    if (historyUserProfileId) {
+      filtered = filtered.filter((r) => r.profileId === historyUserProfileId);
+    }
+    if (historyStatusFilter !== 'all') {
+      filtered = filtered.filter((r) => r.status === historyStatusFilter);
+    }
+    return filtered.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  }, [
+    presenceStatusEvents,
+    profileIdByUserId,
+    users,
+    historyUserProfileId,
+    historyStatusFilter,
+    eventOverlapsHistoryRange,
+  ]);
+
+  const pauseOverrunRows = useMemo(
+    () => hrAnalyticsService.listPauseOverrunEvents(statusHistoryRows, DEFAULT_PRESENCE_POLICY.maxPauseMinutes),
+    [statusHistoryRows]
+  );
+
+  const dailyCategoryOrder: hrAnalyticsService.DailyPresenceCategory[] = ['productive', 'meeting', 'pause', 'mission', 'absent', 'technical'];
+  const dailyCatLabel = useCallback(
+    (cat: hrAnalyticsService.DailyPresenceCategory) =>
+      fr ? hrAnalyticsService.DAILY_PRESENCE_CATEGORY_LABELS_FR[cat] : hrAnalyticsService.DAILY_PRESENCE_CATEGORY_LABELS_EN[cat],
+    [fr]
+  );
+
+  const dailyBreakdownView = useMemo(() => {
+    if (historyRangeMode !== 'day') return null;
+    const dateIso = historyFilterDay;
+    const nowMs = Date.now();
+    if (historyUserProfileId) {
+      const uid = userIdByProfile[historyUserProfileId];
+      if (!uid) return { kind: 'single' as const, missingLink: true, dateIso, profileId: historyUserProfileId };
+      const b = hrAnalyticsService.computeDailyPresenceBreakdown({
+        events: presenceStatusEvents || [],
+        dateIso,
+        userId: uid,
+        nowMs,
+      });
+      return { kind: 'single' as const, missingLink: false, dateIso, profileId: historyUserProfileId, ...b };
+    }
+    const rows = employees
+      .map((emp) => {
+        const profileId = String(emp.profileId);
+        const uid = userIdByProfile[profileId];
+        if (!uid) return null;
+        const b = hrAnalyticsService.computeDailyPresenceBreakdown({
+          events: presenceStatusEvents || [],
+          dateIso,
+          userId: uid,
+          nowMs,
+        });
+        const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
+        const displayName = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId.slice(0, 8);
+        return { profileId, displayName, ...b };
+      })
+      .filter(Boolean) as Array<{
+        profileId: string;
+        displayName: string;
+        categories: Record<hrAnalyticsService.DailyPresenceCategory, number>;
+        totalSeconds: number;
+      }>;
+    return { kind: 'all' as const, dateIso, rows };
+  }, [
+    historyRangeMode,
+    historyFilterDay,
+    historyUserProfileId,
+    presenceStatusEvents,
+    userIdByProfile,
+    employees,
+    users,
+    historyLiveTick,
+  ]);
+
+  const formatSegmentDuration = useCallback(
+    (evt: PresenceStatusEvent) => {
+      const sec = hrAnalyticsService.presenceEventDurationSeconds(evt);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      if (fr) return `${m} min ${String(s).padStart(2, '0')} s`;
+      return `${m}m ${String(s).padStart(2, '0')}s`;
+    },
+    [fr]
+  );
+
+  const exportHistoryCsv = useCallback(() => {
+    const sep = ';';
+    const head = ['Salarié', 'Statut', 'Début', 'Fin', 'Durée', 'Source'];
+    const lines = statusHistoryRows.map((row) => {
+      const sec = hrAnalyticsService.presenceEventDurationSeconds(row);
+      const dur = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+      return [
+        row.displayName,
+        row.status,
+        row.startedAt,
+        row.endedAt || '',
+        dur,
+        row.source || '',
+      ]
+        .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+        .join(sep);
+    });
+    const blob = new Blob([head.join(sep) + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `historique_presence_${historyFilterDay || historyFilterMonth}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [statusHistoryRows, historyFilterDay, historyFilterMonth]);
 
   const statusLabel = useCallback((status: PresenceStatus | 'absent') => {
     if (status === 'absent') return fr ? 'Absent' : 'Absent';
@@ -451,6 +597,7 @@ const RhModule: React.FC<RhModuleProps> = ({
                 <tr>
                   <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
                   <th className="px-4 py-3 text-left">{fr ? 'Statut actuel' : 'Current status'}</th>
+                  <th className="px-4 py-3 text-left">{fr ? 'Durée sur ce statut' : 'Time on status'}</th>
                   <th className="px-4 py-3 text-left">{fr ? 'Dernière connexion' : 'Last connection'}</th>
                   <th className="px-4 py-3 text-right">{fr ? 'Cette heure' : 'This hour'}</th>
                   <th className="px-4 py-3 text-right">{fr ? 'Aujourd’hui' : 'Today'}</th>
@@ -467,6 +614,9 @@ const RhModule: React.FC<RhModuleProps> = ({
                       <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadgeClass(row.currentStatus)}`}>
                         {statusLabel(row.currentStatus)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-700">
+                      {row.openStatusSegment ? formatSegmentDuration(row.openStatusSegment) : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {row.lastConnectionAt
@@ -485,46 +635,206 @@ const RhModule: React.FC<RhModuleProps> = ({
                   </tr>
                 ))}
                 {livePresenceRows.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence en direct.' : 'No live attendance data.'}</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence en direct.' : 'No live attendance data.'}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts' : 'Status history timeline'}</h3>
-              <select
-                value={statusHistoryProfileFilter}
-                onChange={(e) => setStatusHistoryProfileFilter(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="all">{fr ? 'Tous les salariés' : 'All employees'}</option>
-                {employees.map((emp) => {
-                  const linkedUser = users.find((u) => String((u as any).profileId || '') === String(emp.profileId));
-                  const name = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || String(emp.profileId).slice(0, 8);
-                  return (
-                    <option key={emp.id} value={String(emp.profileId)}>
-                      {name}
-                    </option>
-                  );
-                })}
-              </select>
+            <div className="px-4 py-3 border-b border-slate-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts (détaillé)' : 'Detailed status history'}</h3>
+                <button
+                  type="button"
+                  onClick={exportHistoryCsv}
+                  className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-800 hover:bg-slate-50"
+                >
+                  {fr ? 'Exporter CSV' : 'Export CSV'}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-3 border border-slate-100 rounded-lg p-2 max-h-64 overflow-y-auto">
+                  <p className="text-xs font-semibold text-slate-500 uppercase px-2 py-1">{fr ? 'Salariés' : 'Staff'}</p>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryUserProfileId('')}
+                    className={`w-full text-left px-2 py-2 rounded-md text-sm ${!historyUserProfileId ? 'bg-slate-900 text-white' : 'hover:bg-slate-50'}`}
+                  >
+                    {fr ? 'Tous (filtres ci-dessous)' : 'Everyone (use filters)'}
+                  </button>
+                  {employees.map((emp) => {
+                    const linkedUser = users.find((u) => String((u as any).profileId || '') === String(emp.profileId));
+                    const name = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || String(emp.profileId).slice(0, 8);
+                    const sel = historyUserProfileId === String(emp.profileId);
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={() => setHistoryUserProfileId(String(emp.profileId))}
+                        className={`w-full text-left px-2 py-2 rounded-md text-sm truncate ${sel ? 'bg-emerald-700 text-white' : 'hover:bg-slate-50'}`}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="lg:col-span-9 space-y-3">
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">{fr ? 'Période' : 'Period'}</label>
+                      <select
+                        value={historyRangeMode}
+                        onChange={(e) => setHistoryRangeMode(e.target.value as 'day' | 'month' | 'all')}
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="day">{fr ? 'Jour précis' : 'Specific day'}</option>
+                        <option value="month">{fr ? 'Mois précis' : 'Specific month'}</option>
+                        <option value="all">{fr ? 'Tout l’historique chargé' : 'All loaded history'}</option>
+                      </select>
+                    </div>
+                    {historyRangeMode === 'day' && (
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">{fr ? 'Date' : 'Date'}</label>
+                        <input
+                          type="date"
+                          value={historyFilterDay}
+                          onChange={(e) => setHistoryFilterDay(e.target.value)}
+                          className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+                    {historyRangeMode === 'month' && (
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">{fr ? 'Mois' : 'Month'}</label>
+                        <input
+                          type="month"
+                          value={historyFilterMonth}
+                          onChange={(e) => setHistoryFilterMonth(e.target.value)}
+                          className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">{fr ? 'Statut' : 'Status'}</label>
+                      <select
+                        value={historyStatusFilter}
+                        onChange={(e) => setHistoryStatusFilter(e.target.value as PresenceStatus | 'all')}
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="all">{fr ? 'Tous' : 'All'}</option>
+                        <option value="online">{fr ? 'Présent / en ligne' : 'Online'}</option>
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="pause">Pause</option>
+                        <option value="pause_coffee">{fr ? 'Pause café' : 'Coffee break'}</option>
+                        <option value="pause_lunch">{fr ? 'Pause déjeuner' : 'Lunch'}</option>
+                        <option value="in_meeting">{fr ? 'Réunion' : 'Meeting'}</option>
+                        <option value="brief_team">Brief</option>
+                        <option value="away_mission">{fr ? 'Mission' : 'Mission'}</option>
+                        <option value="technical_issue">{fr ? 'Incident tech.' : 'Tech issue'}</option>
+                      </select>
+                    </div>
+                  </div>
+                  {pauseOverrunRows.length > 0 && (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                      <strong>{fr ? 'Pauses dépassant' : 'Pauses over'} {DEFAULT_PRESENCE_POLICY.maxPauseMinutes} min :</strong>{' '}
+                      {pauseOverrunRows.length}{' '}
+                      {fr ? 'segment(s) dans la période sélectionnée.' : 'segment(s) in the selected period.'}
+                    </div>
+                  )}
+                  {dailyBreakdownView && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        {fr ? 'Bilan journalier (heures / minutes / secondes)' : 'Daily totals (h / min / s)'}
+                        <span className="font-normal text-slate-500"> — {dailyBreakdownView.dateIso}</span>
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        {fr
+                          ? 'Somme des segments de statut sur la journée (fuseau local). Indépendant du filtre « Statut » du tableau ci-dessous.'
+                          : 'Sum of status segments for that local calendar day. Independent of the status filter below.'}
+                      </p>
+                      {dailyBreakdownView.kind === 'single' && dailyBreakdownView.missingLink && (
+                        <p className="text-sm text-amber-800">{fr ? 'Profil sans user_id : impossible d’agréger les segments.' : 'Profile has no linked user_id.'}</p>
+                      )}
+                      {dailyBreakdownView.kind === 'single' && !dailyBreakdownView.missingLink && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-slate-800">
+                            {users.find((u) => String((u as any).profileId || '') === dailyBreakdownView.profileId)?.fullName ||
+                              users.find((u) => String((u as any).profileId || '') === dailyBreakdownView.profileId)?.name ||
+                              dailyBreakdownView.profileId.slice(0, 8)}
+                          </p>
+                          <div className="flex flex-wrap gap-2 items-baseline">
+                            <span className="text-xs uppercase text-slate-500">{fr ? 'Total suivis' : 'Tracked total'}</span>
+                            <span className="font-mono text-sm font-semibold text-slate-900">
+                              {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(dailyBreakdownView.totalSeconds))}
+                            </span>
+                          </div>
+                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                            {dailyCategoryOrder.map((cat) => (
+                              <li key={cat} className="flex justify-between gap-2 border border-slate-100 rounded-lg bg-white px-2 py-1.5">
+                                <span className="text-slate-600">{dailyCatLabel(cat)}</span>
+                                <span className="font-mono text-slate-900">
+                                  {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(dailyBreakdownView.categories[cat]))}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {dailyBreakdownView.kind === 'all' && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs sm:text-sm min-w-[640px]">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-left text-slate-600">
+                                <th className="py-2 pr-2">{fr ? 'Salarié' : 'Employee'}</th>
+                                <th className="py-2 pr-2 font-mono">{fr ? 'Total' : 'Total'}</th>
+                                {dailyCategoryOrder.map((cat) => (
+                                  <th key={cat} className="py-2 pr-2 font-mono whitespace-nowrap">
+                                    {dailyCatLabel(cat)}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dailyBreakdownView.rows.map((r) => (
+                                <tr key={r.profileId} className="border-b border-slate-100">
+                                  <td className="py-2 pr-2">{r.displayName}</td>
+                                  <td className="py-2 pr-2 font-mono">
+                                    {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(r.totalSeconds))}
+                                  </td>
+                                  {dailyCategoryOrder.map((cat) => (
+                                    <td key={cat} className="py-2 pr-2 font-mono whitespace-nowrap">
+                                      {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(r.categories[cat]))}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {dailyBreakdownView.rows.length === 0 && (
+                            <p className="text-sm text-slate-500 py-2">{fr ? 'Aucun salarié lié ou pas de segments ce jour-là.' : 'No linked employees or no segments that day.'}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Statut' : 'Status'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Début' : 'Start'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Fin' : 'End'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Durée' : 'Duration'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Source' : 'Source'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statusHistoryRows.map((row) => {
-                  const duration = row.durationMinutes ?? (row.endedAt ? Math.max(0, Math.round((new Date(row.endedAt).getTime() - new Date(row.startedAt).getTime()) / 60000)) : null);
-                  return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Statut' : 'Status'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Début' : 'Start'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Fin' : 'End'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Durée (précise)' : 'Duration (precise)'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Source' : 'Source'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statusHistoryRows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100">
                       <td className="px-4 py-3">{row.displayName}</td>
                       <td className="px-4 py-3">
@@ -534,16 +844,22 @@ const RhModule: React.FC<RhModuleProps> = ({
                       </td>
                       <td className="px-4 py-3 text-slate-600">{formatDateTime(row.startedAt)}</td>
                       <td className="px-4 py-3 text-slate-600">{formatDateTime(row.endedAt ?? null)}</td>
-                      <td className="px-4 py-3 text-right font-mono">{duration !== null ? `${(duration / 60).toFixed(2)} h` : '—'}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs">{formatSegmentDuration(row)}</td>
                       <td className="px-4 py-3 text-slate-600">{row.source || 'system'}</td>
                     </tr>
-                  );
-                })}
-                {statusHistoryRows.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucun historique de statut pour le moment.' : 'No status history yet.'}</td></tr>
-                )}
-              </tbody>
-            </table>
+                  ))}
+                  {statusHistoryRows.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                        {fr
+                          ? 'Aucun segment dans cette période. Choisissez un salarié ou élargissez les filtres.'
+                          : 'No segments in this period. Pick an employee or widen filters.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <table className="w-full text-sm">

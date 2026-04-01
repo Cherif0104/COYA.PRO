@@ -1,5 +1,5 @@
 import { supabase } from './supabaseService';
-import { Employee, HrAbsenceEvent, HrAttendancePolicy, PresencePeriodMetric, PresenceSession, PresenceStatusEvent } from '../types';
+import { Employee, HrAbsenceEvent, HrAttendancePolicy, PresencePeriodMetric, PresenceSession, PresenceStatus, PresenceStatusEvent } from '../types';
 
 const ABSENCE_TABLE = 'hr_absence_events';
 
@@ -253,4 +253,138 @@ export function computePresenceCompliance(params: {
       hourlyRate,
     };
   });
+}
+
+const PAUSE_STATUSES = new Set<PresenceStatus>(['pause', 'pause_coffee', 'pause_lunch']);
+
+/** Secondes de segment (événement fermé ou en cours jusqu’à maintenant) */
+export function presenceEventDurationSeconds(evt: PresenceStatusEvent, nowMs: number = Date.now()): number {
+  if (typeof evt.durationSeconds === 'number' && evt.durationSeconds >= 0 && evt.endedAt) {
+    return evt.durationSeconds;
+  }
+  const start = new Date(evt.startedAt).getTime();
+  const end = evt.endedAt ? new Date(evt.endedAt).getTime() : nowMs;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.floor((end - start) / 1000);
+}
+
+/** Segments de pause dont la durée dépasse le plafond (une ligne par événement) */
+export function listPauseOverrunEvents(events: PresenceStatusEvent[], maxPauseMinutes: number): PresenceStatusEvent[] {
+  const maxSec = Math.max(1, maxPauseMinutes) * 60;
+  return events.filter((e) => {
+    if (!PAUSE_STATUSES.has(e.status)) return false;
+    return presenceEventDurationSeconds(e) > maxSec;
+  });
+}
+
+/** Catégories agrégées pour un bilan journalier (secondes par type) */
+export type DailyPresenceCategory = 'productive' | 'meeting' | 'pause' | 'mission' | 'absent' | 'technical';
+
+export const DAILY_PRESENCE_CATEGORY_LABELS_FR: Record<DailyPresenceCategory, string> = {
+  productive: 'Présent / productif',
+  meeting: 'Réunion / brief',
+  pause: 'Pauses',
+  mission: 'Mission / déplacement',
+  absent: 'Absent',
+  technical: 'Incident technique',
+};
+
+export const DAILY_PRESENCE_CATEGORY_LABELS_EN: Record<DailyPresenceCategory, string> = {
+  productive: 'Present / productive',
+  meeting: 'Meeting / brief',
+  pause: 'Breaks',
+  mission: 'Mission / travel',
+  absent: 'Absent',
+  technical: 'Technical issue',
+};
+
+export function secondsToHmsParts(totalSeconds: number): { hours: number; minutes: number; seconds: number } {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  return {
+    hours: Math.floor(s / 3600),
+    minutes: Math.floor((s % 3600) / 60),
+    seconds: s % 60,
+  };
+}
+
+export function formatHmsFrench(parts: { hours: number; minutes: number; seconds: number }): string {
+  const { hours, minutes, seconds } = parts;
+  return `${hours} h ${String(minutes).padStart(2, '0')} min ${String(seconds).padStart(2, '0')} s`;
+}
+
+function localDayBoundsMs(dateIso: string): { startMs: number; endMs: number } {
+  const [y, m, d] = dateIso.split('-').map((x) => Number(x));
+  if (!y || !m || !d) return { startMs: 0, endMs: 0 };
+  const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+  const end = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  return { startMs: start, endMs: end };
+}
+
+function statusToDailyCategory(status: PresenceStatus): DailyPresenceCategory {
+  if (status === 'online' || status === 'present') return 'productive';
+  if (status === 'in_meeting' || status === 'brief_team') return 'meeting';
+  if (status === 'pause' || status === 'pause_coffee' || status === 'pause_lunch') return 'pause';
+  if (status === 'away_mission') return 'mission';
+  if (status === 'absent') return 'absent';
+  return 'technical';
+}
+
+/** Secondes d’un segment qui tombent dans la journée locale `dateIso` (découpe aux bornes du jour). */
+export function presenceEventSecondsInLocalDay(evt: PresenceStatusEvent, dateIso: string, nowMs: number = Date.now()): number {
+  const { startMs, endMs } = localDayBoundsMs(dateIso);
+  if (endMs <= startMs) return 0;
+  const es = new Date(evt.startedAt).getTime();
+  const ee = evt.endedAt ? new Date(evt.endedAt).getTime() : nowMs;
+  if (!Number.isFinite(es) || !Number.isFinite(ee) || ee <= es) return 0;
+  const overlapStart = Math.max(es, startMs);
+  const overlapEnd = Math.min(ee, endMs);
+  if (overlapEnd <= overlapStart) return 0;
+  return Math.floor((overlapEnd - overlapStart) / 1000);
+}
+
+const EMPTY_CATEGORIES: Record<DailyPresenceCategory, number> = {
+  productive: 0,
+  meeting: 0,
+  pause: 0,
+  mission: 0,
+  absent: 0,
+  technical: 0,
+};
+
+export function computeDailyPresenceBreakdown(params: {
+  events: PresenceStatusEvent[];
+  dateIso: string;
+  userId: string;
+  nowMs?: number;
+}): { categories: Record<DailyPresenceCategory, number>; totalSeconds: number } {
+  const nowMs = params.nowMs ?? Date.now();
+  const categories = { ...EMPTY_CATEGORIES };
+  let totalSeconds = 0;
+  for (const evt of params.events) {
+    if (String(evt.userId) !== String(params.userId)) continue;
+    const sec = presenceEventSecondsInLocalDay(evt, params.dateIso, nowMs);
+    if (sec <= 0) continue;
+    const cat = statusToDailyCategory(evt.status);
+    categories[cat] += sec;
+    totalSeconds += sec;
+  }
+  return { categories, totalSeconds };
+}
+
+/** Une ligne par salarié pour une date (userId = auth user id des événements). */
+export function computeDailyPresenceBreakdownByUser(params: {
+  events: PresenceStatusEvent[];
+  dateIso: string;
+  userIds: string[];
+  nowMs?: number;
+}): Array<{ userId: string; categories: Record<DailyPresenceCategory, number>; totalSeconds: number }> {
+  return params.userIds.map((userId) => ({
+    userId,
+    ...computeDailyPresenceBreakdown({
+      events: params.events,
+      dateIso: params.dateIso,
+      userId,
+      nowMs: params.nowMs,
+    }),
+  }));
 }
