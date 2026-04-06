@@ -6,18 +6,17 @@ import DataAdapter from '../services/dataAdapter';
 import OrganizationService from '../services/organizationService';
 import LeaveManagement from './LeaveManagement';
 import LeaveManagementAdmin from './LeaveManagementAdmin';
-import EmployeeProfile from './EmployeeProfile';
-import TalentAnalytics from './TalentAnalytics';
 import PostesListReadOnly from './PostesListReadOnly';
 import OrganigrammeView from './OrganigrammeView';
 import PayrollTab from './PayrollTab';
 import SalariésList from './SalariésList';
+import EmployeeProfile from './EmployeeProfile';
 import Jobs from './Jobs';
 import * as hrAnalyticsService from '../services/hrAnalyticsService';
 import { usePresence } from '../contexts/PresenceContext';
 import { DataService } from '../services/dataService';
 
-export type RhTab = 'salaries' | 'presence' | 'leave' | 'demandes' | 'employee' | 'postes' | 'organigramme' | 'payroll' | 'formation' | 'talent' | 'jobs' | 'planning';
+export type RhTab = 'salaries' | 'presence' | 'leave' | 'postes' | 'organigramme' | 'payroll' | 'jobs';
 
 interface RhModuleProps {
   leaveRequests: LeaveRequest[];
@@ -75,7 +74,6 @@ const RhModule: React.FC<RhModuleProps> = ({
   const { t, language } = useLocalization();
   const { canAccessModule, hasPermission } = useModulePermissions();
   const [activeTab, setActiveTab] = useState<RhTab>('salaries');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const { currentSession } = usePresence();
   const [presencePeriod, setPresencePeriod] = useState<'day' | 'week' | 'month' | 'quarter' | 'year'>('month');
@@ -98,6 +96,8 @@ const RhModule: React.FC<RhModuleProps> = ({
   const [historyFilterMonth, setHistoryFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [historyStatusFilter, setHistoryStatusFilter] = useState<PresenceStatus | 'all'>('all');
   const [historyLiveTick, setHistoryLiveTick] = useState(0);
+  const [selectedEmployeeSheet, setSelectedEmployeeSheet] = useState<Employee | null>(null);
+  const [employeeListVersion, setEmployeeListVersion] = useState(0);
   const fr = language === 'fr';
 
   useEffect(() => {
@@ -113,6 +113,12 @@ const RhModule: React.FC<RhModuleProps> = ({
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  const sessionById = useMemo(() => {
+    const m = new Map<string, PresenceSession>();
+    (presenceSessions || []).forEach((s) => m.set(String(s.id), s));
+    return m;
+  }, [presenceSessions]);
 
   const loadPresenceAndAbsences = useCallback(async () => {
     const orgId = await OrganizationService.getCurrentUserOrganizationId();
@@ -256,11 +262,12 @@ const RhModule: React.FC<RhModuleProps> = ({
     historyUserProfileId,
     historyStatusFilter,
     eventOverlapsHistoryRange,
+    historyLiveTick,
   ]);
 
   const pauseOverrunRows = useMemo(
-    () => hrAnalyticsService.listPauseOverrunEvents(statusHistoryRows, DEFAULT_PRESENCE_POLICY.maxPauseMinutes),
-    [statusHistoryRows]
+    () => hrAnalyticsService.listPauseOverrunEvents(statusHistoryRows, DEFAULT_PRESENCE_POLICY.maxPauseMinutes, sessionById),
+    [statusHistoryRows, sessionById],
   );
 
   const dailyCategoryOrder: hrAnalyticsService.DailyPresenceCategory[] = ['productive', 'meeting', 'pause', 'mission', 'absent', 'technical'];
@@ -282,6 +289,7 @@ const RhModule: React.FC<RhModuleProps> = ({
         dateIso,
         userId: uid,
         nowMs,
+        sessionById,
       });
       return { kind: 'single' as const, missingLink: false, dateIso, profileId: historyUserProfileId, ...b };
     }
@@ -295,6 +303,7 @@ const RhModule: React.FC<RhModuleProps> = ({
           dateIso,
           userId: uid,
           nowMs,
+          sessionById,
         });
         const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
         const displayName = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId.slice(0, 8);
@@ -305,6 +314,9 @@ const RhModule: React.FC<RhModuleProps> = ({
         displayName: string;
         categories: Record<hrAnalyticsService.DailyPresenceCategory, number>;
         totalSeconds: number;
+        totalSecondsIncludingAbsent: number;
+        pauseSegmentCount: number;
+        pauseSegmentsOverTwoMinutes: number;
       }>;
     return { kind: 'all' as const, dateIso, rows };
   }, [
@@ -316,24 +328,25 @@ const RhModule: React.FC<RhModuleProps> = ({
     employees,
     users,
     historyLiveTick,
+    sessionById,
   ]);
 
   const formatSegmentDuration = useCallback(
     (evt: PresenceStatusEvent) => {
-      const sec = hrAnalyticsService.presenceEventDurationSeconds(evt);
+      const sec = hrAnalyticsService.presenceEventDurationSeconds(evt, Date.now(), sessionById);
       const m = Math.floor(sec / 60);
       const s = sec % 60;
       if (fr) return `${m} min ${String(s).padStart(2, '0')} s`;
       return `${m}m ${String(s).padStart(2, '0')}s`;
     },
-    [fr]
+    [fr, sessionById, historyLiveTick],
   );
 
   const exportHistoryCsv = useCallback(() => {
     const sep = ';';
     const head = ['Salarié', 'Statut', 'Début', 'Fin', 'Durée', 'Source'];
     const lines = statusHistoryRows.map((row) => {
-      const sec = hrAnalyticsService.presenceEventDurationSeconds(row);
+      const sec = hrAnalyticsService.presenceEventDurationSeconds(row, Date.now(), sessionById);
       const dur = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
       return [
         row.displayName,
@@ -352,7 +365,7 @@ const RhModule: React.FC<RhModuleProps> = ({
     a.download = `historique_presence_${historyFilterDay || historyFilterMonth}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
-  }, [statusHistoryRows, historyFilterDay, historyFilterMonth]);
+  }, [statusHistoryRows, historyFilterDay, historyFilterMonth, sessionById, historyLiveTick]);
 
   const statusLabel = useCallback((status: PresenceStatus | 'absent') => {
     if (status === 'absent') return fr ? 'Absent' : 'Absent';
@@ -383,6 +396,27 @@ const RhModule: React.FC<RhModuleProps> = ({
     });
   }, [fr]);
 
+  const displayNameByProfileId = useMemo(() => {
+    const m: Record<string, string> = {};
+    users.forEach((u: any) => {
+      const pid = u.profileId;
+      if (pid) m[String(pid)] = u.fullName || u.name || u.email || String(pid).slice(0, 8);
+    });
+    return m;
+  }, [users]);
+
+  const payrollWorkedRows = useMemo(
+    () =>
+      hrAnalyticsService.listPayrollPeriodWorkedRows({
+        employees,
+        sessions: presenceSessions,
+        policy,
+        userIdByProfile,
+        displayNameByProfileId,
+      }),
+    [employees, presenceSessions, policy, userIdByProfile, displayNameByProfileId],
+  );
+
   const liveCounters = useMemo(() => {
     const present = livePresenceRows.filter((r) => ['online', 'present'].includes(r.currentStatus)).length;
     const meeting = livePresenceRows.filter((r) => ['in_meeting', 'brief_team'].includes(r.currentStatus)).length;
@@ -399,29 +433,19 @@ const RhModule: React.FC<RhModuleProps> = ({
 
   const showSalaries = canAccessModule('rh');
   const showLeave = canAccessModule('leave_management') || canAccessModule('leave_management_admin');
-  const showDemandes = showLeave || canAccessModule('rh');
-  const showEmployee = canAccessModule('rh');
   const showPostes = canAccessModule('postes_management');
   const showOrganigramme = canAccessModule('organization_management');
   const showPayroll = canAccessModule('rh') && hasPermission('rh', 'read');
-  const showFormation = canAccessModule('rh');
-  const showTalent = canAccessModule('talent_analytics');
   const showJobs = canAccessModule('jobs');
-  const showPlanning = canAccessModule('planning');
 
   const tabs: { id: RhTab; label: string; show: boolean }[] = [
     { id: 'salaries', label: fr ? 'Salariés' : 'Employees', show: showSalaries },
     { id: 'presence', label: fr ? 'Présence' : 'Attendance', show: showSalaries },
     { id: 'leave', label: fr ? 'Congés' : 'Leave', show: showLeave },
-    { id: 'demandes', label: fr ? 'Demandes' : 'Requests', show: showDemandes },
-    { id: 'employee', label: fr ? 'Fiche salarié' : 'Employee profile', show: showEmployee },
     { id: 'postes', label: fr ? 'Fiche poste' : 'Job profile', show: showPostes },
     { id: 'organigramme', label: fr ? 'Organigramme' : 'Org chart', show: showOrganigramme },
     { id: 'payroll', label: fr ? 'Paie' : 'Payroll', show: showPayroll },
-    { id: 'formation', label: fr ? 'Formation' : 'Training', show: showFormation },
-    { id: 'talent', label: fr ? 'Évaluations' : 'Evaluations', show: showTalent },
     { id: 'jobs', label: fr ? 'Offres d\'emploi' : 'Job offers', show: showJobs },
-    { id: 'planning', label: fr ? 'Planning' : 'Planning', show: showPlanning }
   ];
 
   const visibleTabs = tabs.filter(tab => tab.show);
@@ -445,7 +469,7 @@ const RhModule: React.FC<RhModuleProps> = ({
             {fr ? 'Ressources humaines' : 'Human resources'}
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {fr ? 'Congés, fiche salarié, postes, paie et évaluations.' : 'Leave, employee profile, positions, payroll and evaluations.'}
+            {fr ? 'Salariés, présence, congés, postes, organigramme, paie et emplois.' : 'Employees, attendance, leave, positions, org chart, payroll and jobs.'}
           </p>
         </div>
       </div>
@@ -469,20 +493,43 @@ const RhModule: React.FC<RhModuleProps> = ({
       </div>
 
       {currentTab === 'salaries' && (
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Liste des salariés' : 'Employees list'}</h2>
-          </div>
-          <div className="p-4">
-            <SalariésList
-              users={users}
-              onSelectEmployee={(emp) => {
-                setSelectedEmployee(emp);
-                setActiveTab('employee');
+        <div className="space-y-6">
+          <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Liste des salariés' : 'Employees list'}</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                {fr
+                  ? 'Utilisez « Associer un utilisateur » pour créer une fiche, puis « Fiche salarié » pour renseigner poste, taux horaire, CNSS, etc.'
+                  : 'Use « Associate user » to create a record, then « Employee record » to edit position, hourly rate, CNSS, etc.'}
+              </p>
+            </div>
+            <div className="p-4">
+              <SalariésList
+                users={users}
+                listVersion={employeeListVersion}
+                onSelectEmployee={(emp) => setSelectedEmployeeSheet(emp)}
+                onEmployeesMutated={loadEmployees}
+              />
+            </div>
+          </section>
+          {selectedEmployeeSheet ? (
+            <EmployeeProfile
+              platformUsers={users}
+              selectedEmployee={selectedEmployeeSheet}
+              onClearSelection={() => setSelectedEmployeeSheet(null)}
+              onSaved={() => {
+                setEmployeeListVersion((n) => n + 1);
+                loadEmployees();
               }}
             />
-          </div>
-        </section>
+          ) : (
+            <p className="text-sm text-slate-500 px-1">
+              {fr
+                ? 'Sélectionnez un salarié dans le tableau (colonne Actions → Fiche salarié) pour afficher et modifier sa fiche.'
+                : 'Pick an employee in the table (Actions → Employee record) to view and edit their HR record.'}
+            </p>
+          )}
+        </div>
       )}
 
       {currentTab === 'presence' && (
@@ -643,7 +690,14 @@ const RhModule: React.FC<RhModuleProps> = ({
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts (détaillé)' : 'Detailed status history'}</h3>
+                <div>
+                  <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts' : 'Status history'}</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-3xl">
+                    {fr
+                      ? 'Les durées des segments ouverts s’arrêtent à la déconnexion (fin de session). Le total journalier « temps suivi » exclut le statut Absent. Pauses : nombre de segments et segments de plus de 2 minutes.'
+                      : 'Open segment durations end at sign-out (session end). Daily « tracked time » excludes Absent status. Breaks: segment count and segments over 2 min.'}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={exportHistoryCsv}
@@ -745,13 +799,13 @@ const RhModule: React.FC<RhModuleProps> = ({
                   {dailyBreakdownView && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 space-y-3">
                       <h4 className="text-sm font-semibold text-slate-900">
-                        {fr ? 'Bilan journalier (heures / minutes / secondes)' : 'Daily totals (h / min / s)'}
+                        {fr ? 'Bilan du jour (hors absence)' : 'Daily summary (excluding absence)'}
                         <span className="font-normal text-slate-500"> — {dailyBreakdownView.dateIso}</span>
                       </h4>
                       <p className="text-xs text-slate-600">
                         {fr
-                          ? 'Somme des segments de statut sur la journée (fuseau local). Indépendant du filtre « Statut » du tableau ci-dessous.'
-                          : 'Sum of status segments for that local calendar day. Independent of the status filter below.'}
+                          ? 'Tous les statuts sont comptés sauf « absent ». Détail par catégorie ci-dessous. Le tableau des lignes respecte le filtre Statut.'
+                          : 'All statuses count except « absent ». Breakdown by category below. The row table respects the Status filter.'}
                       </p>
                       {dailyBreakdownView.kind === 'single' && dailyBreakdownView.missingLink && (
                         <p className="text-sm text-amber-800">{fr ? 'Profil sans user_id : impossible d’agréger les segments.' : 'Profile has no linked user_id.'}</p>
@@ -763,11 +817,37 @@ const RhModule: React.FC<RhModuleProps> = ({
                               users.find((u) => String((u as any).profileId || '') === dailyBreakdownView.profileId)?.name ||
                               dailyBreakdownView.profileId.slice(0, 8)}
                           </p>
-                          <div className="flex flex-wrap gap-2 items-baseline">
-                            <span className="text-xs uppercase text-slate-500">{fr ? 'Total suivis' : 'Tracked total'}</span>
-                            <span className="font-mono text-sm font-semibold text-slate-900">
-                              {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(dailyBreakdownView.totalSeconds))}
-                            </span>
+                          <div className="flex flex-wrap gap-3 items-baseline">
+                            <div>
+                              <span className="text-xs uppercase text-slate-500 block">{fr ? 'Temps suivi (hors absent)' : 'Tracked (excl. absent)'}</span>
+                              <span className="font-mono text-sm font-semibold text-slate-900">
+                                {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(dailyBreakdownView.totalSeconds))}
+                              </span>
+                            </div>
+                            {dailyBreakdownView.totalSecondsIncludingAbsent > dailyBreakdownView.totalSeconds && (
+                              <div>
+                                <span className="text-xs uppercase text-slate-500 block">{fr ? 'Dont absent' : 'Including absent'}</span>
+                                <span className="font-mono text-xs text-slate-600">
+                                  {hrAnalyticsService.formatHmsFrench(
+                                    hrAnalyticsService.secondsToHmsParts(
+                                      dailyBreakdownView.totalSecondsIncludingAbsent - dailyBreakdownView.totalSeconds,
+                                    ),
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-xs uppercase text-slate-500 block">{fr ? 'Pauses (segments)' : 'Break segments'}</span>
+                              <span className="font-mono text-sm text-slate-800">
+                                {dailyBreakdownView.pauseSegmentCount}
+                                {fr ? ' · ' : ' · '}
+                                <span className="text-slate-600">
+                                  {fr
+                                    ? `${dailyBreakdownView.pauseSegmentsOverTwoMinutes} > 2 min`
+                                    : `${dailyBreakdownView.pauseSegmentsOverTwoMinutes} over 2 min`}
+                                </span>
+                              </span>
+                            </div>
                           </div>
                           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                             {dailyCategoryOrder.map((cat) => (
@@ -787,7 +867,8 @@ const RhModule: React.FC<RhModuleProps> = ({
                             <thead>
                               <tr className="border-b border-slate-200 text-left text-slate-600">
                                 <th className="py-2 pr-2">{fr ? 'Salarié' : 'Employee'}</th>
-                                <th className="py-2 pr-2 font-mono">{fr ? 'Total' : 'Total'}</th>
+                                <th className="py-2 pr-2 font-mono whitespace-nowrap">{fr ? 'Suivi (hors absent)' : 'Tracked (excl. absent)'}</th>
+                                <th className="py-2 pr-2 font-mono whitespace-nowrap">{fr ? 'Pauses' : 'Breaks'}</th>
                                 {dailyCategoryOrder.map((cat) => (
                                   <th key={cat} className="py-2 pr-2 font-mono whitespace-nowrap">
                                     {dailyCatLabel(cat)}
@@ -801,6 +882,10 @@ const RhModule: React.FC<RhModuleProps> = ({
                                   <td className="py-2 pr-2">{r.displayName}</td>
                                   <td className="py-2 pr-2 font-mono">
                                     {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(r.totalSeconds))}
+                                  </td>
+                                  <td className="py-2 pr-2 font-mono text-xs whitespace-nowrap" title={fr ? 'Segments pause / &gt; 2 min' : 'Pause segments / over 2 min'}>
+                                    {r.pauseSegmentCount}
+                                    <span className="text-slate-500"> / {r.pauseSegmentsOverTwoMinutes}</span>
                                   </td>
                                   {dailyCategoryOrder.map((cat) => (
                                     <td key={cat} className="py-2 pr-2 font-mono whitespace-nowrap">
@@ -928,6 +1013,55 @@ const RhModule: React.FC<RhModuleProps> = ({
               </tbody>
             </table>
           </div>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h3 className="text-md font-semibold text-slate-900">
+                {fr ? 'Base rémunération (période comptable & sessions)' : 'Pay base (accounting period & sessions)'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {fr
+                  ? `Temps = sessions de présence sur la période définie par la politique (début de mois comptable). Heures paie = minutes réelles ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} (voir hrAnalyticsService). Montant = heures paie × taux horaire fiche salarié.`
+                  : `Time = presence sessions in the payroll window from policy. Pay hours = wall minutes ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR}. Amount = pay hours × employee hourly rate.`}
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Période' : 'Period'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Temps (h min s)' : 'Time (h m s)'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Heures paie' : 'Pay hours'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Jours actifs' : 'Active days'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Taux' : 'Rate'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Montant estimé' : 'Est. pay'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payrollWorkedRows.map((row) => (
+                    <tr key={row.profileId} className="border-b border-slate-100">
+                      <td className="px-4 py-3">{row.displayName}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.periodLabel}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs">
+                        {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(row.workedSeconds))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">{row.payableHours.toFixed(3)} h</td>
+                      <td className="px-4 py-3 text-right">{row.distinctWorkDays}</td>
+                      <td className="px-4 py-3 text-right font-mono">{row.hourlyRate.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono">{row.estimatedPay.toLocaleString()} XOF</td>
+                    </tr>
+                  ))}
+                  {payrollWorkedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        {fr ? 'Aucun salarié ou pas de sessions sur la période.' : 'No employees or no sessions in period.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
           <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
             <h3 className="text-md font-semibold text-slate-900">{fr ? 'Codifier une absence (autorisée / non autorisée)' : 'Classify absence (authorized / unauthorized)'}</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
@@ -1041,29 +1175,6 @@ const RhModule: React.FC<RhModuleProps> = ({
         </div>
       )}
 
-      {currentTab === 'demandes' && (
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Demandes' : 'Requests'}</h2>
-          </div>
-          <div className="p-4 space-y-3">
-            <p className="text-slate-600 text-sm">{fr ? 'Demandes de congé, bulletin de paie, certificat de travail, attestation de travail, attestation de congé.' : 'Leave requests, pay slip, work certificate, work attestation, leave attestation.'}</p>
-            {showLeave && (
-              <button type="button" onClick={() => setActiveTab('leave')} className="text-emerald-600 hover:text-emerald-800 font-medium text-sm">
-                <i className="fas fa-umbrella-beach mr-2" />
-                {fr ? 'Voir les congés' : 'View leave'}
-              </button>
-            )}
-          </div>
-        </section>
-      )}
-
-      {currentTab === 'employee' && (
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <EmployeeProfile selectedEmployee={selectedEmployee} onClearSelection={() => setSelectedEmployee(null)} />
-        </section>
-      )}
-
       {currentTab === 'postes' && (
         <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-200">
@@ -1094,37 +1205,6 @@ const RhModule: React.FC<RhModuleProps> = ({
           <div className="p-4">
             <PayrollTab users={users} employees={employees} />
           </div>
-        </section>
-      )}
-
-      {currentTab === 'formation' && (
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Formation' : 'Training'}</h2>
-          </div>
-          <div className="p-4">
-            <p className="text-slate-500 text-sm">{fr ? 'Espace formation à venir : cursus et formations par salarié.' : 'Training space coming soon: courses and training per employee.'}</p>
-          </div>
-        </section>
-      )}
-
-      {currentTab === 'talent' && (
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <TalentAnalytics setView={setView} users={users} jobs={jobs} />
-        </section>
-      )}
-
-      {currentTab === 'planning' && (
-        <section className="bg-white rounded-xl border border-slate-200 p-6">
-          <p className="text-slate-500 mb-4">{fr ? 'Accédez au planning complet via le menu.' : 'Access the full planning via the menu.'}</p>
-          <button
-            type="button"
-            onClick={() => setView('planning')}
-            className="btn-3d-secondary"
-          >
-            <i className="fas fa-calendar-week mr-2" />
-            {fr ? 'Ouvrir le planning' : 'Open planning'}
-          </button>
         </section>
       )}
 

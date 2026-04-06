@@ -437,10 +437,10 @@ const IntelligentInsights: React.FC<{
   const { language } = useLocalization();
   const [detailCategory, setDetailCategory] = useState<InsightCardId | null>(null);
 
-  const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
-  const now = new Date();
-  const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
+    const localize = (en: string, fr: string) => (language === Language.FR ? fr : en);
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
   const cards = useMemo((): SynthesisCard[] => {
     const list: SynthesisCard[] = [];
     const activeProjects = projects.filter(p => p.status === 'In Progress');
@@ -626,19 +626,19 @@ const IntelligentInsights: React.FC<{
 
   const selectedCard = detailCategory ? cards.find(c => c.id === detailCategory) : null;
 
-  return (
+    return (
     <div className="rounded-2xl border border-coya-border bg-coya-card shadow-sm overflow-hidden">
       <div className="p-5 border-b border-coya-border bg-gradient-to-r from-coya-primary/5 to-transparent">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-lg font-semibold text-coya-text flex items-center gap-2">
             <i className="fas fa-brain text-coya-primary" aria-hidden />
             {localize('Intelligent analysis & predictions', 'Analyse intelligente et prédictions')}
-          </h3>
+        </h3>
           <span className="text-xs text-coya-text-muted bg-white/80 px-2.5 py-1 rounded-full border border-coya-border">
             <i className="fas fa-robot mr-1" aria-hidden />
             {localize('Synthesis by module', 'Synthèse par module')}
-          </span>
-        </div>
+        </span>
+      </div>
       </div>
       <div className="p-4">
         <p className="text-sm text-coya-text-muted mb-4">
@@ -653,11 +653,11 @@ const IntelligentInsights: React.FC<{
               onClick={() => setDetailCategory(card.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCategory(card.id); } }}
               className={`rounded-xl border-l-4 p-4 text-left transition-all cursor-pointer ${getStatusStyles(card.status)} focus:outline-none focus:ring-2 focus:ring-coya-primary/40`}
-            >
-              <div className="flex items-start gap-3">
+          >
+            <div className="flex items-start gap-3">
                 <div className="rounded-lg bg-white/80 p-2 shadow-sm">
                   <i className={`${card.icon} text-coya-primary text-lg`} aria-hidden />
-                </div>
+              </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-coya-text">{card.title}</h4>
                   <p className="text-sm font-medium text-coya-text-muted mt-0.5">{card.metric}</p>
@@ -669,7 +669,7 @@ const IntelligentInsights: React.FC<{
                       className="text-xs font-medium text-coya-primary hover:underline focus:outline-none"
                     >
                       {localize('View analysis', 'Voir l\'analyse')} →
-                    </button>
+                  </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setView(card.view); }}
@@ -678,12 +678,12 @@ const IntelligentInsights: React.FC<{
                       {localize('Go to module', 'Aller au module')} →
                     </button>
                   </div>
-                </div>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
+    </div>
 
       {/* Modal détail : analyse complète */}
       {selectedCard && (
@@ -702,7 +702,7 @@ const IntelligentInsights: React.FC<{
               <h2 id="insight-detail-title" className="text-lg font-semibold text-coya-text flex items-center gap-2">
                 <i className={`${selectedCard.icon} text-coya-primary`} aria-hidden />
                 {selectedCard.detailTitle}
-              </h2>
+        </h2>
               <button
                 type="button"
                 onClick={() => setDetailCategory(null)}
@@ -711,7 +711,7 @@ const IntelligentInsights: React.FC<{
               >
                 <i className="fas fa-times" aria-hidden />
               </button>
-            </div>
+      </div>
             <div className="p-5 overflow-y-auto flex-1">
               <ul className="space-y-2 text-sm text-coya-text">
                 {selectedCard.detailItems.map((item, i) => (
@@ -743,7 +743,7 @@ const IntelligentInsights: React.FC<{
               </button>
             </div>
           </div>
-        </div>
+            </div>
       )}
     </div>
   );
@@ -1265,7 +1265,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
       )}
-
+      
       {sectionMatchesSearch([t('my_courses'), localize('Courses', 'Formations')]) && (
       <div className="mt-10">
         <div className="flex justify-between items-center mb-4">

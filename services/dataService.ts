@@ -1,9 +1,57 @@
 import { supabase } from './supabaseService';
 import { ApiHelper } from './apiHelper';
-import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee, PresenceStatusEvent, HrAttendancePolicy, WorkMode } from '../types';
+import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee, EmployeeHrAttachment, PresenceStatusEvent, HrAttendancePolicy, WorkMode } from '../types';
 import OrganizationService from './organizationService';
 import { CurrencyService } from './currencyService';
 import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
+
+/** Résolution profiles.id / auth user_id pour notifications — cache + requêtes in-flight dédupliquées (évite tempête réseau). */
+const NOTIF_TARGET_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const notifTargetProfileCache = new Map<string, string>();
+const notifTargetProfileInflight = new Map<string, Promise<string | null>>();
+
+async function resolveNotifTargetProfileId(rawUserId: string): Promise<string | null> {
+  const raw = String(rawUserId);
+  if (!NOTIF_TARGET_UUID.test(raw)) return null;
+
+  const hit = notifTargetProfileCache.get(raw);
+  if (hit) return hit;
+
+  const pending = notifTargetProfileInflight.get(raw);
+  if (pending) return pending;
+
+  const task = (async (): Promise<string | null> => {
+    try {
+      const { data: profileById } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', raw)
+        .maybeSingle();
+      if (profileById?.id) {
+        const id = String(profileById.id);
+        notifTargetProfileCache.set(raw, id);
+        return id;
+      }
+      const { data: profileByUserId } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_id', raw)
+        .maybeSingle();
+      if (profileByUserId?.id) {
+        const id = String(profileByUserId.id);
+        notifTargetProfileCache.set(raw, id);
+        return id;
+      }
+      return null;
+    } finally {
+      notifTargetProfileInflight.delete(raw);
+    }
+  })();
+
+  notifTargetProfileInflight.set(raw, task);
+  return task;
+}
 
 // Service de données Supabase
 export class DataService {
@@ -2601,6 +2649,20 @@ export class DataService {
   }
 
   // ===== EMPLOYEES (Phase 4 Bloc 1.5 – Fiche salarié) =====
+  private static parseHrAttachments(raw: unknown): EmployeeHrAttachment[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw as EmployeeHrAttachment[];
+    if (typeof raw === 'string') {
+      try {
+        const p = JSON.parse(raw);
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
   private static mapEmployeeRow(row: any): Employee {
     return {
       id: row.id,
@@ -2620,9 +2682,33 @@ export class DataService {
       familySituation: row.family_situation ?? undefined,
       photoUrl: row.photo_url ?? undefined,
       cvUrl: row.cv_url ?? undefined,
+      hrAttachments: this.parseHrAttachments(row.hr_attachments),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
+  }
+
+  /** Upload photo / CV / document RH vers le bucket `employee-files` (migration + bucket requis). */
+  static async uploadEmployeeHrFile(params: {
+    organizationId: string;
+    employeeProfileId: string;
+    file: File;
+    subfolder: 'photo' | 'cv' | 'documents';
+  }): Promise<{ publicUrl: string | null; error: any }> {
+    try {
+      const bucket = 'employee-files';
+      const safe = params.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const path = `${params.organizationId}/${params.employeeProfileId}/${params.subfolder}/${Date.now()}_${safe}`;
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, params.file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+      if (uploadError) return { publicUrl: null, error: uploadError };
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return { publicUrl: data?.publicUrl ?? null, error: null };
+    } catch (e) {
+      return { publicUrl: null, error: e };
+    }
   }
 
   static async listEmployees(organizationId?: string | null): Promise<Employee[]> {
@@ -2686,25 +2772,49 @@ export class DataService {
       const organizationId = employee.organizationId || (profile as any)?.organization_id;
       const profileId = employee.profileId || (profile as any)?.id;
       if (!organizationId || !profileId) return { data: null, error: new Error('Organisation ou profil manquant') };
-      const row = {
+      // PostgREST PGRST204 si une clé JSON ne correspond à aucune colonne. Le hotfix `employees` n’a souvent
+      // pas cnss/amo/work_mode/… — le formulaire envoie toujours les clés avec des chaînes vides : on n’inclut
+      // ces champs que s’ils ont une valeur utile, ou (HR) si l’utilisateur sort des défauts du formulaire.
+      const row: Record<string, unknown> = {
         organization_id: organizationId,
         profile_id: profileId,
-        position: employee.position ?? null,
-        work_mode: employee.workMode ?? null,
-        hourly_rate: employee.hourlyRate ?? null,
-        expected_daily_minutes: employee.expectedDailyMinutes ?? null,
-        manager_id: employee.managerId ?? null,
-        mentor_id: employee.mentorId ?? null,
-        cnss: employee.cnss ?? null,
-        amo: employee.amo ?? null,
-        indemnities: employee.indemnities ?? null,
-        leave_rate: employee.leaveRate ?? null,
-        tenure_date: employee.tenureDate ?? null,
-        family_situation: employee.familySituation ?? null,
-        photo_url: employee.photoUrl ?? null,
-        cv_url: employee.cvUrl ?? null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
+      const e = employee as Record<string, unknown>;
+      const strTrim = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+      const includeOptionalText = (v: unknown) => strTrim(v) !== '';
+
+      if ('position' in e) row.position = strTrim(e.position) === '' ? null : e.position ?? null;
+      if ('managerId' in e) row.manager_id = strTrim(e.managerId) === '' ? null : e.managerId ?? null;
+      if ('mentorId' in e) row.mentor_id = strTrim(e.mentorId) === '' ? null : e.mentorId ?? null;
+      if ('cnss' in e && includeOptionalText(e.cnss)) row.cnss = strTrim(e.cnss);
+      if ('amo' in e && includeOptionalText(e.amo)) row.amo = strTrim(e.amo);
+      if ('indemnities' in e && includeOptionalText(e.indemnities)) row.indemnities = strTrim(e.indemnities);
+      if ('leaveRate' in e) row.leave_rate = e.leaveRate ?? null;
+      if ('tenureDate' in e && includeOptionalText(e.tenureDate)) row.tenure_date = strTrim(e.tenureDate);
+      if ('familySituation' in e && includeOptionalText(e.familySituation)) row.family_situation = strTrim(e.familySituation);
+      if ('photoUrl' in e && includeOptionalText(e.photoUrl)) row.photo_url = strTrim(e.photoUrl);
+      if ('cvUrl' in e && includeOptionalText(e.cvUrl)) row.cv_url = strTrim(e.cvUrl);
+
+      const wm = e.workMode;
+      const hr = e.hourlyRate;
+      const edm = e.expectedDailyMinutes;
+      const hrMeaningful =
+        ('workMode' in e && wm != null && String(wm) !== '' && String(wm) !== 'office') ||
+        ('hourlyRate' in e && typeof hr === 'number' && Number.isFinite(hr) && hr > 0) ||
+        ('expectedDailyMinutes' in e &&
+          typeof edm === 'number' &&
+          Number.isFinite(edm) &&
+          edm !== 480);
+      if (hrMeaningful) {
+        if ('workMode' in e) row.work_mode = wm ?? null;
+        if ('hourlyRate' in e) row.hourly_rate = hr ?? null;
+        if ('expectedDailyMinutes' in e) row.expected_daily_minutes = edm ?? null;
+      }
+      const att = (e as any).hrAttachments;
+      if ('hrAttachments' in e && Array.isArray(att) && att.length > 0) {
+        row.hr_attachments = att;
+      }
       const { data, error } = await supabase.from('employees').upsert(row, {
         onConflict: 'organization_id,profile_id',
         ignoreDuplicates: false
@@ -3330,6 +3440,13 @@ export class DataService {
     }
   }
 
+  /** JSON stocké dans course_lessons.quiz */
+  private static courseLessonQuizToJson(lesson: { quizQuestions?: unknown }): unknown | null {
+    const qs = lesson.quizQuestions;
+    if (!qs || !Array.isArray(qs) || qs.length === 0) return null;
+    return { questions: qs };
+  }
+
   // ===== COURSES =====
   static async getCourses() {
     return await ApiHelper.get('courses', { 
@@ -3370,6 +3487,8 @@ export class DataService {
           requires_final_validation: !!course.requiresFinalValidation,
           sequential_modules: !!course.sequentialModules,
           course_materials: course.courseMaterials || [],
+          programme_id: course.programmeId ?? null,
+          audience_segment: course.audienceSegment ?? null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -3424,6 +3543,7 @@ export class DataService {
                   content_url: lesson.contentUrl || null,
                   attachments: lesson.attachments || [],
                   external_links: lesson.externalLinks || [],
+                  quiz: DataService.courseLessonQuizToJson(lesson),
                   order_index: lIndex + 1,
                   created_at: new Date().toISOString()
                 })
@@ -3481,6 +3601,8 @@ export class DataService {
       if (updates.requiresFinalValidation !== undefined) updateData.requires_final_validation = updates.requiresFinalValidation;
       if (updates.sequentialModules !== undefined) updateData.sequential_modules = updates.sequentialModules;
       if (updates.courseMaterials !== undefined) updateData.course_materials = updates.courseMaterials;
+      if (updates.programmeId !== undefined) updateData.programme_id = updates.programmeId;
+      if (updates.audienceSegment !== undefined) updateData.audience_segment = updates.audienceSegment;
 
       // Ignorer les champs calculés : modules, completedLessons, progress
       // Ces champs ne sont pas stockés dans la table courses
@@ -3573,6 +3695,7 @@ export class DataService {
                   content_url: lesson.contentUrl || null,
                   attachments: lesson.attachments || [],
                   external_links: lesson.externalLinks || [],
+                  quiz: DataService.courseLessonQuizToJson(lesson),
                   order_index: lIndex + 1,
                   created_at: new Date().toISOString()
                 });
@@ -4219,24 +4342,8 @@ export class DataService {
       }
 
       // La table notifications pointe vers profiles.id (et non auth.users.id)
-      const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      let targetProfileId: string | null = null;
-      if (uuidLike.test(String(rawUserId))) {
-        const { data: profileById } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', rawUserId)
-          .maybeSingle();
-        if (profileById?.id) targetProfileId = String(profileById.id);
-        else {
-          const { data: profileByUserId } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('user_id', rawUserId)
-            .maybeSingle();
-          if (profileByUserId?.id) targetProfileId = String(profileByUserId.id);
-        }
-      }
+      const uuidLike = NOTIF_TARGET_UUID;
+      const targetProfileId = await resolveNotifTargetProfileId(String(rawUserId));
       if (!targetProfileId) {
         return { data: null, error: new Error('Profil destinataire introuvable (notifications.user_id doit être un profiles.id)') };
       }

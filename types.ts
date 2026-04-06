@@ -13,7 +13,7 @@ export type Role =
   // Rôles créatifs et médias
   'publisher' | 'editor' | 'producer' | 'artist';
 
-/** 22 modules métier + administration (alignés Odoo / 10 départements) */
+/** Modules métier + administration (alignés Odoo / départements) */
 export type ModuleName =
   | 'dashboard'
   | 'projects'
@@ -27,15 +27,12 @@ export type ModuleName =
   | 'courses'
   | 'jobs'
   | 'crm_sales'
-  | 'partenariat'
   | 'analytics'
   | 'talent_analytics'
   | 'qualite'
   | 'rh'
   | 'trinite'
   | 'programme'
-  | 'juridique'
-  | 'studio'
   | 'tech'
   | 'collecte'
   | 'conseil'
@@ -50,7 +47,6 @@ export type ModuleName =
   | 'logistique'
   | 'parc_auto'
   | 'ticket_it'
-  | 'alerte_anonyme'
   | 'messagerie';
 
 export type ProfileStatus = 'pending' | 'active' | 'rejected';
@@ -217,6 +213,22 @@ export interface FileAttachment {
 export type EvidenceDocument = FileAttachment;
 export type Receipt = FileAttachment;
 
+/** Choix d’une question de quiz (formation / cours) */
+export interface CourseQuizChoice {
+  id: string;
+  label: string;
+}
+
+/** Question à choix multiples, définie par le créateur de formation */
+export interface CourseQuizQuestion {
+  id: string;
+  prompt: string;
+  /** single = une seule bonne réponse ; multiple = plusieurs cases correctes */
+  mode: 'single' | 'multiple';
+  choices: CourseQuizChoice[];
+  correctChoiceIds: string[];
+}
+
 export interface Lesson {
   id: string;
   title: string;
@@ -227,7 +239,12 @@ export interface Lesson {
   contentUrl?: string;
   attachments?: EvidenceDocument[];
   externalLinks?: Array<{ label: string; url: string }>;
+  /** Stocké en JSON (`quiz`) côté Supabase : ensemble des questions de la leçon */
+  quizQuestions?: CourseQuizQuestion[];
 }
+
+/** Public ou parcours visuel (couverture, ton) — extensible */
+export type CourseAudienceSegment = 'general' | 'incubated' | 'beneficiary';
 
 export interface Module {
   id: string;
@@ -268,6 +285,10 @@ export interface Course {
   requiresFinalValidation?: boolean;
   sequentialModules?: boolean;
   courseMaterials?: EvidenceDocument[];
+  /** Rattachement optionnel au module Programme (bailleurs, participants, etc.) */
+  programmeId?: string | null;
+  /** Cible pédagogique / présentation (incubés, bénéficiaires…) */
+  audienceSegment?: CourseAudienceSegment | null;
 }
 
 // Source de candidature
@@ -339,6 +360,8 @@ export interface TaskSwotNotes {
 
 export interface Task {
   id: string;
+  /** Activité de terrain (projet) — lien hiérarchique Programme → Projet → Activité → Tâche */
+  activityId?: string | null;
   text: string;
   status: 'To Do' | 'In Progress' | 'Completed';
   priority: 'High' | 'Medium' | 'Low';
@@ -361,6 +384,15 @@ export interface Task {
   completedById?: string;
   /** Justificatif obligatoire : au moins une pièce jointe pour "Réalisé" (Phase 2) */
   justificationAttachmentIds?: string[];
+  /** Pilotage manager : période, consigne, clôture auto / hors performance */
+  taskGovernance?: 'open' | 'done_proven' | 'not_realized' | 'closed_out';
+  periodStart?: string;
+  periodEnd?: string;
+  managerComment?: string;
+  proofUrl?: string;
+  proofStoragePath?: string;
+  /** Impact productivité (0–1) — renseigné lors d’échéance non tenue ou clôture manager */
+  productivityPenalty?: number;
 }
 
 export interface Risk {
@@ -424,6 +456,87 @@ export interface Bailleur {
   updatedAt?: string;
 }
 
+/** Activité de terrain rattachée à un projet (niveau intermédiaire avant les tâches) */
+export interface ProjectActivity {
+  id: string;
+  organizationId: string;
+  programmeId?: string | null;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  status: 'planned' | 'in_progress' | 'completed' | 'cancelled';
+  sequence: number;
+  /** MEL : indicateur / cible */
+  melTargetLabel?: string | null;
+  melTargetValue?: number | null;
+  melResultValue?: number | null;
+  melUnit?: string | null;
+  melNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type BudgetCascadeScope = 'programme' | 'project' | 'activity' | 'task';
+
+export type BudgetCascadeWorkflowStatus = 'draft' | 'submitted' | 'validated' | 'locked';
+
+/** Agrégation budget cascade (vue SQL ou calcul équivalent). */
+export interface BudgetRollupByPostRow {
+  programmeId: string;
+  expensePostCode: string;
+  currency: string;
+  totalPlanned: number;
+  totalActual: number;
+  variancePlannedMinusActual: number;
+  lineCount: number;
+}
+
+export interface BudgetRollupByScopeRow {
+  programmeId: string;
+  scopeLevel: BudgetCascadeScope;
+  currency: string;
+  totalPlanned: number;
+  totalActual: number;
+  variancePlannedMinusActual: number;
+  lineCount: number;
+}
+
+/** Soumission formulaire collecte (local, prête pour branchement API). */
+export interface DataCollectionSubmission {
+  id: string;
+  collectionId: string;
+  organizationId?: string | null;
+  submittedAt: string;
+  /** Champs formulaire (email, téléphone, nom, etc.) */
+  payload: Record<string, string>;
+  syncedToCrm?: boolean;
+  crmContactId?: string | null;
+}
+
+/** Ligne budgétaire avec cascade Programme → Projet → Activité → Tâche */
+export interface BudgetCascadeLine {
+  id: string;
+  organizationId: string;
+  scopeLevel: BudgetCascadeScope;
+  programmeId: string;
+  projectId?: string | null;
+  activityId?: string | null;
+  /** Id de la tâche dans le JSON du projet lorsque scopeLevel = task */
+  projectTaskId?: string | null;
+  parentLineId?: string | null;
+  expensePostCode?: string | null;
+  label: string;
+  plannedAmount: number;
+  actualAmount: number;
+  currency: string;
+  workflowStatus: BudgetCascadeWorkflowStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Programme (Phase 3) : financé par un bailleur, regroupe projets et lignes budgétaires */
 export interface Programme {
   id: string;
@@ -444,8 +557,12 @@ export interface Programme {
 export type ProgrammeStakeholderType =
   | 'facilitator'
   | 'implementation_partner'
+  /** Partenaire opérationnel / exécutant sur le terrain */
+  | 'executing_partner'
   | 'donor_contact'
   | 'technical'
+  /** Personnel interne COYA (profil plateforme) */
+  | 'internal_staff'
   | 'other';
 
 export interface ProgrammeStakeholder {
@@ -465,8 +582,10 @@ export type ProgrammeActionStatus =
   | 'draft'
   | 'pending_validation'
   | 'validated'
+  | 'assigned'
   | 'done'
-  | 'cancelled';
+  | 'cancelled'
+  | 'not_realized';
 
 export interface ProgrammeAction {
   id: string;
@@ -478,6 +597,17 @@ export interface ProgrammeAction {
   validatedByProfileId?: string | null;
   validatedAt?: string | null;
   dueDate?: string | null;
+  /** Début de période (inclusive), format date YYYY-MM-DD */
+  periodStart?: string | null;
+  /** Fin de période / échéance : au-delà, clôture auto en non réalisé si pas « fait » */
+  periodEnd?: string | null;
+  /** Preuve externe (URL) lors du marquage réalisé */
+  proofUrl?: string | null;
+  /** Chemin Storage (capture d’écran) */
+  proofStoragePath?: string | null;
+  completedByProfileId?: string | null;
+  completedAt?: string | null;
+  assigneeProfileIds: string[];
   notes?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -772,6 +902,8 @@ export interface Beneficiaire {
   organizationId?: string | null;
   programmeId?: string | null;
   projectId?: string | null;
+  /** Fiche CRM créée ou liée depuis la collecte terrain */
+  crmContactId?: string | null;
   theme?: string | null;
   target?: string | null;
   gender?: string | null;
@@ -946,7 +1078,13 @@ export interface DataCollection {
   status?: 'draft' | 'active' | 'archived';
   /** Une seule affectation principale parmi les trois (validation métier côté UI) */
   projectId?: string | null;
+  /**
+   * Programme cible (mode « programme seul ») ou **dérivé du projet** lorsque `projectId` est défini
+   * (pour filtres / rapports sans jointure sur `projects`).
+   */
   programmeId?: string | null;
+  /** Activité de terrain (optionnel, avec projectId) */
+  activityId?: string | null;
   /** Formation globale (ex. cours / offre) – distinct de l’espace formation RH */
   formationId?: string | null;
   linkedToCrm?: boolean;
@@ -1076,6 +1214,13 @@ export const DEFAULT_PRESENCE_POLICY: PresencePolicy = {
   maxHoursPerDay: 10
 };
 
+/** Pièce jointe RH (URL publique Storage après upload) */
+export interface EmployeeHrAttachment {
+  url: string;
+  name: string;
+  uploadedAt?: string;
+}
+
 /** Fiche salarié RH (Phase 4 Bloc 1.5) */
 export interface Employee {
   id: string;
@@ -1085,7 +1230,9 @@ export interface Employee {
   workMode?: WorkMode | null;
   hourlyRate?: number | null;
   expectedDailyMinutes?: number | null;
+  /** Responsable hiérarchique (profil) — utilisé par l’organigramme */
   managerId?: string | null;
+  /** Superviseur / mentor (profil) — affiché sur la fiche et l’organigramme */
   mentorId?: string | null;
   cnss?: string | null;
   amo?: string | null;
@@ -1095,6 +1242,7 @@ export interface Employee {
   familySituation?: string | null;
   photoUrl?: string | null;
   cvUrl?: string | null;
+  hrAttachments?: EmployeeHrAttachment[];
   createdAt?: string;
   updatedAt?: string;
 }

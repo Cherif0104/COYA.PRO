@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Course, User, Module, Lesson, EvidenceDocument, Role } from '../types';
+import { Course, User, Module, Lesson, EvidenceDocument, Role, Programme, CourseQuizQuestion, CourseAudienceSegment } from '../types';
 import DataAdapter from '../services/dataAdapter';
+import * as programmeService from '../services/programmeService';
+import OrganizationService from '../services/organizationService';
+
+const genQuizId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+function newQuizQuestion(): CourseQuizQuestion {
+  const a = genQuizId();
+  const b = genQuizId();
+  return {
+    id: genQuizId(),
+    prompt: '',
+    mode: 'single',
+    choices: [
+      { id: a, label: 'Réponse A' },
+      { id: b, label: 'Réponse B' },
+    ],
+    correctChoiceIds: [a],
+  };
+}
 
 const INSTRUCTOR_ROLES: Role[] = ['trainer', 'coach', 'mentor', 'facilitator', 'partner_facilitator', 'administrator', 'manager', 'supervisor', 'super_administrator'];
 const TARGETABLE_ROLES: Role[] = ['student', 'intern', 'alumni', 'trainer', 'coach', 'mentor', 'entrepreneur', 'employer', 'facilitator', 'partner_facilitator'];
@@ -38,7 +57,9 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
         modules: [] as Module[],
         requiresFinalValidation: false,
         sequentialModules: false,
-        courseMaterials: [] as EvidenceDocument[]
+        courseMaterials: [] as EvidenceDocument[],
+        programmeId: '' as string,
+        audienceSegment: 'general' as CourseAudienceSegment,
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,6 +68,7 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
     const [isInstructorSearchLoading, setIsInstructorSearchLoading] = useState(false);
     const [targetSearch, setTargetSearch] = useState('');
     const [targetRoleFilter, setTargetRoleFilter] = useState<'all' | Role>('all');
+    const [programmes, setProgrammes] = useState<Programme[]>([]);
 
     const eligibleInstructors = useMemo(() => {
         return users
@@ -134,10 +156,23 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
                 modules: editingCourse.modules || [],
                 requiresFinalValidation: editingCourse.requiresFinalValidation || false,
                 sequentialModules: editingCourse.sequentialModules || false,
-                courseMaterials: editingCourse.courseMaterials || []
+                courseMaterials: editingCourse.courseMaterials || [],
+                programmeId: editingCourse.programmeId || '',
+                audienceSegment: (editingCourse.audienceSegment as CourseAudienceSegment) || 'general',
             });
         }
     }, [editingCourse]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const orgId = await OrganizationService.getCurrentUserOrganizationId();
+            if (!orgId || cancelled) return;
+            const list = await programmeService.listProgrammes(orgId);
+            if (!cancelled) setProgrammes(list);
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         if (!isEditMode) return;
@@ -298,7 +333,9 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
             targetStudents: formData.targetAllUsers ? null : formData.selectedUserIds,
             youtubeUrl: formData.youtubeUrl || null,
             driveUrl: formData.driveUrl || null,
-            instructorId: formData.instructorId || null
+            instructorId: formData.instructorId || null,
+            programmeId: formData.programmeId.trim() || null,
+            audienceSegment: formData.audienceSegment,
         };
 
         // Si mode édition, conserver l'ID
@@ -329,10 +366,13 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
     };
     
     const handleLessonChange = (moduleIndex: number, lessonIndex: number, field: string, value: string) => {
-        updateLesson(moduleIndex, lessonIndex, lesson => ({
-            ...lesson,
-            [field]: value
-        }));
+        updateLesson(moduleIndex, lessonIndex, (lesson) => {
+            const next: Lesson = { ...lesson, [field]: value } as Lesson;
+            if (field === 'type' && value === 'quiz' && (!next.quizQuestions || next.quizQuestions.length === 0)) {
+                next.quizQuestions = [newQuizQuestion()];
+            }
+            return next;
+        });
     };
 
     useEffect(() => {
@@ -372,7 +412,8 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
             description: '',
             contentUrl: '',
             attachments: [],
-            externalLinks: []
+            externalLinks: [],
+            quizQuestions: [],
         };
         const newModules = [...formData.modules];
         newModules[moduleIndex].lessons.push(newLesson);
@@ -766,6 +807,44 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
                             </div>
                         </div>
 
+                        {/* Lien module Programme & parcours apprenant */}
+                        <div className="space-y-4 border-t pt-6">
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center mb-2">
+                                <i className="fas fa-project-diagram text-emerald-600 mr-2"></i>
+                                Programme & public cible
+                            </h3>
+                            <p className="text-xs text-gray-600 mb-3">
+                                Rattachez la formation à un programme (bailleurs, participants, collecte) et précisez le type de parcours pour l’affichage côté apprenant.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Programme COYA (optionnel)</label>
+                                    <select
+                                        value={formData.programmeId}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, programmeId: e.target.value }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                    >
+                                        <option value="">— Aucun rattachement —</option>
+                                        {programmes.map((p) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Parcours / présentation</label>
+                                    <select
+                                        value={formData.audienceSegment}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, audienceSegment: e.target.value as CourseAudienceSegment }))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                    >
+                                        <option value="general">Tous publics</option>
+                                        <option value="incubated">Incubés / entrepreneurs accompagnés</option>
+                                        <option value="beneficiary">Bénéficiaires de programme</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Liens YouTube et Drive */}
                         <div className="space-y-4 border-t pt-6">
                             <h3 className="text-lg font-bold text-gray-800 flex items-center mb-4">
@@ -1002,8 +1081,137 @@ const CourseCreatePage: React.FC<CourseCreatePageProps> = ({
                                                                     placeholder="https://..."
                                                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
                                                                 />
-                                                                <p className="text-[11px] text-gray-500 mt-1">URL de la vidéo, du document ou de la page principale à consulter.</p>
+                                                                <p className="text-[11px] text-gray-500 mt-1">YouTube, lien vidéo direct (.mp4), ou PDF : affichage intégré dans la plateforme pour les apprenants.</p>
                                                             </div>
+
+                                                            {lesson.type === 'quiz' && (
+                                                                <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 space-y-3">
+                                                                    <p className="text-xs font-bold text-amber-900">Quiz — questions et bonnes réponses</p>
+                                                                    {(lesson.quizQuestions || []).map((q, qIdx) => (
+                                                                        <div key={q.id} className="border border-amber-100 rounded-md p-2 bg-white space-y-2">
+                                                                            <div className="flex flex-wrap gap-2 items-center justify-between">
+                                                                                <span className="text-[10px] font-semibold text-gray-500">Question {qIdx + 1}</span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-[10px] text-red-600"
+                                                                                    onClick={() => updateLesson(mIndex, lIndex, (l) => {
+                                                                                        const qs = [...(l.quizQuestions || [])];
+                                                                                        qs.splice(qIdx, 1);
+                                                                                        return { ...l, quizQuestions: qs };
+                                                                                    })}
+                                                                                >
+                                                                                    Supprimer
+                                                                                </button>
+                                                                            </div>
+                                                                            <input
+                                                                                value={q.prompt}
+                                                                                onChange={(e) => updateLesson(mIndex, lIndex, (l) => {
+                                                                                    const qs = [...(l.quizQuestions || [])];
+                                                                                    qs[qIdx] = { ...qs[qIdx], prompt: e.target.value };
+                                                                                    return { ...l, quizQuestions: qs };
+                                                                                })}
+                                                                                placeholder="Intitulé de la question"
+                                                                                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                                                            />
+                                                                            <div className="flex gap-2 items-center text-xs">
+                                                                                <span className="text-gray-600">Mode :</span>
+                                                                                <select
+                                                                                    value={q.mode}
+                                                                                    onChange={(e) => updateLesson(mIndex, lIndex, (l) => {
+                                                                                        const qs = [...(l.quizQuestions || [])];
+                                                                                        qs[qIdx] = { ...qs[qIdx], mode: e.target.value as 'single' | 'multiple' };
+                                                                                        return { ...l, quizQuestions: qs };
+                                                                                    })}
+                                                                                    className="border border-gray-300 rounded px-2 py-1"
+                                                                                >
+                                                                                    <option value="single">Une bonne réponse</option>
+                                                                                    <option value="multiple">Plusieurs bonnes réponses</option>
+                                                                                </select>
+                                                                            </div>
+                                                                            <div className="space-y-1">
+                                                                                {q.choices.map((c, cIdx) => (
+                                                                                    <div key={c.id} className="flex flex-wrap items-center gap-2 text-xs">
+                                                                                        <input
+                                                                                            value={c.label}
+                                                                                            onChange={(e) => updateLesson(mIndex, lIndex, (l) => {
+                                                                                                const qs = [...(l.quizQuestions || [])];
+                                                                                                const ch = [...qs[qIdx].choices];
+                                                                                                ch[cIdx] = { ...ch[cIdx], label: e.target.value };
+                                                                                                qs[qIdx] = { ...qs[qIdx], choices: ch };
+                                                                                                return { ...l, quizQuestions: qs };
+                                                                                            })}
+                                                                                            className="flex-1 min-w-[120px] px-2 py-1 border border-gray-200 rounded"
+                                                                                            placeholder={`Choix ${cIdx + 1}`}
+                                                                                        />
+                                                                                        <label className="flex items-center gap-1 whitespace-nowrap">
+                                                                                            <input
+                                                                                                type="checkbox"
+                                                                                                checked={q.correctChoiceIds.includes(c.id)}
+                                                                                                onChange={() => updateLesson(mIndex, lIndex, (l) => {
+                                                                                                    const qs = [...(l.quizQuestions || [])];
+                                                                                                    const cur = qs[qIdx];
+                                                                                                    let ids = [...cur.correctChoiceIds];
+                                                                                                    if (cur.mode === 'single') {
+                                                                                                        ids = ids.includes(c.id) ? [] : [c.id];
+                                                                                                    } else if (ids.includes(c.id)) {
+                                                                                                        ids = ids.filter((x) => x !== c.id);
+                                                                                                    } else {
+                                                                                                        ids.push(c.id);
+                                                                                                    }
+                                                                                                    qs[qIdx] = { ...cur, correctChoiceIds: ids };
+                                                                                                    return { ...l, quizQuestions: qs };
+                                                                                                })}
+                                                                                            />
+                                                                                            Correct
+                                                                                        </label>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            className="text-red-500"
+                                                                                            onClick={() => updateLesson(mIndex, lIndex, (l) => {
+                                                                                                const qs = [...(l.quizQuestions || [])];
+                                                                                                const ch = qs[qIdx].choices.filter((_, i) => i !== cIdx);
+                                                                                                qs[qIdx] = {
+                                                                                                    ...qs[qIdx],
+                                                                                                    choices: ch,
+                                                                                                    correctChoiceIds: qs[qIdx].correctChoiceIds.filter((id) => id !== c.id),
+                                                                                                };
+                                                                                                return { ...l, quizQuestions: qs };
+                                                                                            })}
+                                                                                        >
+                                                                                            ×
+                                                                                        </button>
+                                                                                    </div>
+                                                                                ))}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-[11px] text-emerald-700 font-semibold"
+                                                                                    onClick={() => updateLesson(mIndex, lIndex, (l) => {
+                                                                                        const qs = [...(l.quizQuestions || [])];
+                                                                                        const nid = genQuizId();
+                                                                                        qs[qIdx] = {
+                                                                                            ...qs[qIdx],
+                                                                                            choices: [...qs[qIdx].choices, { id: nid, label: `Choix ${qs[qIdx].choices.length + 1}` }],
+                                                                                        };
+                                                                                        return { ...l, quizQuestions: qs };
+                                                                                    })}
+                                                                                >
+                                                                                    + Choix
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-xs font-semibold text-amber-900"
+                                                                        onClick={() => updateLesson(mIndex, lIndex, (l) => ({
+                                                                            ...l,
+                                                                            quizQuestions: [...(l.quizQuestions || []), newQuizQuestion()],
+                                                                        }))}
+                                                                    >
+                                                                        + Ajouter une question
+                                                                    </button>
+                                                                </div>
+                                                            )}
 
                                                             <div>
                                                                 <div className="flex items-center justify-between mb-2">

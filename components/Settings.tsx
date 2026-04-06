@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
@@ -103,6 +103,24 @@ const Settings: React.FC<SettingsProps> = ({
   const [showModuleLabels, setShowModuleLabels] = useState(false);
   const [showDashboardSettings, setShowDashboardSettings] = useState(false);
   const [showProjectModuleSettings, setShowProjectModuleSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'personal' | 'admin'>('personal');
+  const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
+
+  const visibleAdminSections = useMemo(
+    () =>
+      ADMIN_SECTIONS.filter((s) =>
+        s.key === 'postes_management'
+          ? user?.role === 'super_administrator' || user?.role === 'administrator'
+          : canAccessModule(s.key),
+      ),
+    [user?.role, canAccessModule],
+  );
+
+  const showAdminTab = user?.role === 'super_administrator' || visibleAdminSections.length > 0;
+
+  useEffect(() => {
+    setProfileAvatarFailed(false);
+  }, [user?.avatar]);
 
   const handleAddSkill = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,11 +153,42 @@ const Settings: React.FC<SettingsProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t('settings_title')}</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Profil, préférences et administration des modules.</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {showAdminTab
+              ? 'Compte et préférences d’un côté, administration (rôles, modules, équipe) de l’autre.'
+              : 'Profil, préférences et compétences.'}
+          </p>
         </div>
       </div>
 
+      {showAdminTab ? (
+        <div className="flex flex-wrap gap-2 p-1.5 mb-6 bg-slate-100 rounded-xl border border-slate-200 max-w-xl">
+          <button
+            type="button"
+            onClick={() => setSettingsTab('personal')}
+            className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              settingsTab === 'personal' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <i className="fas fa-user mr-2 text-emerald-600" />
+            Compte & préférences
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsTab('admin')}
+            className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              settingsTab === 'admin' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <i className="fas fa-shield-alt mr-2 text-slate-700" />
+            Administration
+          </button>
+        </div>
+      ) : null}
+
       <div className="space-y-6">
+        {(!showAdminTab || settingsTab === 'personal') && (
+          <>
         {/* Profile Settings */}
         <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -151,19 +200,16 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           <div className="p-4">
           <div className="flex items-center space-x-4">
-            {user?.avatar && !user.avatar.startsWith('data:image') ? (
+            {user?.avatar && !profileAvatarFailed ? (
               <img 
                 src={user.avatar} 
                 alt={user?.name} 
                 className="w-20 h-20 rounded-full border-2 border-emerald-500 object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.removeAttribute('style');
-                }}
+                onError={() => setProfileAvatarFailed(true)}
               />
             ) : null}
             <div 
-              className={`w-20 h-20 rounded-full border-2 border-emerald-500 bg-gradient-to-br from-emerald-500 via-green-500 to-blue-500 flex items-center justify-center text-white text-2xl font-bold ${user?.avatar && !user.avatar.startsWith('data:image') ? 'hidden' : ''}`}
+              className={`w-20 h-20 rounded-full border-2 border-emerald-500 bg-gradient-to-br from-emerald-500 via-green-500 to-blue-500 flex items-center justify-center text-white text-2xl font-bold ${user?.avatar && !profileAvatarFailed ? 'hidden' : ''}`}
             >
               {user ? getInitials(user.name) : 'U'}
             </div>
@@ -175,6 +221,31 @@ const Settings: React.FC<SettingsProps> = ({
               {user?.location && <p className="text-slate-500 text-sm mt-1">{user.location}</p>}
             </div>
           </div>
+          </div>
+        </section>
+
+        {/* Centre de notifications & historique — regroupés ici (retirés du menu principal) */}
+        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">Notifications &amp; activité</h2>
+          </div>
+          <div className="p-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50"
+              onClick={() => setView?.('notifications_center')}
+            >
+              <i className="fas fa-bell mr-2 text-amber-600" />
+              Centre de notifications
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50"
+              onClick={() => setView?.('activity_logs')}
+            >
+              <i className="fas fa-history mr-2 text-slate-600" />
+              Historique des activités
+            </button>
           </div>
         </section>
 
@@ -288,7 +359,11 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           </div>
         </section>
+          </>
+        )}
 
+        {showAdminTab && settingsTab === 'admin' && (
+          <>
         {/* Libellés des modules (super admin uniquement) */}
         {user?.role === 'super_administrator' && (
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -359,22 +434,15 @@ const Settings: React.FC<SettingsProps> = ({
         )}
 
         {/* Administration et gestion – visibilité selon canAccessModule (garde admin) */}
-        {(() => {
-          const visibleSections = ADMIN_SECTIONS.filter(s =>
-            s.key === 'postes_management'
-              ? (user?.role === 'super_administrator' || user?.role === 'administrator')
-              : canAccessModule(s.key)
-          );
-          if (visibleSections.length === 0) return null;
-          return (
+        {visibleAdminSections.length > 0 ? (
             <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200">
-                <h2 className="text-lg font-semibold text-slate-900">Administration et gestion</h2>
-                <p className="text-sm text-slate-500 mt-0.5">Sous-sections accessibles selon vos droits.</p>
+                <h2 className="text-lg font-semibold text-slate-900">Équipe, droits et référentiels</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Choisissez un module ci-dessous (selon votre rôle).</p>
               </div>
               <div className="p-4">
               <div className="flex flex-wrap gap-2 mb-4">
-                {visibleSections.map(s => (
+                {visibleAdminSections.map(s => (
                   <button
                     key={s.key}
                     type="button"
@@ -405,8 +473,11 @@ const Settings: React.FC<SettingsProps> = ({
               )}
               </div>
             </section>
-          );
-        })()}
+        ) : user?.role !== 'super_administrator' ? (
+          <p className="text-sm text-slate-500 py-4">Aucune section d’administration accessible avec votre compte.</p>
+        ) : null}
+          </>
+        )}
       </div>
 
       {/* Modal de modification du profil */}

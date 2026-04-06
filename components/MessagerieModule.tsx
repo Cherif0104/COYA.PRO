@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { Language, User } from '../types';
@@ -12,6 +12,10 @@ import { supabase } from '../services/supabaseService';
 import * as messagingMentions from '../services/messagingMentions';
 
 type Tab = 'channels' | 'direct';
+
+type MentionRow =
+  | { kind: 'broadcast'; token: string; label: string }
+  | { kind: 'user'; profile: messagingMentions.MentionProfile };
 const TAB_PREF_KEY = 'coya_messaging_default_tab';
 const DEEPLINK_KEY = 'coya.messaging.deeplink';
 
@@ -76,6 +80,13 @@ const MessagerieModule: React.FC = () => {
   const [savingChannelMembers, setSavingChannelMembers] = useState(false);
   const [listSearch, setListSearch] = useState('');
 
+  const channelInputRef = useRef<HTMLInputElement>(null);
+  const directInputRef = useRef<HTMLInputElement>(null);
+  const [channelCursor, setChannelCursor] = useState(0);
+  const [directCursor, setDirectCursor] = useState(0);
+  const [channelMentionIdx, setChannelMentionIdx] = useState(0);
+  const [directMentionIdx, setDirectMentionIdx] = useState(0);
+
   const userByProfileId = useMemo(() => {
     const m = new Map<string, User>();
     users.forEach((u) => {
@@ -124,26 +135,247 @@ const MessagerieModule: React.FC = () => {
   }, [profiles, userByProfileId]);
 
   const dedupeIds = (ids: string[]) => Array.from(new Set(ids.filter(Boolean)));
-  const renderContentWithMentions = useCallback((content: string) => {
-    const parts = content.split(/(@[^\s@]+)/g);
-    return (
-      <>
-        {parts.map((part, idx) => {
-          if (/^@[^\s@]+$/.test(part)) {
-            return (
-              <span
-                key={`${part}-${idx}`}
-                className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-800"
-              >
-                {part}
-              </span>
-            );
-          }
-          return <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>;
-        })}
-      </>
-    );
-  }, []);
+
+  const mentionProfiles = useMemo(
+    (): messagingMentions.MentionProfile[] => profiles.map((p) => ({ id: p.id, fullName: p.fullName, email: p.email })),
+    [profiles],
+  );
+
+  const channelMentionScope = useMemo(
+    () => mentionProfiles.filter((p) => activeChannelMembers.includes(p.id)),
+    [mentionProfiles, activeChannelMembers],
+  );
+
+  const directMentionScope = useMemo(() => {
+    const ids = activeThread?.memberIds;
+    if (ids?.length) return mentionProfiles.filter((p) => ids.includes(p.id));
+    return mentionProfiles;
+  }, [mentionProfiles, activeThread?.memberIds]);
+
+  const channelMentionMeta = useMemo(() => {
+    if (tab !== 'channels' || !activeChannelId) return null;
+    return messagingMentions.getActiveMentionQuery(channelText, channelCursor);
+  }, [tab, activeChannelId, channelText, channelCursor]);
+
+  const directMentionMeta = useMemo(() => {
+    if (tab !== 'direct' || !activeThreadId) return null;
+    return messagingMentions.getActiveMentionQuery(directText, directCursor);
+  }, [tab, activeThreadId, directText, directCursor]);
+
+  const channelMentionRows = useMemo((): MentionRow[] => {
+    if (!channelMentionMeta) return [];
+    const q = channelMentionMeta.query.toLowerCase();
+    const broadcast: MentionRow[] = [];
+    const opts = isFr
+      ? [
+          { token: 'everyone', label: '@everyone — tout le canal' },
+          { token: 'tous', label: '@tous — tout le canal' },
+          { token: 'canal', label: '@canal — tout le canal' },
+        ]
+      : [
+          { token: 'everyone', label: '@everyone — whole channel' },
+          { token: 'channel', label: '@channel — whole channel' },
+        ];
+    for (const b of opts) {
+      if (!q || b.token.startsWith(q) || b.label.toLowerCase().includes(q)) {
+        broadcast.push({ kind: 'broadcast', ...b });
+      }
+    }
+    const users = messagingMentions.filterProfilesForMentionPicker(mentionProfiles, channelMentionMeta.query, {
+      onlyAmongIds: activeChannelMembers,
+    });
+    return [...broadcast, ...users.map((profile) => ({ kind: 'user' as const, profile }))];
+  }, [channelMentionMeta, mentionProfiles, activeChannelMembers, isFr]);
+
+  const directMentionRows = useMemo((): MentionRow[] => {
+    if (!directMentionMeta) return [];
+    const ids = activeThread?.memberIds?.length ? activeThread.memberIds : undefined;
+    const users = messagingMentions.filterProfilesForMentionPicker(mentionProfiles, directMentionMeta.query, {
+      onlyAmongIds: ids,
+    });
+    return users.map((profile) => ({ kind: 'user' as const, profile }));
+  }, [directMentionMeta, mentionProfiles, activeThread?.memberIds]);
+
+  useEffect(() => {
+    setChannelMentionIdx(0);
+  }, [channelMentionMeta?.start, channelMentionMeta?.query]);
+
+  useEffect(() => {
+    setDirectMentionIdx(0);
+  }, [directMentionMeta?.start, directMentionMeta?.query]);
+
+  useEffect(() => {
+    setChannelMentionIdx((i) => (channelMentionRows.length === 0 ? 0 : Math.min(i, channelMentionRows.length - 1)));
+  }, [channelMentionRows.length]);
+
+  useEffect(() => {
+    setDirectMentionIdx((i) => (directMentionRows.length === 0 ? 0 : Math.min(i, directMentionRows.length - 1)));
+  }, [directMentionRows.length]);
+
+  const applyChannelMention = useCallback(
+    (row: MentionRow) => {
+      const meta = messagingMentions.getActiveMentionQuery(channelText, channelCursor);
+      if (!meta) return;
+      const token = row.kind === 'broadcast' ? row.token : messagingMentions.mentionInsertToken(row.profile, channelMentionScope);
+      const before = channelText.slice(0, meta.start);
+      const after = channelText.slice(channelCursor);
+      const insert = `@${token} `;
+      const next = before + insert + after;
+      const newPos = before.length + insert.length;
+      setChannelText(next);
+      setChannelCursor(newPos);
+      requestAnimationFrame(() => {
+        const el = channelInputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(newPos, newPos);
+        }
+      });
+    },
+    [channelText, channelCursor, channelMentionScope],
+  );
+
+  const applyDirectMention = useCallback(
+    (row: MentionRow) => {
+      if (row.kind !== 'user') return;
+      const meta = messagingMentions.getActiveMentionQuery(directText, directCursor);
+      if (!meta) return;
+      const token = messagingMentions.mentionInsertToken(row.profile, directMentionScope);
+      const before = directText.slice(0, meta.start);
+      const after = directText.slice(directCursor);
+      const insert = `@${token} `;
+      const next = before + insert + after;
+      const newPos = before.length + insert.length;
+      setDirectText(next);
+      setDirectCursor(newPos);
+      requestAnimationFrame(() => {
+        const el = directInputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(newPos, newPos);
+        }
+      });
+    },
+    [directText, directCursor, directMentionScope],
+  );
+
+  const stripChannelMentionFragment = useCallback(() => {
+    const meta = messagingMentions.getActiveMentionQuery(channelText, channelCursor);
+    if (!meta) return;
+    const before = channelText.slice(0, meta.start);
+    const after = channelText.slice(channelCursor);
+    const next = before + after;
+    const newPos = meta.start;
+    setChannelText(next);
+    setChannelCursor(newPos);
+    requestAnimationFrame(() => {
+      const el = channelInputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(newPos, newPos);
+      }
+    });
+  }, [channelText, channelCursor]);
+
+  const stripDirectMentionFragment = useCallback(() => {
+    const meta = messagingMentions.getActiveMentionQuery(directText, directCursor);
+    if (!meta) return;
+    const before = directText.slice(0, meta.start);
+    const after = directText.slice(directCursor);
+    const next = before + after;
+    const newPos = meta.start;
+    setDirectText(next);
+    setDirectCursor(newPos);
+    requestAnimationFrame(() => {
+      const el = directInputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(newPos, newPos);
+      }
+    });
+  }, [directText, directCursor]);
+
+  const handleChannelInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      const el = e.currentTarget;
+      const cur = el.selectionStart ?? channelText.length;
+      const meta = messagingMentions.getActiveMentionQuery(channelText, cur);
+      if (e.key === 'Escape' && meta) {
+        e.preventDefault();
+        stripChannelMentionFragment();
+        return;
+      }
+      if (!meta || channelMentionRows.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setChannelMentionIdx((i) => Math.min(i + 1, channelMentionRows.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setChannelMentionIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const row = channelMentionRows[channelMentionIdx];
+        if (row) applyChannelMention(row);
+      }
+    },
+    [channelText, channelMentionRows, channelMentionIdx, applyChannelMention, stripChannelMentionFragment],
+  );
+
+  const handleDirectInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      const el = e.currentTarget;
+      const cur = el.selectionStart ?? directText.length;
+      const meta = messagingMentions.getActiveMentionQuery(directText, cur);
+      if (e.key === 'Escape' && meta) {
+        e.preventDefault();
+        stripDirectMentionFragment();
+        return;
+      }
+      if (!meta || directMentionRows.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setDirectMentionIdx((i) => Math.min(i + 1, directMentionRows.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setDirectMentionIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const row = directMentionRows[directMentionIdx];
+        if (row?.kind === 'user') applyDirectMention(row);
+      }
+    },
+    [directText, directMentionRows, directMentionIdx, applyDirectMention, stripDirectMentionFragment],
+  );
+
+  const renderContentWithMentions = useCallback(
+    (content: string) => {
+      const parts = content.split(/(@[^\s@]+)/g);
+      return (
+        <>
+          {parts.map((part, idx) => {
+            if (/^@[^\s@]+$/.test(part)) {
+              const raw = part.slice(1);
+              let display = part;
+              if (messagingMentions.MENTION_UUID_RE.test(raw)) {
+                const prof = profiles.find((x) => x.id === raw);
+                if (prof?.fullName || prof?.email) display = `@${prof.fullName || prof.email}`;
+              }
+              return (
+                <span
+                  key={`${part}-${idx}`}
+                  className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-800"
+                >
+                  {display}
+                </span>
+              );
+            }
+            return <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>;
+          })}
+        </>
+      );
+    },
+    [profiles],
+  );
   const appendMessageUnique = useCallback((setter: React.Dispatch<React.SetStateAction<messagingService.ChatMessage[]>>, next: messagingService.ChatMessage) => {
     setter((prev) => (prev.some((m) => m.id === next.id) ? prev : [...prev, next]));
   }, []);
@@ -281,6 +513,10 @@ const MessagerieModule: React.FC = () => {
         setActiveThreadId(String(d.threadId));
       }
       sessionStorage.removeItem(DEEPLINK_KEY);
+      queueMicrotask(() => {
+        if (d.threadId) directInputRef.current?.focus();
+        else if (d.channelId) channelInputRef.current?.focus();
+      });
     } catch {
       try {
         sessionStorage.removeItem(DEEPLINK_KEY);
@@ -756,8 +992,8 @@ const MessagerieModule: React.FC = () => {
   }, [activeThread, currentProfileId, tab]);
 
   return (
-    <div className="text-slate-900 px-2 sm:px-4 py-4 sm:py-6 max-w-[1680px] mx-auto">
-      <header className="mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+    <div className="text-slate-900 px-2 sm:px-4 py-4 sm:py-6 max-w-[1680px] mx-auto flex flex-col min-h-0 max-h-[calc(100dvh-5.5rem)] sm:max-h-[calc(100dvh-6rem)]">
+      <header className="mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 shrink-0">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white text-sm">
@@ -773,13 +1009,13 @@ const MessagerieModule: React.FC = () => {
         </div>
       </header>
       {error && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shrink-0">
           {error}
         </div>
       )}
 
       {/* Mobile : onglets */}
-      <div className="flex lg:hidden gap-2 mb-3 p-1 bg-slate-100 rounded-xl border border-slate-200">
+      <div className="flex lg:hidden gap-2 mb-3 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
         {[
           { id: 'channels' as Tab, label: isFr ? 'Canaux' : 'Channels', icon: 'fa-hashtag' },
           { id: 'direct' as Tab, label: isFr ? 'Direct' : 'Direct', icon: 'fa-comment-dots' },
@@ -798,7 +1034,7 @@ const MessagerieModule: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm min-h-[min(680px,82vh)] flex-col lg:flex-row">
+      <div className="flex flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex-col lg:flex-row lg:min-h-[min(520px,calc(100dvh-11rem))] lg:max-h-full">
         {/* Rail — charte COYA : fond slate-900, actif emerald */}
         <nav
           className="hidden lg:flex flex-col items-center py-5 gap-1 w-[56px] shrink-0 bg-slate-900 border-r border-slate-800"
@@ -831,8 +1067,8 @@ const MessagerieModule: React.FC = () => {
         </nav>
 
         {/* Colonne navigation secondaire (style inbox) */}
-        <aside className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-slate-200 bg-slate-50/90">
-          <div className="p-4 border-b border-slate-200">
+        <aside className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-slate-200 bg-slate-50/90 min-h-0 max-h-full">
+          <div className="p-4 border-b border-slate-200 shrink-0">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{isFr ? 'Espace' : 'Workspace'}</p>
             <p className="text-lg font-semibold text-slate-900 mt-0.5">{isFr ? 'Boîte de réception' : 'Inbox'}</p>
           </div>
@@ -890,7 +1126,7 @@ const MessagerieModule: React.FC = () => {
 
       {tab === 'channels' && (
         <>
-        <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 lg:max-w-none max-h-[42vh] lg:max-h-none overflow-hidden min-h-0">
+        <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 min-h-0 max-h-[min(42vh,22rem)] lg:max-h-full overflow-hidden lg:flex lg:flex-col">
             <div className="px-3 py-2.5 border-b border-slate-200 bg-white/90 space-y-2 shrink-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isFr ? 'Canaux' : 'Channels'}</span>
@@ -912,7 +1148,7 @@ const MessagerieModule: React.FC = () => {
                 </p>
               )}
             </div>
-            <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100/80">
+            <ul className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain divide-y divide-slate-100/80">
               {filteredChannels.map((c) => (
                 <li key={c.id}>
                   <button
@@ -1021,7 +1257,7 @@ const MessagerieModule: React.FC = () => {
             )}
           </aside>
 
-          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[280px] lg:min-h-[min(560px,78vh)]">
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[240px] lg:min-h-0 lg:max-h-full">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Canal' : 'Channel'}</p>
@@ -1089,7 +1325,7 @@ const MessagerieModule: React.FC = () => {
                 )}
               </div>
             )}
-            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto bg-slate-50/40">
+            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto overscroll-y-contain bg-slate-50/40 [scrollbar-gutter:stable]">
               {channelMessages.map((m) => {
                 const isMe = m.senderId === currentProfileId;
                 const sender = userByProfileId.get(m.senderId);
@@ -1131,14 +1367,64 @@ const MessagerieModule: React.FC = () => {
             </div>
             <div className="p-3 border-t border-slate-200 space-y-2 shrink-0 bg-white">
               <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={channelText}
-                  onChange={(e) => setChannelText(e.target.value)}
-                  placeholder={isFr ? 'Écrivez votre message…' : 'Type your message…'}
-                  className="flex-1 min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
-                  disabled={!activeChannelId}
-                />
+                <div className="relative flex-1 min-w-0">
+                  {channelMentionMeta && channelMentionRows.length > 0 ? (
+                    <ul
+                      className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10"
+                      role="listbox"
+                    >
+                      {channelMentionRows.map((row, idx) => (
+                        <li key={row.kind === 'broadcast' ? `b-${row.token}` : row.profile.id}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={idx === channelMentionIdx}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
+                              idx === channelMentionIdx ? 'bg-emerald-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                            onMouseDown={(ev) => ev.preventDefault()}
+                            onMouseEnter={() => setChannelMentionIdx(idx)}
+                            onClick={() => applyChannelMention(row)}
+                          >
+                            {row.kind === 'broadcast' ? (
+                              <>
+                                <i className="fas fa-bullhorn w-5 text-center text-emerald-600 text-xs" />
+                                <span className="font-medium">{row.label}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="shrink-0 scale-90">{avatarForProfile(row.profile.id)}</span>
+                                <span className="min-w-0 truncate">
+                                  <span className="font-semibold">{row.profile.fullName || row.profile.email}</span>
+                                  {row.profile.email ? (
+                                    <span className="block text-[11px] text-slate-500 truncate">{row.profile.email}</span>
+                                  ) : null}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <input
+                    ref={channelInputRef}
+                    type="text"
+                    value={channelText}
+                    onChange={(e) => {
+                      setChannelText(e.target.value);
+                      setChannelCursor(e.target.selectionStart ?? e.target.value.length);
+                    }}
+                    onSelect={(e) => setChannelCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onClick={(e) => setChannelCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onKeyUp={(e) => setChannelCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onKeyDown={handleChannelInputKeyDown}
+                    placeholder={isFr ? 'Écrivez votre message… (@ pour mentionner)' : 'Type your message… (@ to mention)'}
+                    className="w-full min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
+                    disabled={!activeChannelId}
+                    autoComplete="off"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={sendChannelText}
@@ -1221,7 +1507,7 @@ const MessagerieModule: React.FC = () => {
 
       {tab === 'direct' && (
         <>
-          <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 max-h-[42vh] lg:max-h-none overflow-hidden min-h-0">
+          <aside className="flex flex-col w-full lg:w-[300px] shrink-0 border-r border-slate-200 bg-slate-50/50 min-h-0 max-h-[min(42vh,22rem)] lg:max-h-full overflow-hidden lg:flex lg:flex-col">
             <div className="px-3 py-2.5 border-b border-slate-200 bg-white/90 space-y-3 shrink-0">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{isFr ? 'Nouveau message' : 'New message'}</p>
@@ -1267,7 +1553,7 @@ const MessagerieModule: React.FC = () => {
                 />
               </div>
             </div>
-            <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100/80">
+            <ul className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain divide-y divide-slate-100/80">
               {filteredThreads.map((t) => {
                 const primary =
                   t.memberIds.filter((m) => m !== currentProfileId)[0] || t.memberIds[0] || currentProfileId;
@@ -1319,14 +1605,14 @@ const MessagerieModule: React.FC = () => {
             </ul>
           </aside>
 
-          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[280px] lg:min-h-[min(560px,78vh)]">
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[240px] lg:min-h-0 lg:max-h-full">
             <div className="px-4 py-3 border-b border-slate-200 shrink-0 bg-white">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Direct' : 'Direct'}</p>
               <p className="font-semibold text-slate-900 truncate">
                 {activeThread ? threadLabel(activeThread) : isFr ? 'Conversation' : 'Conversation'}
               </p>
             </div>
-            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto bg-slate-50/40">
+            <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto overscroll-y-contain bg-slate-50/40 [scrollbar-gutter:stable]">
               {directMessages.map((m) => {
                 const isMe = m.senderId === currentProfileId;
                 const sender = userByProfileId.get(m.senderId);
@@ -1358,14 +1644,55 @@ const MessagerieModule: React.FC = () => {
             </div>
             <div className="p-3 border-t border-slate-200 space-y-2 shrink-0 bg-white">
               <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={directText}
-                  onChange={(e) => setDirectText(e.target.value)}
-                  placeholder={isFr ? 'Écrivez votre message…' : 'Type your message…'}
-                  className="flex-1 min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
-                  disabled={!activeThreadId}
-                />
+                <div className="relative flex-1 min-w-0">
+                  {directMentionMeta && directMentionRows.length > 0 ? (
+                    <ul
+                      className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/10"
+                      role="listbox"
+                    >
+                      {directMentionRows.map((row, idx) => (
+                        <li key={row.profile.id}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={idx === directMentionIdx}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
+                              idx === directMentionIdx ? 'bg-emerald-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                            onMouseDown={(ev) => ev.preventDefault()}
+                            onMouseEnter={() => setDirectMentionIdx(idx)}
+                            onClick={() => applyDirectMention(row)}
+                          >
+                            <span className="shrink-0 scale-90">{avatarForProfile(row.profile.id)}</span>
+                            <span className="min-w-0 truncate">
+                              <span className="font-semibold">{row.profile.fullName || row.profile.email}</span>
+                              {row.profile.email ? (
+                                <span className="block text-[11px] text-slate-500 truncate">{row.profile.email}</span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <input
+                    ref={directInputRef}
+                    type="text"
+                    value={directText}
+                    onChange={(e) => {
+                      setDirectText(e.target.value);
+                      setDirectCursor(e.target.selectionStart ?? e.target.value.length);
+                    }}
+                    onSelect={(e) => setDirectCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onClick={(e) => setDirectCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onKeyUp={(e) => setDirectCursor((e.target as HTMLInputElement).selectionStart ?? 0)}
+                    onKeyDown={handleDirectInputKeyDown}
+                    placeholder={isFr ? 'Écrivez votre message… (@ pour mentionner)' : 'Type your message… (@ to mention)'}
+                    className="w-full min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white shadow-inner shadow-slate-100/80"
+                    disabled={!activeThreadId}
+                    autoComplete="off"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={sendDirectText}

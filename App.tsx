@@ -1151,21 +1151,26 @@ const App: React.FC = () => {
               action,
             }));
           });
-          await Promise.all(
-            deliveries.map(async ({ userId: recipientId, action }) => {
-              try {
-                await DataService.createNotification({
-                  userId: recipientId,
-                  message: action.message,
-                  type: action.severity,
-                  entityId: action.entityId,
-                  read: false,
-                });
-              } catch (error) {
-                console.error('Erreur notification auto workflow:', error);
-              }
-            })
-          );
+          // Limite de concurrence : évite des centaines de requêtes profiles/notifications en parallèle (net::ERR_INSUFFICIENT_RESOURCES).
+          const notifyConcurrency = 6;
+          for (let i = 0; i < deliveries.length; i += notifyConcurrency) {
+            const chunk = deliveries.slice(i, i + notifyConcurrency);
+            await Promise.all(
+              chunk.map(async ({ userId: recipientId, action }) => {
+                try {
+                  await DataService.createNotification({
+                    userId: recipientId,
+                    message: action.message,
+                    type: action.severity,
+                    entityId: action.entityId,
+                    read: false,
+                  });
+                } catch (error) {
+                  console.error('Erreur notification auto workflow:', error);
+                }
+              })
+            );
+          }
 
           try {
             AuditLogService.logAction({
@@ -2910,7 +2915,6 @@ const App: React.FC = () => {
                     onDeleteContact={handleDeleteContact}
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
-                    canAccessModule={canAccessModule}
                     setView={handleSetView}
                 />;
       case 'knowledge_base':

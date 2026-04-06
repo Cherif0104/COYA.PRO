@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Contact, RESOURCE_MANAGEMENT_ROLES, ModuleName, DataCollection } from '../types';
-import PartenariatModule from './PartenariatModule';
+import { Contact, RESOURCE_MANAGEMENT_ROLES, DataCollection } from '../types';
 import * as dataCollectionService from '../services/dataCollectionService';
 import OrganizationService from '../services/organizationService';
 import { draftSalesEmail } from '../services/geminiService';
@@ -179,7 +178,6 @@ interface CRMProps {
     onAddContact: (contact: Omit<Contact, 'id'>) => void;
     onUpdateContact: (contact: Contact) => void;
     onDeleteContact: (contactId: number) => void;
-    canAccessModule?: (module: ModuleName) => boolean;
     setView?: (view: string) => void;
 }
 
@@ -188,13 +186,10 @@ const CRM: React.FC<CRMProps> = ({
     onAddContact,
     onUpdateContact,
     onDeleteContact,
-    canAccessModule,
     setView,
 }) => {
     const { t } = useLocalization();
     const { user } = useAuth();
-    const showPartenariatTab = canAccessModule ? canAccessModule('partenariat') : true;
-    const [mainTab, setMainTab] = useState<'contacts' | 'partenariat'>('contacts');
     const [contactSubView, setContactSubView] = useState<'list' | 'pipeline'>('list');
     const [showCollecteEnrichModal, setShowCollecteEnrichModal] = useState(false);
     const [collecteEnrichCandidates, setCollecteEnrichCandidates] = useState<DataCollection[]>([]);
@@ -250,10 +245,6 @@ const CRM: React.FC<CRMProps> = ({
         }).catch(() => {});
         return () => { cancelled = true; };
     }, []);
-
-    useEffect(() => {
-        if (!showPartenariatTab && mainTab === 'partenariat') setMainTab('contacts');
-    }, [showPartenariatTab, mainTab]);
 
     useEffect(() => {
         OrganizationService.getCurrentUserOrganizationId().then(setCollecteOrgId).catch(() => setCollecteOrgId(null));
@@ -435,37 +426,6 @@ const CRM: React.FC<CRMProps> = ({
                 )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex flex-wrap gap-1">
-                <button
-                    type="button"
-                    onClick={() => setMainTab('contacts')}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                        mainTab === 'contacts' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                >
-                    CRM &amp; Ventes
-                </button>
-                {showPartenariatTab && (
-                    <button
-                        type="button"
-                        onClick={() => setMainTab('partenariat')}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                            mainTab === 'partenariat' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                    >
-                        Partenariat
-                    </button>
-                )}
-            </div>
-
-            {mainTab === 'partenariat' && (
-                <section className="mb-8">
-                    <PartenariatModule embedded />
-                </section>
-            )}
-
-            {mainTab === 'contacts' && (
-            <>
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
                 <div className="bg-white rounded-xl border border-slate-200 p-1.5 inline-flex flex-wrap gap-1">
                     <button
@@ -808,8 +768,6 @@ const CRM: React.FC<CRMProps> = ({
                         </div>
                     ))}
                 </div>
-            )}
-            </>
             )}
 
             {showCollecteEnrichModal && (

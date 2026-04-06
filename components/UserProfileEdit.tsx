@@ -36,7 +36,15 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
   const [showCreatePosteModal, setShowCreatePosteModal] = useState(false);
   const [newPosteName, setNewPosteName] = useState('');
   const [creatingPoste, setCreatingPoste] = useState(false);
+  /** Ne pas manipuler le DOM dans onError (insertBefore React) — basculer en React state. */
+  const [avatarMainFailed, setAvatarMainFailed] = useState(false);
+  const [avatarPreviewFailed, setAvatarPreviewFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setAvatarMainFailed(false);
+    setAvatarPreviewFailed(false);
+  }, [avatarPreview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +149,7 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
       console.log('🔄 Sauvegarde profil:', { updatedUser });
 
       await onSave(updatedUser);
-      onClose();
+      queueMicrotask(() => onClose());
     } catch (err: any) {
       console.error('❌ Erreur lors de la modification du profil:', err);
       setError(err.message || 'Erreur lors de la modification du profil');
@@ -151,9 +159,10 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
   };
 
   const initials = getInitials(firstName, lastName);
-  const hasAvatar = avatarPreview && !avatarPreview.startsWith('data:image');
+  const showMainPhoto = Boolean(avatarPreview) && !avatarMainFailed;
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8">
         {/* En-tête */}
@@ -170,16 +179,12 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
           {/* Avatar */}
           <div className="flex items-center space-x-6">
             <div className="relative">
-              {/* Avatar avec initiales ou photo */}
-              {hasAvatar ? (
+              {showMainPhoto ? (
                 <img
                   src={avatarPreview}
                   alt={`${user.name}`}
                   className="w-24 h-24 rounded-full border-4 border-emerald-500 shadow-lg object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.removeAttribute('style');
-                  }}
+                  onError={() => setAvatarMainFailed(true)}
                 />
               ) : (
                 <div className="w-24 h-24 rounded-full border-4 border-emerald-500 shadow-lg bg-gradient-to-br from-emerald-500 via-green-500 to-blue-500 flex items-center justify-center text-white text-3xl font-bold">
@@ -326,56 +331,18 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
             </select>
           </div>
 
-          {/* Modal Créer et enregistrer (poste) */}
-          {showCreatePosteModal && (
-            <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[60] p-4">
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Nouveau poste</h3>
-                <input
-                  type="text"
-                  value={newPosteName}
-                  onChange={(e) => setNewPosteName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreatePosteAndSelect()}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 mb-4"
-                  placeholder="Ex: Directeur de programme"
-                  autoFocus
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setShowCreatePosteModal(false); setNewPosteName(''); setError(null); }}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCreatePosteAndSelect}
-                    disabled={!newPosteName.trim() || creatingPoste}
-                    className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {creatingPoste ? 'Création...' : 'Créer et enregistrer'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Aperçu de l'avatar avec initiales */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Aperçu de l'avatar avec initiales
             </label>
             <div className="flex items-center space-x-4">
-              {hasAvatar ? (
+              {Boolean(avatarPreview) && !avatarPreviewFailed ? (
                 <img
                   src={avatarPreview}
                   alt={`${firstName} ${lastName}`}
                   className="w-16 h-16 rounded-full border-2 border-emerald-500 shadow-md object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.removeAttribute('style');
-                  }}
+                  onError={() => setAvatarPreviewFailed(true)}
                 />
               ) : (
                 <div className="w-16 h-16 rounded-full border-2 border-emerald-500 shadow-md bg-gradient-to-br from-emerald-500 via-green-500 to-blue-500 flex items-center justify-center text-white text-xl font-bold">
@@ -418,6 +385,41 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onClose, onSave
         </form>
       </div>
     </div>
+
+    {showCreatePosteModal && (
+      <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[60] p-4" role="dialog" aria-modal="true" aria-labelledby="new-poste-title">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-4">
+          <h3 id="new-poste-title" className="text-lg font-semibold text-gray-800 mb-3">Nouveau poste</h3>
+          <input
+            type="text"
+            value={newPosteName}
+            onChange={(e) => setNewPosteName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreatePosteAndSelect()}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 mb-4"
+            placeholder="Ex: Directeur de programme"
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowCreatePosteModal(false); setNewPosteName(''); setError(null); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={handleCreatePosteAndSelect}
+              disabled={!newPosteName.trim() || creatingPoste}
+              className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {creatingPoste ? 'Création...' : 'Créer et enregistrer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

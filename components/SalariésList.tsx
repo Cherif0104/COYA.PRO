@@ -8,9 +8,13 @@ import { useAuth } from '../contexts/AuthContextSupabase';
 interface SalariésListProps {
   users: User[];
   onSelectEmployee?: (employee: Employee) => void;
+  /** Incrémenter pour forcer un rechargement de la liste (ex. après édition fiche). */
+  listVersion?: number;
+  /** Après association ou changement côté liste (ex. recharger salariés côté module RH / présence). */
+  onEmployeesMutated?: () => void;
 }
 
-const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee }) => {
+const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee, listVersion = 0, onEmployeesMutated }) => {
   const { language } = useLocalization();
   const { user: currentUser } = useAuth();
   const fr = language === 'fr';
@@ -46,7 +50,7 @@ const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listVersion]);
 
   useEffect(() => {
     load();
@@ -56,12 +60,20 @@ const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee }
     if (!selectedUserId) return;
     const user = users.find((u) => String(u.profileId || u.id) === selectedUserId);
     if (!user) return;
-    const profileId = user.profileId ? String(user.profileId) : String(user.id);
+    if (!user.profileId) {
+      alert(
+        fr
+          ? 'Ce compte n’a pas d’identifiant profil valide. Réessayez après reconnexion ou contactez l’administrateur.'
+          : 'This account has no valid profile id. Try again after sign-in or contact an administrator.'
+      );
+      return;
+    }
+    const profileId = String(user.profileId);
     setSaving(true);
     try {
       const orgId = await OrganizationService.getCurrentUserOrganizationId();
-      const created = await DataAdapter.upsertEmployee({ profileId, organizationId: orgId ?? undefined });
-      if (created) {
+      const { data: created, error } = await DataAdapter.upsertEmployee({ profileId, organizationId: orgId ?? undefined });
+      if (created && !error) {
         setEmployees((prev) => {
           const exists = prev.some((e) => e.profileId === profileId);
           if (exists) return prev.map((e) => (e.profileId === profileId ? created : e));
@@ -69,8 +81,17 @@ const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee }
         });
         setShowAssociateModal(false);
         setSelectedUserId('');
+        onEmployeesMutated?.();
       } else {
-        alert(fr ? 'Impossible de créer la fiche salarié.' : 'Could not create employee record.');
+        alert(
+          error
+            ? fr
+              ? `Impossible de créer la fiche salarié : ${error}`
+              : `Could not create employee record: ${error}`
+            : fr
+              ? 'Impossible de créer la fiche salarié.'
+              : 'Could not create employee record.'
+        );
       }
     } catch (e) {
       console.error('Associate user:', e);
@@ -149,7 +170,7 @@ const SalariésList: React.FC<SalariésListProps> = ({ users, onSelectEmployee }
                           onClick={() => onSelectEmployee(emp)}
                           className="text-emerald-600 hover:text-emerald-800 font-medium text-xs"
                         >
-                          {fr ? 'Fiche' : 'Profile'}
+                          {fr ? 'Fiche salarié' : 'Employee record'}
                         </button>
                       )}
                     </td>

@@ -7,9 +7,9 @@ import { moduleDisplayNames } from './UserModulePermissions';
 
 const ALL_MODULE_KEYS: ModuleName[] = [
   'dashboard', 'projects', 'goals_okrs', 'time_tracking', 'planning', 'leave_management',
-  'finance', 'comptabilite', 'knowledge_base', 'courses', 'jobs', 'crm_sales', 'partenariat',
-  'analytics', 'talent_analytics', 'qualite', 'rh', 'trinite', 'programme', 'juridique',
-  'studio', 'tech', 'collecte', 'conseil', 'user_management', 'course_management',
+  'finance', 'comptabilite', 'knowledge_base', 'courses', 'jobs', 'crm_sales',
+  'analytics', 'talent_analytics', 'qualite', 'rh', 'trinite', 'programme',
+  'tech', 'collecte', 'conseil', 'user_management', 'course_management',
   'job_management', 'leave_management_admin', 'organization_management', 'department_management', 'settings',
 ];
 

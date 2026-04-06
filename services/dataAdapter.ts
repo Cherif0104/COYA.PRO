@@ -1,9 +1,12 @@
 import { DataService } from './dataService';
 import { AuthService } from './authService';
 import * as programmeService from './programmeService';
+import { listTasksForProjects, syncProjectTasksFromUi } from './taskTableService';
+import OrganizationService from './organizationService';
+import { supabase } from './supabaseService';
 import { handleOptionalTableError } from './optionalTableGuard';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
-import { Course, Job, Project, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot, PresenceStatusEvent, HrAttendancePolicy } from '../types';
+import { Course, CourseAudienceSegment, Job, Project, Task, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot, PresenceStatusEvent, HrAttendancePolicy } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
@@ -113,9 +116,17 @@ export class DataAdapter {
           });
         } catch (_) { /* ignore */ }
 
+        const rawRows = (data || []) as any[];
+        let tasksByProject: Record<string, Task[]> = {};
+        try {
+          tasksByProject = await listTasksForProjects(rawRows.map((p) => String(p.id)));
+        } catch (_) {
+          tasksByProject = {};
+        }
+
         // Convertir les données Supabase vers le format attendu
         const projects = await Promise.all(
-          (data || []).map(async (project: any) => {
+          rawRows.map(async (project: any) => {
             // Récupérer les utilisateurs de l'équipe
             let team: any[] = [];
             if (project.team_members && project.team_members.length > 0) {
@@ -137,6 +148,9 @@ export class DataAdapter {
             const prog = project.programme_id ? programmeMap[project.programme_id] : null;
             const rawStatus = (project.status || 'not_started').toLowerCase();
             const statusDisplay = rawStatus === 'completed' ? 'Completed' : rawStatus === 'cancelled' ? 'Cancelled' : rawStatus === 'on_hold' ? 'On Hold' : rawStatus === 'in_progress' || rawStatus === 'active' ? 'In Progress' : 'Not Started';
+            const dbTasks = tasksByProject[String(project.id)];
+            const jsonTasks = project.tasks || [];
+            const tasks = dbTasks && dbTasks.length > 0 ? dbTasks : jsonTasks;
             return {
               id: project.id,
               title: project.name,
@@ -149,7 +163,7 @@ export class DataAdapter {
               clientName: project.client || '',
               team,
               teamMemberIds: Array.isArray(project.team_members) ? project.team_members.map((memberId: any) => String(memberId)) : [],
-              tasks: project.tasks || [],
+              tasks,
               risks: project.risks || [],
               createdById: project.created_by_id || project.owner_id || null,
               createdByName: project.created_by_name || null,
@@ -179,6 +193,16 @@ export class DataAdapter {
         const { data, error } = await DataService.createProject(project);
         if (error) throw error;
         if (data) {
+          try {
+            const orgId = await OrganizationService.getCurrentUserOrganizationId();
+            const { data: { user } } = await supabase.auth.getUser();
+            const initialTasks = project.tasks || data.tasks || [];
+            if (orgId && data.id) {
+              await syncProjectTasksFromUi(orgId, String(data.id), initialTasks, user?.id ?? null);
+            }
+          } catch (syncErr) {
+            console.warn('DataAdapter.createProject - sync tasks table:', syncErr);
+          }
           // Récupérer les utilisateurs de l'équipe
           let team: any[] = [];
           if (data.team_members && data.team_members.length > 0) {
@@ -295,7 +319,17 @@ export class DataAdapter {
           programmeId: project.programmeId ?? null
         });
         if (error) throw error;
-        
+
+        try {
+          const orgId = await OrganizationService.getCurrentUserOrganizationId();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (orgId) {
+            await syncProjectTasksFromUi(orgId, String(project.id), project.tasks || [], user?.id ?? null);
+          }
+        } catch (syncErr) {
+          console.warn('DataAdapter.updateProject - sync tasks table:', syncErr);
+        }
+
         console.log('✅ DataAdapter.updateProject - Projet mis à jour avec succès');
         return true;
       } catch (error) {
@@ -1145,7 +1179,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
                 description: lesson.description || '',
                 contentUrl: lesson.content_url || undefined,
                 attachments: lesson.attachments || [],
-                externalLinks: lesson.external_links || []
+                externalLinks: lesson.external_links || [],
+                quizQuestions: Array.isArray(lesson.quiz?.questions) ? lesson.quiz.questions : [],
               })),
               evidenceDocuments: module.evidence_documents || [],
               requiresValidation: module.requires_validation ?? false,
@@ -1176,6 +1211,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
               requiresFinalValidation: course.requires_final_validation ?? false,
               sequentialModules: course.sequential_modules ?? false,
               courseMaterials: course.course_materials || [],
+              programmeId: course.programme_id ?? null,
+              audienceSegment: (course.audience_segment as CourseAudienceSegment | null) ?? null,
               icon: course.category === 'Marketing' ? 'fas fa-bullhorn' :
                     course.category === 'Business' ? 'fas fa-briefcase' :
                     course.category === 'Technology' ? 'fas fa-laptop-code' :
@@ -1212,7 +1249,12 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             title: lesson.title || 'Leçon',
             type: lesson.type || 'video',
             duration: lesson.duration || '0 min',
-            icon: lesson.icon || 'fas fa-play-circle'
+            icon: lesson.icon || 'fas fa-play-circle',
+            description: lesson.description || '',
+            contentUrl: lesson.content_url || undefined,
+            attachments: lesson.attachments || [],
+            externalLinks: lesson.external_links || [],
+            quizQuestions: Array.isArray(lesson.quiz?.questions) ? lesson.quiz.questions : [],
           })),
           evidenceDocuments: module.evidence_documents || [],
           requiresValidation: module.requires_validation ?? false,
@@ -1243,6 +1285,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           requiresFinalValidation: data.requires_final_validation ?? false,
           sequentialModules: data.sequential_modules ?? false,
           courseMaterials: data.course_materials || [],
+          programmeId: data.programme_id ?? null,
+          audienceSegment: (data.audience_segment as CourseAudienceSegment | null) ?? null,
           icon: 'fas fa-book',
           progress: 0,
           modules
@@ -1272,7 +1316,12 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
             title: lesson.title || 'Leçon',
             type: lesson.type || 'video',
             duration: lesson.duration || '0 min',
-            icon: lesson.icon || 'fas fa-play-circle'
+            icon: lesson.icon || 'fas fa-play-circle',
+            description: lesson.description || '',
+            contentUrl: lesson.content_url || undefined,
+            attachments: lesson.attachments || [],
+            externalLinks: lesson.external_links || [],
+            quizQuestions: Array.isArray(lesson.quiz?.questions) ? lesson.quiz.questions : [],
           })),
           evidenceDocuments: module.evidence_documents || [],
           requiresValidation: module.requires_validation ?? false,
@@ -1303,6 +1352,8 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
           requiresFinalValidation: data.requires_final_validation ?? false,
           sequentialModules: data.sequential_modules ?? false,
           courseMaterials: data.course_materials || [],
+          programmeId: data.programme_id ?? null,
+          audienceSegment: (data.audience_segment as CourseAudienceSegment | null) ?? null,
           icon: 'fas fa-book',
           progress: 0,
           modules
@@ -1770,14 +1821,41 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
   }
 
-  static async upsertEmployee(employee: Partial<Employee>): Promise<Employee | null> {
+  static async upsertEmployee(employee: Partial<Employee>): Promise<{ data: Employee | null; error: string | null }> {
     try {
       const { data, error } = await DataService.upsertEmployee(employee);
-      if (error) throw error;
-      return data ?? null;
-    } catch (e) {
+      if (error) {
+        const msg =
+          typeof (error as any)?.message === 'string'
+            ? (error as any).message
+            : typeof error === 'string'
+              ? error
+              : 'Erreur enregistrement salarié';
+        console.error('❌ DataAdapter.upsertEmployee:', error);
+        return { data: null, error: msg };
+      }
+      return { data: data ?? null, error: null };
+    } catch (e: any) {
       console.error('❌ DataAdapter.upsertEmployee:', e);
-      return null;
+      return { data: null, error: typeof e?.message === 'string' ? e.message : 'Erreur enregistrement salarié' };
+    }
+  }
+
+  static async uploadEmployeeHrFile(params: {
+    organizationId: string;
+    employeeProfileId: string;
+    file: File;
+    subfolder: 'photo' | 'cv' | 'documents';
+  }): Promise<{ publicUrl: string | null; error: string | null }> {
+    try {
+      const { publicUrl, error } = await DataService.uploadEmployeeHrFile(params);
+      if (error) {
+        const msg = typeof (error as any)?.message === 'string' ? (error as any).message : String(error);
+        return { publicUrl: null, error: msg };
+      }
+      return { publicUrl, error: null };
+    } catch (e: any) {
+      return { publicUrl: null, error: typeof e?.message === 'string' ? e.message : 'Upload impossible' };
     }
   }
 

@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
+import { NAV_SESSION_COURSES_PROGRAMME_ID } from '../contexts/AppNavigationContext';
 import { Course, User } from '../types';
 import LinkPreview from './common/LinkPreview';
 
@@ -20,6 +21,16 @@ const Courses: React.FC<CoursesProps> = ({ courses, users = [], onSelectCourse }
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'instructor' | 'rating' | 'students'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+  const [programmeFilterId, setProgrammeFilterId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const preset = sessionStorage.getItem(NAV_SESSION_COURSES_PROGRAMME_ID);
+      if (preset) setProgrammeFilterId(preset);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Extraire toutes les catégories uniques
   const categories = useMemo(() => {
@@ -53,7 +64,10 @@ const Courses: React.FC<CoursesProps> = ({ courses, users = [], onSelectCourse }
       // Filtre par niveau
       const matchesLevel = levelFilter === 'all' || course.level === levelFilter;
 
-      return matchesSearch && matchesCategory && matchesLevel;
+      const matchesProgramme =
+        !programmeFilterId || (course.programmeId && String(course.programmeId) === String(programmeFilterId));
+
+      return matchesSearch && matchesCategory && matchesLevel && matchesProgramme;
     });
 
     // Tri
@@ -84,7 +98,7 @@ const Courses: React.FC<CoursesProps> = ({ courses, users = [], onSelectCourse }
     });
 
     return filtered;
-  }, [courses, searchQuery, categoryFilter, levelFilter, sortBy, sortOrder]);
+  }, [courses, searchQuery, categoryFilter, levelFilter, sortBy, sortOrder, programmeFilterId]);
 
   // Métriques
   const totalCourses = courses.length;
@@ -157,6 +171,28 @@ const Courses: React.FC<CoursesProps> = ({ courses, users = [], onSelectCourse }
 
         {/* Barre de recherche et filtres */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+          {programmeFilterId && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <span>
+                <i className="fas fa-filter mr-2" aria-hidden />
+                {t('courses') || 'Formations'} : affichage filtré par le programme ouvert depuis le module Programme.
+              </span>
+              <button
+                type="button"
+                className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-emerald-800 shadow-sm border border-emerald-200 hover:bg-emerald-100"
+                onClick={() => {
+                  setProgrammeFilterId(null);
+                  try {
+                    sessionStorage.removeItem(NAV_SESSION_COURSES_PROGRAMME_ID);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                Effacer le filtre
+              </button>
+            </div>
+          )}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <div className="flex flex-wrap items-center gap-4">
               {/* Recherche */}

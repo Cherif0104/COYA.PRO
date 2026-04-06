@@ -13,6 +13,7 @@ import OrganizationService from '../services/organizationService';
 import * as programmeService from '../services/programmeService';
 import * as referentialsService from '../services/referentialsService';
 import { useModulePermissions } from '../hooks/useModulePermissions';
+import { NAV_SESSION_OPEN_PROJECT_ID } from '../contexts/AppNavigationContext';
 
 const statusStyles: Record<string, string> = {
     'Not Started': 'bg-gray-200 text-gray-800',
@@ -1770,6 +1771,28 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
         onNotificationHandled?.();
     }, [autoOpenProjectId, projects, isProjectDetailPageOpen, selectedProject, onNotificationHandled]);
 
+    /** Navigation depuis le module Programme : ouvrir la fiche du projet ciblé. */
+    useEffect(() => {
+        const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(NAV_SESSION_OPEN_PROJECT_ID) : null;
+        if (!raw) return;
+        const target = projects.find((p) => String(p.id) === String(raw));
+        if (!target) {
+            if (projects.length > 0) {
+                try {
+                    sessionStorage.removeItem(NAV_SESSION_OPEN_PROJECT_ID);
+                } catch (_) { /* ignore */ }
+            }
+            return;
+        }
+        try {
+            sessionStorage.removeItem(NAV_SESSION_OPEN_PROJECT_ID);
+        } catch (_) { /* ignore */ }
+        setSelectedProject(target);
+        setIsProjectDetailPageOpen(true);
+        setActiveSection('overview');
+        setViewMode('list');
+    }, [projects]);
+
     const validateProject = (projectData: Project | Omit<Project, 'id' | 'tasks' | 'risks'>): string | null => {
         if (!projectData.title?.trim()) {
             return t('project_title_required');
@@ -2039,15 +2062,6 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             </span>
                         </div>
                     )}
-                {setView && (
-                    <button
-                        onClick={() => setView('planning')}
-                        className="btn-3d-secondary"
-                    >
-                        <i className="fas fa-calendar-week mr-2"></i>
-                        {localize('Planning', 'Planning')}
-                    </button>
-                )}
                 {canCreateProject && (
                     <button
                         onClick={() => handleOpenForm()}

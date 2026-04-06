@@ -1,6 +1,9 @@
 import { supabase } from './supabaseService';
 import { Employee, HrAbsenceEvent, HrAttendancePolicy, PresencePeriodMetric, PresenceSession, PresenceStatus, PresenceStatusEvent } from '../types';
 
+/** Une pause « significative » : au-delà de 2 minutes (micro-interruptions ignorées pour le comptage). */
+export const MIN_SIGNIFICANT_PAUSE_SECONDS = 120;
+
 const ABSENCE_TABLE = 'hr_absence_events';
 
 function minutesBetween(startIso: string, endIso?: string | null): number {
@@ -257,23 +260,44 @@ export function computePresenceCompliance(params: {
 
 const PAUSE_STATUSES = new Set<PresenceStatus>(['pause', 'pause_coffee', 'pause_lunch']);
 
-/** Secondes de segment (événement fermé ou en cours jusqu’à maintenant) */
-export function presenceEventDurationSeconds(evt: PresenceStatusEvent, nowMs: number = Date.now()): number {
+/** Fin effective d’un segment : ne prolonge pas au-delà de la fin de session de présence si déconnecté. */
+export function boundedStatusEventEndMs(
+  evt: PresenceStatusEvent,
+  nowMs: number,
+  sessionById?: Map<string, PresenceSession>,
+): number {
+  if (evt.endedAt) return new Date(evt.endedAt).getTime();
+  const sess = sessionById?.get(evt.presenceSessionId);
+  const sessionCap = sess?.endedAt ? new Date(sess.endedAt).getTime() : nowMs;
+  return Math.min(nowMs, sessionCap);
+}
+
+/** Secondes de segment (événement fermé ou en cours ; plafonné à la session si `sessionById` fourni). */
+export function presenceEventDurationSeconds(
+  evt: PresenceStatusEvent,
+  nowMs: number = Date.now(),
+  sessionById?: Map<string, PresenceSession>,
+): number {
   if (typeof evt.durationSeconds === 'number' && evt.durationSeconds >= 0 && evt.endedAt) {
     return evt.durationSeconds;
   }
   const start = new Date(evt.startedAt).getTime();
-  const end = evt.endedAt ? new Date(evt.endedAt).getTime() : nowMs;
+  const end = boundedStatusEventEndMs(evt, nowMs, sessionById);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
   return Math.floor((end - start) / 1000);
 }
 
 /** Segments de pause dont la durée dépasse le plafond (une ligne par événement) */
-export function listPauseOverrunEvents(events: PresenceStatusEvent[], maxPauseMinutes: number): PresenceStatusEvent[] {
+export function listPauseOverrunEvents(
+  events: PresenceStatusEvent[],
+  maxPauseMinutes: number,
+  sessionById?: Map<string, PresenceSession>,
+): PresenceStatusEvent[] {
   const maxSec = Math.max(1, maxPauseMinutes) * 60;
+  const nowMs = Date.now();
   return events.filter((e) => {
     if (!PAUSE_STATUSES.has(e.status)) return false;
-    return presenceEventDurationSeconds(e) > maxSec;
+    return presenceEventDurationSeconds(e, nowMs, sessionById) > maxSec;
   });
 }
 
@@ -330,11 +354,16 @@ function statusToDailyCategory(status: PresenceStatus): DailyPresenceCategory {
 }
 
 /** Secondes d’un segment qui tombent dans la journée locale `dateIso` (découpe aux bornes du jour). */
-export function presenceEventSecondsInLocalDay(evt: PresenceStatusEvent, dateIso: string, nowMs: number = Date.now()): number {
+export function presenceEventSecondsInLocalDay(
+  evt: PresenceStatusEvent,
+  dateIso: string,
+  nowMs: number = Date.now(),
+  sessionById?: Map<string, PresenceSession>,
+): number {
   const { startMs, endMs } = localDayBoundsMs(dateIso);
   if (endMs <= startMs) return 0;
   const es = new Date(evt.startedAt).getTime();
-  const ee = evt.endedAt ? new Date(evt.endedAt).getTime() : nowMs;
+  const ee = boundedStatusEventEndMs(evt, nowMs, sessionById);
   if (!Number.isFinite(es) || !Number.isFinite(ee) || ee <= es) return 0;
   const overlapStart = Math.max(es, startMs);
   const overlapEnd = Math.min(ee, endMs);
@@ -351,24 +380,52 @@ const EMPTY_CATEGORIES: Record<DailyPresenceCategory, number> = {
   technical: 0,
 };
 
+export type DailyPresenceBreakdown = {
+  categories: Record<DailyPresenceCategory, number>;
+  /** Temps suivi hors statut « absent » (tous les autres statuts comptés). */
+  totalSeconds: number;
+  /** Somme brute incluant absent (transparence). */
+  totalSecondsIncludingAbsent: number;
+  /** Nombre de segments de pause touchant ce jour (pause / café / déjeuner). */
+  pauseSegmentCount: number;
+  /** Segments de pause de plus de {@link MIN_SIGNIFICANT_PAUSE_SECONDS} dans ce jour. */
+  pauseSegmentsOverTwoMinutes: number;
+};
+
 export function computeDailyPresenceBreakdown(params: {
   events: PresenceStatusEvent[];
   dateIso: string;
   userId: string;
   nowMs?: number;
-}): { categories: Record<DailyPresenceCategory, number>; totalSeconds: number } {
+  sessionById?: Map<string, PresenceSession>;
+}): DailyPresenceBreakdown {
   const nowMs = params.nowMs ?? Date.now();
+  const sessionById = params.sessionById;
   const categories = { ...EMPTY_CATEGORIES };
-  let totalSeconds = 0;
+  let totalIncludingAbsent = 0;
+  let pauseSegmentCount = 0;
+  let pauseSegmentsOverTwoMinutes = 0;
   for (const evt of params.events) {
     if (String(evt.userId) !== String(params.userId)) continue;
-    const sec = presenceEventSecondsInLocalDay(evt, params.dateIso, nowMs);
+    const sec = presenceEventSecondsInLocalDay(evt, params.dateIso, nowMs, sessionById);
     if (sec <= 0) continue;
     const cat = statusToDailyCategory(evt.status);
     categories[cat] += sec;
-    totalSeconds += sec;
+    totalIncludingAbsent += sec;
+    if (PAUSE_STATUSES.has(evt.status)) {
+      pauseSegmentCount += 1;
+      if (sec > MIN_SIGNIFICANT_PAUSE_SECONDS) pauseSegmentsOverTwoMinutes += 1;
+    }
   }
-  return { categories, totalSeconds };
+  const absentSec = categories.absent;
+  const totalSeconds = Math.max(0, totalIncludingAbsent - absentSec);
+  return {
+    categories,
+    totalSeconds,
+    totalSecondsIncludingAbsent: totalIncludingAbsent,
+    pauseSegmentCount,
+    pauseSegmentsOverTwoMinutes,
+  };
 }
 
 /** Une ligne par salarié pour une date (userId = auth user id des événements). */
@@ -377,7 +434,8 @@ export function computeDailyPresenceBreakdownByUser(params: {
   dateIso: string;
   userIds: string[];
   nowMs?: number;
-}): Array<{ userId: string; categories: Record<DailyPresenceCategory, number>; totalSeconds: number }> {
+  sessionById?: Map<string, PresenceSession>;
+}): Array<DailyPresenceBreakdown & { userId: string }> {
   return params.userIds.map((userId) => ({
     userId,
     ...computeDailyPresenceBreakdown({
@@ -385,6 +443,145 @@ export function computeDailyPresenceBreakdownByUser(params: {
       dateIso: params.dateIso,
       userId,
       nowMs: params.nowMs,
+      sessionById: params.sessionById,
     }),
   }));
+}
+
+// ----- Paie : période comptable + conversion temps → heures rémunérées -----
+
+/**
+ * Nombre de minutes « mur » comptées pour une heure de paie (défaut 60).
+ * Certaines organisations utilisent une autre base (ex. 68) : modifier ici si besoin.
+ */
+export const PAYROLL_MINUTES_PER_PAID_HOUR = 60;
+
+/** Secondes de session de présence qui chevauchent [startMs, endMs] (fin ouverte = now). */
+export function computeSessionOverlapSecondsInRange(
+  sessions: PresenceSession[],
+  authUserId: string,
+  startMs: number,
+  endMs: number,
+  nowMs: number = Date.now(),
+): number {
+  let total = 0;
+  for (const s of sessions) {
+    if (String(s.userId) !== String(authUserId)) continue;
+    const a = new Date(s.startedAt).getTime();
+    const b = s.endedAt ? new Date(s.endedAt).getTime() : nowMs;
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) continue;
+    const o0 = Math.max(a, startMs);
+    const o1 = Math.min(b, endMs);
+    if (o1 > o0) total += Math.floor((o1 - o0) / 1000);
+  }
+  return total;
+}
+
+function localDateKeyFromMs(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Jours distincts (calendrier local) avec au moins une session qui intersecte la période. */
+export function countDistinctWorkDaysInRange(
+  sessions: PresenceSession[],
+  authUserId: string,
+  startMs: number,
+  endMs: number,
+  nowMs: number = Date.now(),
+): number {
+  const days = new Set<string>();
+  for (const s of sessions) {
+    if (String(s.userId) !== String(authUserId)) continue;
+    const a = new Date(s.startedAt).getTime();
+    const b = s.endedAt ? new Date(s.endedAt).getTime() : nowMs;
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) continue;
+    const o0 = Math.max(a, startMs);
+    const o1 = Math.min(b, endMs);
+    if (o1 <= o0) continue;
+    const dayStart = new Date(o0);
+    dayStart.setHours(0, 0, 0, 0);
+    let ptr = dayStart.getTime();
+    while (ptr < o1) {
+      days.add(localDateKeyFromMs(ptr));
+      ptr += 86400000;
+    }
+  }
+  return days.size;
+}
+
+/** Heures « paie » : minutes réelles / base (ex. 60 min = 1 h payée). */
+export function workedSecondsToPayableHours(workedSeconds: number): number {
+  const minutes = workedSeconds / 60;
+  return minutes / Math.max(1, PAYROLL_MINUTES_PER_PAID_HOUR);
+}
+
+export type PayrollPeriodWorkedRow = {
+  profileId: string;
+  displayName: string;
+  periodLabel: string;
+  periodStartIso: string;
+  periodEndIso: string;
+  workedSeconds: number;
+  /** Heures décimales pour calcul salaire (après règle PAYROLL_MINUTES_PER_PAID_HOUR). */
+  payableHours: number;
+  distinctWorkDays: number;
+  hourlyRate: number;
+  estimatedPay: number;
+};
+
+/** Aperçu rémunération sur la période comptable (politique RH) pour chaque salarié. */
+export function listPayrollPeriodWorkedRows(params: {
+  employees: Employee[];
+  sessions: PresenceSession[];
+  policy: HrAttendancePolicy | null;
+  userIdByProfile: Record<string, string>;
+  displayNameByProfileId: Record<string, string>;
+  referenceDate?: Date;
+}): PayrollPeriodWorkedRow[] {
+  const ref = params.referenceDate ?? new Date();
+  const startDay = params.policy?.payrollPeriodStartDay ?? 1;
+  const { start, end, label } = getPayrollPeriodBounds(ref, startDay);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const nowMs = Date.now();
+
+  return params.employees.map((emp) => {
+    const profileId = String(emp.profileId);
+    const authUserId = params.userIdByProfile[profileId] || profileId;
+    const workedSeconds = computeSessionOverlapSecondsInRange(
+      params.sessions,
+      authUserId,
+      startMs,
+      endMs,
+      nowMs,
+    );
+    const payableHours = workedSecondsToPayableHours(workedSeconds);
+    const distinctWorkDays = countDistinctWorkDaysInRange(
+      params.sessions,
+      authUserId,
+      startMs,
+      endMs,
+      nowMs,
+    );
+    const hourlyRate = Number(emp.hourlyRate ?? 0) || 0;
+    const estimatedPay = payableHours * hourlyRate;
+    const displayName =
+      params.displayNameByProfileId[profileId] || profileId.slice(0, 8);
+    return {
+      profileId,
+      displayName,
+      periodLabel: label,
+      periodStartIso: start.toISOString().slice(0, 10),
+      periodEndIso: end.toISOString().slice(0, 10),
+      workedSeconds,
+      payableHours,
+      distinctWorkDays,
+      hourlyRate,
+      estimatedPay,
+    };
+  });
 }

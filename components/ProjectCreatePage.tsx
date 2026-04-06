@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useLocalization } from '../contexts/LocalizationContext';
-import { useAuth } from '../contexts/AuthContextSupabase';
 import { Project, User } from '../types';
 import TeamSelector from './common/TeamSelector';
+import OrganizationService from '../services/organizationService';
+import * as programmeService from '../services/programmeService';
 
 const PROJECT_TITLE_MIN = 10;
 const PROJECT_TITLE_MAX = 120;
@@ -22,8 +22,6 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
     users,
     editingProject = null
 }) => {
-    const { t } = useLocalization();
-    const { user: currentUser } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
@@ -31,10 +29,28 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
         status: 'Not Started' as 'Not Started' | 'In Progress' | 'Completed' | 'On Hold',
         startDate: '',
         dueDate: '',
-        team: [] as User[]
+        team: [] as User[],
+        programmeId: '',
     });
 
+    const [programmes, setProgrammes] = useState<{ id: string; name: string }[]>([]);
+
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const orgId = await OrganizationService.getCurrentUserOrganizationId();
+            if (cancelled || !orgId) return;
+            try {
+                const list = await programmeService.listProgrammes(orgId);
+                if (!cancelled) setProgrammes(list.map((p) => ({ id: p.id, name: p.name })));
+            } catch {
+                if (!cancelled) setProgrammes([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // Fonction utilitaire pour convertir une date ISO en format yyyy-MM-dd pour les champs input date
     const formatDateForInput = (dateString?: string): string => {
@@ -61,12 +77,17 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                 status: editingProject.status,
                 startDate: formatDateForInput(editingProject.startDate),
                 dueDate: formatDateForInput(editingProject.dueDate),
-                team: editingProject.team || []
+                team: editingProject.team || [],
+                programmeId: editingProject.programmeId ?? '',
             });
         } else {
             // Définir la date de début par défaut à aujourd'hui pour les nouveaux projets
             const today = new Date().toISOString().split('T')[0];
-            setFormData(prev => ({ ...prev, startDate: today }));
+            setFormData(prev => ({
+                ...prev,
+                startDate: today,
+                programmeId: '',
+            }));
         }
     }, [editingProject]);
 
@@ -109,10 +130,17 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
         setIsLoading(true);
         try {
             // Si on est en mode édition, inclure l'ID du projet
-            const projectToSave = editingProject 
-                ? { ...formData, id: editingProject.id, tasks: editingProject.tasks, risks: editingProject.risks }
-                : formData;
-            
+            const programmeIdNorm = formData.programmeId.trim() || null;
+            const projectToSave = editingProject
+                ? {
+                    ...formData,
+                    id: editingProject.id,
+                    tasks: editingProject.tasks,
+                    risks: editingProject.risks,
+                    programmeId: programmeIdNorm,
+                }
+                : { ...formData, programmeId: programmeIdNorm };
+
             await onSave(projectToSave as Project | Omit<Project, 'id' | 'tasks' | 'risks'>);
             onClose();
         } catch (error) {
@@ -269,6 +297,26 @@ const ProjectCreatePage: React.FC<ProjectCreatePageProps> = ({
                                                 <p className="mt-1 text-sm text-red-600">{errors.dueDate}</p>
                                             )}
                                         </div>
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="programmeId" className="block text-sm font-medium text-slate-700 mb-2">
+                                            Programme (optionnel)
+                                        </label>
+                                        <select
+                                            id="programmeId"
+                                            value={formData.programmeId}
+                                            onChange={(e) => handleInputChange('programmeId', e.target.value)}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400"
+                                        >
+                                            <option value="">— Aucun —</option>
+                                            {programmes.map((p) => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Rattache le projet au module Programme &amp; Bailleur pour la synthèse et le budget cascade.
+                                        </p>
                                     </div>
                                 </div>
                             </div>

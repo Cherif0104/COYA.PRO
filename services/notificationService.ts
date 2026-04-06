@@ -41,6 +41,28 @@ export type NotificationAction = 'created' | 'updated' | 'deleted' | 'approved' 
 export class NotificationService {
   private static channels: Map<string, any> = new Map();
 
+  /** Profil expéditeur (created_by) — une seule requête par session pour ce chemin. */
+  private static senderProfilePromise: Promise<{ id: string; full_name: string | null } | null> | null = null;
+
+  private static async getSenderProfileOnce(): Promise<{ id: string; full_name: string | null } | null> {
+    if (this.senderProfilePromise) return this.senderProfilePromise;
+    this.senderProfilePromise = (async () => {
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) return null;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('user_id', currentUser.id)
+          .single();
+        return profile?.id ? { id: profile.id, full_name: profile.full_name ?? null } : null;
+      } catch {
+        return null;
+      }
+    })();
+    return this.senderProfilePromise;
+  }
+
   // Créer une notification
   static async createNotification(
     userId: string,
@@ -84,23 +106,13 @@ export class NotificationService {
         }
       }
 
-      // INSERT direct (chemin principal)
-      // Récupérer le profil de l'utilisateur actuel pour created_by
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      // INSERT direct (chemin principal) — created_by : un seul fetch profil par session
       let createdByProfileId: string | null = null;
       let createdByName: string | null = null;
-
-      if (currentUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .eq('user_id', currentUser.id)
-          .single();
-
-        if (profile) {
-          createdByProfileId = profile.id;
-          createdByName = profile.full_name;
-        }
+      const sender = await this.getSenderProfileOnce();
+      if (sender) {
+        createdByProfileId = sender.id;
+        createdByName = sender.full_name;
       }
 
       const { data: ins, error: insErr } = await DataService.createNotification({
@@ -160,13 +172,19 @@ export class NotificationService {
     }
   ): Promise<number> {
     try {
-      const results = await Promise.allSettled(
-        userIds.map(userId =>
-          this.createNotification(userId, type, module, action, title, message, options)
-        )
-      );
-
-      return results.filter(r => r.status === 'fulfilled').length;
+      const unique = Array.from(new Set(userIds.filter(Boolean)));
+      const concurrency = 6;
+      let ok = 0;
+      for (let i = 0; i < unique.length; i += concurrency) {
+        const chunk = unique.slice(i, i + concurrency);
+        const results = await Promise.allSettled(
+          chunk.map((userId) =>
+            this.createNotification(userId, type, module, action, title, message, options)
+          )
+        );
+        ok += results.filter((r) => r.status === 'fulfilled').length;
+      }
+      return ok;
     } catch (error) {
       console.error('Erreur notification multiple:', error);
       return 0;
@@ -262,14 +280,15 @@ export class NotificationService {
   // Marquer toutes les notifications comme lues
   static async markAllAsRead(userId: string): Promise<number> {
     try {
-      // Essayer via la fonction RPC
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('mark_all_notifications_read');
-
-      if (!rpcError && rpcResult) {
-        return rpcResult;
+      // RPC optionnelle (évite un 404 réseau si la fonction n’est pas déployée sur Supabase)
+      const useRpc = import.meta.env.VITE_USE_MARK_ALL_NOTIFICATIONS_RPC === 'true';
+      if (useRpc) {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('mark_all_notifications_read');
+        if (!rpcError && rpcResult != null && Number(rpcResult) >= 0) {
+          return Number(rpcResult);
+        }
       }
 
-      // Fallback: UPDATE direct
       const { data, error } = await supabase
         .from('notifications')
         .update({ read: true, read_at: new Date().toISOString() })

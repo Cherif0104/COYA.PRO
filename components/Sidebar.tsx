@@ -48,7 +48,7 @@ const NavLink: React.FC<{
  * Modules visibles dans la sidebar (épurés).
  * - Supprimés en tant que modules distincts : Tech, Analytics.
  * - Talent Analytics et Offres d’emploi : sous-fonctionnalités du module RH (onglets dans Ressources humaines).
- * - Alerte anonyme → Signalement ; Base de connaissances → Espace documentaire (archivage type Drive).
+ * - Base documentaire → Archives (vision type Drive : dossiers / partages — en évolution).
  */
 const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; view: ModuleName }[] = [
   { icon: 'fas fa-th-large', labelKey: 'dashboard', labelFallback: 'Tableau de bord', view: 'dashboard' },
@@ -59,22 +59,13 @@ const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; vi
   { icon: 'fas fa-chart-line', labelKey: 'programme', labelFallback: 'Programme & Budget', view: 'programme' },
   { icon: 'fas fa-book-open', labelKey: 'courses', labelFallback: 'Cours', view: 'courses' },
   { icon: 'fas fa-users', labelKey: 'crm_sales', labelFallback: 'CRM & Ventes', view: 'crm_sales' },
-  { icon: 'fas fa-handshake', labelKey: 'partenariat', labelFallback: 'Partenariat', view: 'partenariat' },
-  { icon: 'fas fa-gavel', labelKey: 'juridique', labelFallback: 'Juridique', view: 'juridique' },
-  { icon: 'fas fa-video', labelKey: 'studio', labelFallback: 'Studio', view: 'studio' },
   { icon: 'fas fa-clipboard-list', labelKey: 'collecte', labelFallback: 'Collecte de données', view: 'collecte' },
   { icon: 'fas fa-gem', labelKey: 'trinite', labelFallback: 'Trinité', view: 'trinite' },
   { icon: 'fas fa-boxes', labelKey: 'logistique', labelFallback: 'Logistique', view: 'logistique' },
   { icon: 'fas fa-car', labelKey: 'parc_auto', labelFallback: 'Parc automobile', view: 'parc_auto' },
   { icon: 'fas fa-envelope', labelKey: 'messagerie', labelFallback: 'Messagerie', view: 'messagerie' },
   { icon: 'fas fa-ticket-alt', labelKey: 'ticket_it', labelFallback: 'Ticket IT', view: 'ticket_it' },
-  { icon: 'fas fa-shield-alt', labelKey: 'alerte_anonyme', labelFallback: 'Signalement', view: 'alerte_anonyme' },
-  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'Espace documentaire', view: 'knowledge_base' },
-];
-
-const MONITORING_ITEMS: { icon: string; labelKey: string; labelFallback: string; view: string }[] = [
-  { icon: 'fas fa-bell', labelKey: 'notifications_center', labelFallback: 'Centre de notifications', view: 'notifications_center' },
-  { icon: 'fas fa-history', labelKey: 'activity_history', labelFallback: 'Historique des activités', view: 'activity_logs' },
+  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'Archives', view: 'knowledge_base' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAccessModule, permissionsLoading }) => {
@@ -86,10 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
       ? (canAccessModule(item.view) || canAccessModule('finance' as ModuleName))
       : canAccessModule(item.view)
   );
-  const allNavItems: { icon: string; labelKey: string; labelFallback: string; view: string }[] = [
-    ...mainItems,
-    ...MONITORING_ITEMS,
-  ];
+  const allNavItems: { icon: string; labelKey: string; labelFallback: string; view: string }[] = [...mainItems];
 
   const settingsItem = { icon: 'fas fa-cog', label: t('settings'), view: 'settings' as ModuleName };
 

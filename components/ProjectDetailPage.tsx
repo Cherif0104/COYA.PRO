@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Project, TimeLog, Objective, ProjectAttachment, MANAGEMENT_ROLES, Role, ProjectBudgetLine, Task, SUPPORTED_CURRENCIES, TASK_SCORE_PERCENT_EMPLOYEE, TASK_SCORE_PERCENT_MANAGER } from '../types';
+import { Project, TimeLog, Objective, ProjectAttachment, MANAGEMENT_ROLES, Role, ProjectBudgetLine, Task, SUPPORTED_CURRENCIES, TASK_SCORE_PERCENT_EMPLOYEE, TASK_SCORE_PERCENT_MANAGER, Language, RESOURCE_MANAGEMENT_ROLES } from '../types';
+import { NAV_SESSION_OPEN_PROGRAMME_ID } from '../contexts/AppNavigationContext';
 import LogTimeModal from './LogTimeModal';
 import ObjectivesBlock from './ObjectivesBlock';
 import ConfirmationModal from './common/ConfirmationModal';
@@ -10,7 +11,6 @@ import DataAdapter from '../services/dataAdapter';
 import { useProjectModuleSettings } from '../hooks/useProjectModuleSettings';
 import { useModulePermissions } from '../hooks/useModulePermissions';
 import jsPDF from 'jspdf';
-
 const PROJECT_MANAGEMENT_ROLES: Role[] = [
     'super_administrator',
     'administrator',
@@ -19,6 +19,31 @@ const PROJECT_MANAGEMENT_ROLES: Role[] = [
 
 const TASK_TITLE_MIN = 8;
 const TASK_TITLE_MAX = 120;
+
+function getTaskGovernance(task: Task): NonNullable<Task['taskGovernance']> {
+  if (task.taskGovernance) return task.taskGovernance;
+  if (task.status === 'Completed') return 'done_proven';
+  return 'open';
+}
+
+function applyProjectTasksAutoClose(tasks: Task[]): Task[] {
+  const today = new Date().toISOString().slice(0, 10);
+  return tasks.map((t) => {
+    const g = getTaskGovernance(t);
+    if (g === 'not_realized' || g === 'closed_out') return t;
+    const end = t.periodEnd || t.dueDate;
+    if (!end) return t;
+    if (today > String(end).slice(0, 10) && t.status !== 'Completed') {
+      return {
+        ...t,
+        taskGovernance: 'not_realized' as const,
+        isFrozen: true,
+        productivityPenalty: Math.min(1, Number(t.productivityPenalty ?? 0) + 0.2),
+      };
+    }
+    return t;
+  });
+}
 
 interface ProjectDetailPageProps {
     project: Project;
@@ -41,7 +66,8 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     objectives = [],
     setView
 }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const isFr = language === Language.FR;
     const { user: currentUser } = useAuth();
     const { hasPermission } = useModulePermissions();
     const [currentProject, setCurrentProject] = useState(project);
@@ -57,6 +83,13 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         const canWriteProject = hasPermission('projects', 'write');
         return isCreator || hasRole || canWriteProject;
     }, [currentUser, currentProject, hasPermission]);
+
+    /** Création / structure des tâches (période, consigne, réaffectation) : aligné module Programme. */
+    const canGovernTasks = useMemo(
+        () => !!currentUser && RESOURCE_MANAGEMENT_ROLES.includes(currentUser.role),
+        [currentUser],
+    );
+
     const [isLoading, setIsLoading] = useState(false);
     const [pendingTasks, setPendingTasks] = useState<any[]>([]);
     const [pendingRisks, setPendingRisks] = useState<any[]>([]);
@@ -79,6 +112,9 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const [newTaskScheduledTime, setNewTaskScheduledTime] = useState('');
     const [newTaskScheduledDuration, setNewTaskScheduledDuration] = useState<number>(60);
     const [newTaskSmartCriteria, setNewTaskSmartCriteria] = useState<{ specific?: string; measurable?: string; achievable?: string; relevant?: string; timeBound?: string }>({});
+    const [newTaskPeriodStart, setNewTaskPeriodStart] = useState('');
+    const [newTaskPeriodEnd, setNewTaskPeriodEnd] = useState('');
+    const [newTaskManagerComment, setNewTaskManagerComment] = useState('');
     const [taskSearch, setTaskSearch] = useState('');
     const [taskStatusFilter, setTaskStatusFilter] = useState<'all' | Task['status']>('all');
     const [taskPriorityFilter, setTaskPriorityFilter] = useState<'all' | Task['priority']>('all');
@@ -116,7 +152,14 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     };
 
     useEffect(() => {
-        setCurrentProject(project);
+        const tasks = applyProjectTasksAutoClose(project.tasks || []);
+        const prevTasks = project.tasks || [];
+        const changed = JSON.stringify(tasks) !== JSON.stringify(prevTasks);
+        const merged = { ...project, tasks };
+        setCurrentProject(merged);
+        if (changed) {
+            onUpdateProject(merged);
+        }
         loadProjectReports();
     }, [project]);
 
@@ -286,22 +329,35 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     };
 
     const handleUpdateTask = (taskId: string, updates: any) => {
-        const updatedTasks = (currentProject.tasks || []).map(task =>
-            task.id === taskId ? { ...task, ...updates } : task
+        const existing = (currentProject.tasks || []).find((t) => t.id === taskId);
+        if (!existing) return;
+        const gov = getTaskGovernance(existing);
+        if (!canGovernTasks && gov === 'not_realized' && updates.status !== undefined && updates.status !== existing.status) {
+            return;
+        }
+        const merged: any = { ...updates };
+        if (merged.status === 'Completed') {
+            merged.taskGovernance = 'done_proven';
+            merged.completedAt = merged.completedAt ?? new Date().toISOString();
+            merged.completedById = merged.completedById ?? currentUser?.id;
+            merged.isFrozen = false;
+        }
+        const updatedTasks = (currentProject.tasks || []).map((task) =>
+            task.id === taskId ? { ...task, ...merged } : task,
         );
-        
+
         const updatedProject = {
             ...currentProject,
-            tasks: updatedTasks
+            tasks: updatedTasks,
         };
-        
+
         setCurrentProject(updatedProject);
         onUpdateProject(updatedProject);
     };
 
     const handleAddTask = () => {
-        if (!canManageProject) {
-            alert('Seuls les managers, administrateurs et super administrateurs peuvent créer des tâches.');
+        if (!canGovernTasks) {
+            alert('Seuls les rôles autorisés (manager, superviseur, formateur, administrateur…) peuvent créer des tâches.');
             return;
         }
         const title = newTaskText.trim();
@@ -310,13 +366,18 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             alert(`Le titre de la tâche doit contenir entre ${TASK_TITLE_MIN} et ${TASK_TITLE_MAX} caractères.`);
             return;
         }
-        
+
+        const periodEnd = newTaskPeriodEnd.trim() || newTaskDueDate.trim();
         const newTask: Task = {
             id: `task-${Date.now()}`,
             text: title,
             status: 'To Do' as const,
             priority: newTaskPriority,
-            dueDate: newTaskDueDate || undefined,
+            dueDate: newTaskDueDate || periodEnd || undefined,
+            periodStart: newTaskPeriodStart || undefined,
+            periodEnd: periodEnd || undefined,
+            managerComment: newTaskManagerComment.trim() || undefined,
+            taskGovernance: 'open',
             assignee: newTaskAssignee ? currentProject.team?.find(m => m.id === newTaskAssignee) : undefined,
             estimatedHours: 8,
             loggedHours: 0,
@@ -328,22 +389,26 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
         const updatedProject = {
             ...currentProject,
-            tasks: [...(currentProject.tasks || []), newTask]
+            tasks: [...(currentProject.tasks || []), newTask],
         };
-        
+
         setCurrentProject(updatedProject);
         onUpdateProject(updatedProject);
-        
+
         setNewTaskText('');
         setNewTaskDueDate('');
         setNewTaskPriority('Medium');
         setNewTaskAssignee('');
+        setNewTaskPeriodStart('');
+        setNewTaskPeriodEnd('');
+        setNewTaskManagerComment('');
         setNewTaskScheduledDate('');
         setNewTaskScheduledTime('');
         setNewTaskScheduledDuration(60);
     };
 
     const handleDeleteTask = (taskId: string) => {
+        if (!canGovernTasks) return;
         const updatedTasks = (currentProject.tasks || []).filter(task => task.id !== taskId);
         const updatedProject = { ...currentProject, tasks: updatedTasks };
         setCurrentProject(updatedProject);
@@ -375,6 +440,11 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         if (!kanbanDraggingTaskId) return;
         const draggedTask = (currentProject.tasks || []).find((task) => task.id === kanbanDraggingTaskId);
         if (!draggedTask) return;
+        const g = getTaskGovernance(draggedTask);
+        if (g === 'not_realized' || g === 'closed_out') {
+            setKanbanDraggingTaskId(null);
+            return;
+        }
         if (targetStatus === 'Completed' && requireJustification) {
             const hasJustif = (draggedTask.justificationAttachmentIds?.length ?? 0) > 0;
             if (!hasJustif) {
@@ -1064,6 +1134,45 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             {currentProject.description && (
                                 <p className="text-slate-500 text-sm mb-4 max-w-2xl">{currentProject.description}</p>
                             )}
+                            {(currentProject.programmeId || currentProject.programmeName) && (
+                                <div className="w-full max-w-2xl mb-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <i className="fas fa-sitemap text-slate-400 mt-0.5" aria-hidden />
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                {isFr ? 'Programme' : 'Programme'}
+                                            </p>
+                                            <p className="text-sm font-semibold text-slate-800 truncate">
+                                                {currentProject.programmeName || currentProject.programmeId}
+                                            </p>
+                                            {currentProject.programmeBailleurName ? (
+                                                <p className="text-xs text-slate-600 mt-0.5">
+                                                    {isFr ? 'Bailleur : ' : 'Donor: '}
+                                                    {currentProject.programmeBailleurName}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    {setView && currentProject.programmeId ? (
+                                        <button
+                                            type="button"
+                                            className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                                            onClick={() => {
+                                                try {
+                                                    sessionStorage.setItem(
+                                                        NAV_SESSION_OPEN_PROGRAMME_ID,
+                                                        String(currentProject.programmeId)
+                                                    );
+                                                } catch (_) { /* ignore */ }
+                                                setView('programme');
+                                            }}
+                                        >
+                                            <i className="fas fa-external-link-alt mr-2" aria-hidden />
+                                            {isFr ? 'Voir le programme' : 'Open programme'}
+                                        </button>
+                                    ) : null}
+                                </div>
+                            )}
                             <div className="flex items-center gap-6 flex-wrap">
                                 <div className="flex items-center gap-2">
                                     <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(currentProject.status)}`}>
@@ -1095,15 +1204,6 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            {setView && (
-                                <button
-                                    onClick={() => setView('planning')}
-                                    className="btn-3d-secondary"
-                                >
-                                    <i className="fas fa-calendar-week"></i>
-                                    Planning
-                                </button>
-                            )}
                             <button
                                 onClick={() => setLogTimeModalOpen(true)}
                                 className="btn-3d-primary"
@@ -1492,11 +1592,11 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             {activeTab === 'tasks' && (
                                 <div className="space-y-6">
                                     {/* Formulaire pour ajouter une nouvelle tâche */}
-                                    {canManageProject && (
+                                    {canGovernTasks && (
                                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                                             <i className="fas fa-plus-circle text-emerald-600"></i>
-                                            Ajouter une nouvelle tâche (manager / admin)
+                                            Ajouter une tâche (rôles autorisés : manager, superviseur, formateur, admin…)
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                             <input
@@ -1516,6 +1616,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                 value={newTaskDueDate}
                                                 onChange={(e) => setNewTaskDueDate(e.target.value)}
                                                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                                title="Échéance"
                                             />
                                             <select
                                                 value={newTaskPriority}
@@ -1526,6 +1627,20 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                 <option value="Medium">Moyen</option>
                                                 <option value="High">Haut</option>
                                             </select>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                                            <div>
+                                                <label className="text-xs text-gray-500 block mb-1">Début période (optionnel)</label>
+                                                <input type="date" value={newTaskPeriodStart} onChange={(e) => setNewTaskPeriodStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-gray-500 block mb-1">Fin période / échéance pilotage</label>
+                                                <input type="date" value={newTaskPeriodEnd} onChange={(e) => setNewTaskPeriodEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="text-xs text-gray-500 block mb-1">Consigne / commentaire manager</label>
+                                            <textarea value={newTaskManagerComment} onChange={(e) => setNewTaskManagerComment(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Instructions pour l’exécutant…" />
                                         </div>
                                         <details className="mt-2">
                                             <summary className="text-xs text-gray-600 cursor-pointer hover:text-emerald-600">Critères SMART (optionnel)</summary>
@@ -1576,9 +1691,9 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                     </p>
                             </div>
                                     )}
-                                    {!canManageProject && (
+                                    {!canGovernTasks && (
                                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                                            Vous pouvez réaliser les tâches, joindre des justificatifs et mettre à jour l’avancement. La création de tâches est réservée aux managers / administrateurs.
+                                            Vous pouvez réaliser les tâches qui vous sont assignées (justificatif si exigé) et mettre à jour l’avancement. La création et la structure des tâches sont réservées aux rôles autorisés (manager, superviseur, formateur, administrateur…). Après échéance non tenue, la tâche se clôture automatiquement ; votre manager peut réaffecter ou clôturer.
                                         </div>
                                     )}
 
@@ -1649,7 +1764,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                             >
                                                 Réinitialiser
                                             </button>
-                                            {canManageProject && (
+                                            {canGovernTasks && (
                                                 <>
                                                     <button
                                                         type="button"
@@ -1709,6 +1824,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                 return {
                                                                     ...task,
                                                                     status: 'Completed',
+                                                                    taskGovernance: 'done_proven' as const,
                                                                     completedAt: new Date().toISOString(),
                                                                     completedById: currentUser?.id,
                                                                     isFrozen: false,
@@ -1808,11 +1924,19 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {/* Afficher les tâches existantes */}
                                                         {filteredTasks.map(task => {
+                                                            const governance = getTaskGovernance(task);
                                                             const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'Completed';
                                                             const frozen = isTaskFrozen(task);
-                                                            const canSetCompleted = !frozen || canManageProject;
+                                                            const blocked = governance === 'not_realized' || governance === 'closed_out';
+                                                            const canSetCompleted = !blocked && (!frozen || canManageProject);
+                                                            const canEditStructure = canGovernTasks;
+                                                            const isAssignee =
+                                                                !!task.assignee?.id &&
+                                                                !!currentUser?.id &&
+                                                                String(task.assignee.id) === String(currentUser.id);
+                                                            const canChangeStatus = canGovernTasks || isAssignee;
                                                             return (
-                                                            <tr key={task.id} className={`hover:bg-gray-50 ${frozen ? 'bg-amber-50 border-l-2 border-amber-500' : ''}`}>
+                                                            <tr key={task.id} className={`hover:bg-gray-50 ${frozen || blocked ? 'bg-amber-50 border-l-2 border-amber-500' : ''}`}>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     <input
                                                                         type="checkbox"
@@ -1823,14 +1947,22 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex flex-col gap-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <input
                                                             type="text"
                                                             value={task.text}
                                                             onChange={(e) => handleUpdateTask(task.id, { text: e.target.value })}
-                                                            className="w-full min-w-64 text-sm border border-gray-300 rounded px-3 py-2"
+                                                            className="w-full min-w-64 text-sm border border-gray-300 rounded px-3 py-2 disabled:bg-gray-100"
                                                             placeholder="Nom de la tâche"
+                                                            disabled={!canEditStructure}
                                                         />
+                                                                        {governance === 'not_realized' && (
+                                                                            <span className="shrink-0 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-900 rounded">Non réalisée (échue)</span>
+                                                                        )}
+                                                                        {governance === 'closed_out' && (
+                                                                            <span className="shrink-0 px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-900 rounded">Clôturée manager</span>
+                                                                        )}
                                                                         {frozen && <span className="shrink-0 px-2 py-0.5 text-xs font-medium bg-amber-200 text-amber-900 rounded" title="Date/heure dépassée sans Réalisé">Gel</span>}
                                                                         {task.status === 'Completed' && (!task.justificationAttachmentIds || task.justificationAttachmentIds.length === 0) && (
                                                                             <span className="shrink-0 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded" title="Justificatif recommandé">Justificatif à fournir</span>
@@ -1866,6 +1998,10 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                             </select>
                                                                         )}
                                                                     </div>
+                                                                    {task.managerComment && (
+                                                                        <p className="text-xs text-gray-500 pl-1 max-w-md">Consigne : {task.managerComment}</p>
+                                                                    )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center space-x-2">
@@ -1873,6 +2009,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                             value={task.status}
                                                                             onChange={(e) => {
                                                                                 const newStatus = e.target.value as Task['status'];
+                                                                                if (blocked && newStatus !== task.status) return;
                                                                                 if (newStatus === 'Completed' && requireJustification) {
                                                                                     const hasJustif = (task.justificationAttachmentIds?.length ?? 0) > 0;
                                                                                     if (!hasJustif) {
@@ -1888,7 +2025,7 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                                 }
                                                                                 handleUpdateTask(task.id, updates);
                                                                             }}
-                                                                            disabled={task.status !== 'Completed' && !canSetCompleted}
+                                                                            disabled={!canChangeStatus || (task.status !== 'Completed' && !canSetCompleted)}
                                                                             className="text-xs border border-gray-300 rounded px-2 py-1"
                                                                         >
                                                                             <option value="To Do">À faire</option>
@@ -1903,7 +2040,8 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                             type="date"
                                                                             value={formatDateForInput(task.dueDate)}
                                                                             onChange={(e) => handleUpdateTask(task.id, { dueDate: e.target.value })}
-                                                                            className="text-xs border border-gray-300 rounded px-2 py-1"
+                                                                            className="text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
+                                                                            disabled={!canEditStructure}
                                                                         />
                                                                         {task.scheduledDate && <span className="text-xs text-gray-500" title={`Prévu: ${task.scheduledDate} ${task.scheduledTime || ''}`}><i className="fas fa-clock"></i></span>}
                                                                         {isOverdue && <span className="ml-2 text-xs text-red-600">En retard</span>}
@@ -1914,8 +2052,9 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                         type="number"
                                                                         value={task.estimatedHours || 0}
                                                                         onChange={(e) => handleUpdateTask(task.id, { estimatedHours: Number(e.target.value) })}
-                                                                        className="w-16 text-xs border border-gray-300 rounded px-2 py-1"
+                                                                        className="w-16 text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
                                                                         min="0"
+                                                                        disabled={!canEditStructure}
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
@@ -1923,15 +2062,17 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                         type="number"
                                                                         value={task.loggedHours || 0}
                                                                         onChange={(e) => handleUpdateTask(task.id, { loggedHours: Number(e.target.value) })}
-                                                                        className="w-16 text-xs border border-gray-300 rounded px-2 py-1"
+                                                                        className="w-16 text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
                                                                         min="0"
+                                                                        disabled={!canGovernTasks && !isAssignee}
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     <select
                                                                         value={task.priority}
                                                                         onChange={(e) => handleUpdateTask(task.id, { priority: e.target.value as 'Low' | 'Medium' | 'High' })}
-                                                                        className="text-xs border border-gray-300 rounded px-2 py-1"
+                                                                        className="text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
+                                                                        disabled={!canEditStructure}
                                                                     >
                                                                         <option value="Low">Faible</option>
                                                                         <option value="Medium">Moyen</option>
@@ -1947,7 +2088,8 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                                 const assignee = assigneeId ? currentProject.team.find(m => m.id === assigneeId) : undefined;
                                                                                 handleUpdateTask(task.id, { assignee });
                                                                             }}
-                                                                            className="text-xs border border-gray-300 rounded px-2 py-1 min-w-24"
+                                                                            className="text-xs border border-gray-300 rounded px-2 py-1 min-w-24 disabled:bg-gray-100"
+                                                                            disabled={!canEditStructure}
                                                                         >
                                                                             <option value="">Non attribué</option>
                                                                             {currentProject.team.map(member => (
@@ -1959,13 +2101,51 @@ const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                                                    <button
-                                                                        onClick={() => handleDeleteTask(task.id)}
-                                                                        className="text-red-600 hover:text-red-800 transition-colors p-2 rounded hover:bg-red-50"
-                                                                        title="Supprimer la tâche"
-                                                                    >
-                                                                        <i className="fas fa-trash"></i>
-                                                                    </button>
+                                                                    <div className="flex flex-col gap-1 items-start">
+                                                                        {canGovernTasks && governance === 'not_realized' && (
+                                                                            <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-xs text-blue-700 hover:underline text-left"
+                                                                                    onClick={() =>
+                                                                                        handleUpdateTask(task.id, {
+                                                                                            taskGovernance: 'open',
+                                                                                            isFrozen: false,
+                                                                                            status: 'To Do',
+                                                                                        })
+                                                                                    }
+                                                                                >
+                                                                                    Réouvrir / réaffecter
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-xs text-red-700 hover:underline text-left"
+                                                                                    onClick={() =>
+                                                                                        handleUpdateTask(task.id, {
+                                                                                            taskGovernance: 'closed_out',
+                                                                                            isFrozen: true,
+                                                                                            productivityPenalty: Math.min(
+                                                                                                1,
+                                                                                                Number(task.productivityPenalty ?? 0) + 0.3,
+                                                                                            ),
+                                                                                        })
+                                                                                    }
+                                                                                >
+                                                                                    Clôturer (hors perf.)
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                        {canGovernTasks && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleDeleteTask(task.id)}
+                                                                                className="text-red-600 hover:text-red-800 transition-colors p-2 rounded hover:bg-red-50"
+                                                                                title="Supprimer la tâche"
+                                                                            >
+                                                                                <i className="fas fa-trash"></i>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                             );

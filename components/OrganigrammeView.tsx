@@ -8,6 +8,7 @@ import { Employee } from '../types';
 interface OrgNode {
   employee: Employee;
   name: string;
+  supervisorName?: string;
   departmentNames: string[];
   posteName?: string;
   level: number;
@@ -33,7 +34,7 @@ const OrganigrammeView: React.FC = () => {
         ]);
         if (cancelled) return;
         const deptMap = new Map(departments.map((d) => [d.id, d.name]));
-        const profileIds = [...new Set(employees.flatMap((e) => [e.profileId, e.managerId].filter(Boolean)))] as string[];
+        const profileIds = [...new Set(employees.flatMap((e) => [e.profileId, e.managerId, e.mentorId].filter(Boolean)))] as string[];
         const profileMap = new Map<string, { full_name?: string; user_id?: string }>();
         const { supabase } = await import('../services/supabaseService');
         if (profileIds.length > 0) {
@@ -47,30 +48,33 @@ const OrganigrammeView: React.FC = () => {
             userDeptMap.set(profileId, links.map((l) => deptMap.get(l.departmentId) || l.departmentId).filter(Boolean));
           }
         }
-        const buildTree = (managerId: string | null | undefined): OrgNode[] => {
-          return employees
-            .filter((e) => (managerId == null ? !e.managerId : e.managerId === managerId))
+        const buildTree = (managerId: string | null | undefined, depth: number): OrgNode[] =>
+          employees
+            .filter((e) => (managerId == null || managerId === undefined ? !e.managerId : e.managerId === managerId))
             .map((e) => {
               const profile = profileMap.get(e.profileId);
               const deptNames = userDeptMap.get(e.profileId) || [];
+              const sup = e.mentorId ? profileMap.get(e.mentorId)?.full_name : undefined;
               return {
                 employee: e,
                 name: profile?.full_name || e.profileId?.slice(0, 8) || '—',
+                supervisorName: sup || undefined,
                 departmentNames: deptNames,
                 posteName: e.position ?? undefined,
-                level: managerId == null ? 0 : 1,
-                children: buildTree(e.profileId),
+                level: depth,
+                children: buildTree(e.profileId, depth + 1),
               };
             });
-        };
-        const roots = buildTree(null);
+        const roots = buildTree(null, 0);
         if (roots.length === 0 && employees.length > 0) {
           const fallback: OrgNode[] = employees.map((e) => {
             const profile = profileMap.get(e.profileId);
             const deptNames = userDeptMap.get(e.profileId) || [];
+            const sup = e.mentorId ? profileMap.get(e.mentorId)?.full_name : undefined;
             return {
               employee: e,
               name: profile?.full_name || e.profileId?.slice(0, 8) || '—',
+              supervisorName: sup || undefined,
               departmentNames: deptNames,
               posteName: e.position ?? undefined,
               level: 0,
@@ -114,6 +118,12 @@ const OrganigrammeView: React.FC = () => {
             {node.posteName && <span>{node.posteName}</span>}
             {node.departmentNames.length > 0 && (
               <span className="ml-2">— {node.departmentNames.join(', ')}</span>
+            )}
+            {node.supervisorName && (
+              <span className="block text-amber-800/90 mt-0.5">
+                {fr ? 'Superviseur : ' : 'Supervisor: '}
+                {node.supervisorName}
+              </span>
             )}
           </div>
         </div>

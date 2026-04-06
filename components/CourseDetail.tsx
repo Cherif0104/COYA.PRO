@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Course, Lesson, Module, TimeLog, Project, EvidenceDocument } from '../types';
+import { Course, Language, Lesson, Module, TimeLog, Project, EvidenceDocument } from '../types';
 import LogTimeModal from './LogTimeModal';
 import { DataService } from '../services/dataService';
 import { logger } from '../services/loggerService';
 import LinkPreview from './common/LinkPreview';
 import RealtimeService from '../services/realtimeService';
+import { LessonInPlatformViewer, LessonQuizRunner } from './common/LessonInPlatformViewer';
 
 type LessonTimerState = {
     lessonId: string | null;
@@ -55,7 +56,8 @@ const EnhancedLessonItem: React.FC<{
     timerSeconds?: number;
     timerIsRunning?: boolean;
     onPauseResume?: () => void;
-}> = ({ lesson, isCompleted, isInProgress, isNext, note, onToggle, onStart, onNoteChange, course, isLocked, timerSeconds, timerIsRunning, onPauseResume }) => {
+    isFr?: boolean;
+}> = ({ lesson, isCompleted, isInProgress, isNext, note, onToggle, onStart, onNoteChange, course, isLocked, timerSeconds, timerIsRunning, onPauseResume, isFr = true }) => {
     const [showNote, setShowNote] = useState(false);
     const [editingNote, setEditingNote] = useState(note);
     
@@ -233,24 +235,20 @@ const EnhancedLessonItem: React.FC<{
                 </div>
             )}
 
-            {/* Ressource principale */}
-            {(lesson.contentUrl || course.youtubeUrl) && (
-                <div className="mt-3 text-sm">
-                    <p className="text-gray-500 flex items-center gap-2 mb-1">
-                        <i className="fas fa-external-link-alt text-emerald-600"></i>
-                        Ressource principale
+            {/* Lecteur in-plateforme (vidéo / PDF / YouTube) ou quiz */}
+            <div className="mt-4 space-y-4">
+                {lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0 ? (
+                    <LessonQuizRunner questions={lesson.quizQuestions} isFr={isFr} />
+                ) : lesson.type === 'quiz' ? (
+                    <p className="text-sm text-coya-text-muted rounded-coya border border-dashed border-coya-border p-4">
+                        {isFr
+                            ? 'Leçon quiz : ajoutez des questions dans la gestion du cours (module Gestion des formations).'
+                            : 'Quiz lesson: add questions in course management.'}
                     </p>
-                    <a
-                        href={lesson.contentUrl || course.youtubeUrl || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-semibold"
-                    >
-                        Ouvrir le contenu
-                        <i className="fas fa-arrow-right"></i>
-                    </a>
-                </div>
-            )}
+                ) : (
+                    <LessonInPlatformViewer lesson={lesson} course={course} isFr={isFr} />
+                )}
+            </div>
 
             {/* Pièces jointes de la leçon */}
             {lesson.attachments && lesson.attachments.length > 0 && (
@@ -305,7 +303,8 @@ const EnhancedLessonItem: React.FC<{
 };
 
 const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, onAddTimeLog, projects, onCourseChange }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
+    const isFr = language === Language.FR;
     const { user } = useAuth();
     const [isLogTimeModalOpen, setLogTimeModalOpen] = useState(false);
     const [isLoadingModules, setIsLoadingModules] = useState(true);
@@ -499,6 +498,18 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, o
         return idx >= 0 ? idx : 0;
     }, [course.modules, selectedModuleIndex, selectedLesson]);
 
+    const nextLessonAfterSelected = useMemo(() => {
+        if (!course.modules || !selectedLesson) return null;
+        let seen = false;
+        for (const mod of course.modules) {
+            for (const les of mod.lessons) {
+                if (seen) return les;
+                if (les.id === selectedLesson.id) seen = true;
+            }
+        }
+        return null;
+    }, [course.modules, selectedLesson]);
+
     const selectedModuleState = useMemo(() => {
         if (!selectedLesson) return undefined;
         return computeModuleStates[selectedModuleIndex] || undefined;
@@ -552,7 +563,8 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, o
                             description: lesson.description || '',
                             contentUrl: lesson.content_url || undefined,
                             attachments: lesson.attachments || [],
-                            externalLinks: lesson.external_links || []
+                            externalLinks: lesson.external_links || [],
+                            quizQuestions: Array.isArray(lesson.quiz?.questions) ? lesson.quiz.questions : [],
                         }))
                     }));
                     
@@ -659,13 +671,7 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, o
         if (course.progress === 0) {
             onCourseChange({ ...course, progress: 5 });
         }
-        
-        // Ouvrir le contenu de la leçon (YouTube, Drive, etc.)
-        if (lesson.contentUrl) {
-            window.open(lesson.contentUrl, '_blank');
-        } else if (course.youtubeUrl) {
-            window.open(course.youtubeUrl, '_blank');
-        }
+        // Le contenu s’affiche dans la plateforme (lecteur intégré / quiz) — pas d’ouverture d’onglet systématique.
     };
 
     const handleToggleLesson = async (lessonId: string) => {
@@ -821,28 +827,54 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, o
         setLogTimeModalOpen(false);
     };
 
+    const audienceLabel =
+        course.audienceSegment === 'incubated'
+            ? isFr ? 'Parcours incubés' : 'Incubated track'
+            : course.audienceSegment === 'beneficiary'
+              ? isFr ? 'Parcours bénéficiaires' : 'Beneficiary track'
+              : null;
+
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 via-green-500 to-blue-600 text-white shadow-lg">
+        <div className="min-h-screen bg-coya-bg text-coya-text">
+            {/* Page de garde — thème COYA */}
+            <div className="border-b border-coya-border bg-coya-card shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <button 
-                        onClick={onBack} 
-                        className="flex items-center text-white hover:text-emerald-100 transition-colors mb-4"
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="flex items-center text-coya-primary hover:opacity-90 transition-opacity mb-4 text-sm font-medium"
                     >
                         <i className="fas fa-arrow-left mr-2"></i>
                         {t('back_to_courses')}
                     </button>
-                
-                    <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                            <h1 className="text-4xl font-bold mb-2">{course.title}</h1>
-                            <p className="text-emerald-50 text-sm">{course.description}</p>
-                        </div>
-                        <div className="hidden md:flex items-center space-x-4 text-right">
-                            <div>
-                                <p className="text-xs text-emerald-100 uppercase">Progression</p>
-                                <p className="text-3xl font-bold">{course.progress || 0}%</p>
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                        {course.thumbnailUrl ? (
+                            <div className="w-full md:w-56 shrink-0 rounded-coya overflow-hidden border border-coya-border aspect-video bg-coya-bg">
+                                <img src={course.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                            </div>
+                        ) : (
+                            <div className="w-full md:w-56 shrink-0 rounded-coya border border-coya-border aspect-video bg-coya-primary/10 flex items-center justify-center">
+                                <i className="fas fa-graduation-cap text-4xl text-coya-primary/80" aria-hidden />
+                            </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                            {audienceLabel && (
+                                <span className="inline-block mb-2 rounded-full bg-coya-primary/15 text-coya-primary text-xs font-semibold px-3 py-0.5">
+                                    {audienceLabel}
+                                </span>
+                            )}
+                            <h1 className="text-3xl font-bold text-coya-text mb-2">{course.title}</h1>
+                            <p className="text-sm text-coya-text-muted leading-relaxed">{course.description}</p>
+                            <div className="mt-4 flex flex-wrap items-center gap-4">
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-wide text-coya-text-muted">{isFr ? 'Progression' : 'Progress'}</p>
+                                    <p className="text-2xl font-bold text-coya-primary">{course.progress || 0}%</p>
+                                </div>
+                                <div className="h-8 w-px bg-coya-border hidden sm:block" />
+                                <p className="text-sm text-coya-text-muted">
+                                    <i className="fas fa-chalkboard-teacher mr-1 text-coya-primary" />
+                                    {course.instructor}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -1044,10 +1076,32 @@ const CourseDetail: React.FC<CourseDetailProps> = ({ course, onBack, timeLogs, o
                                 timerSeconds={lessonTimer.lessonId === selectedLesson.id ? activeElapsedSeconds : undefined}
                                 timerIsRunning={lessonTimer.lessonId === selectedLesson.id ? lessonTimer.isRunning : undefined}
                                 onPauseResume={lessonTimer.lessonId === selectedLesson.id ? handlePauseResumeTimer : undefined}
+                                isFr={isFr}
                             />
                         ) : (
-                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 text-center text-sm text-gray-500">
-                                Sélectionnez une leçon dans la colonne de gauche pour afficher le contenu.
+                            <div className="rounded-coya border border-coya-border bg-coya-card p-6 text-center text-sm text-coya-text-muted">
+                                {isFr
+                                    ? 'Sélectionnez une leçon dans le plan à gauche.'
+                                    : 'Select a lesson from the outline on the left.'}
+                            </div>
+                        )}
+
+                        {selectedLesson && nextLessonAfterSelected && (
+                            <div className="rounded-coya border border-coya-border bg-coya-bg/60 p-4 flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm text-coya-text">
+                                    <span className="text-coya-text-muted">{isFr ? 'Suite du parcours' : 'Next in path'} · </span>
+                                    <span className="font-medium">{nextLessonAfterSelected.title}</span>
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedLessonId(nextLessonAfterSelected.id);
+                                        handleStartLesson(nextLessonAfterSelected);
+                                    }}
+                                    className="rounded-coya bg-coya-primary px-4 py-2 text-sm font-medium text-white hover:opacity-95 shrink-0"
+                                >
+                                    {isFr ? 'Leçon suivante →' : 'Next lesson →'}
+                                </button>
                             </div>
                         )}
 

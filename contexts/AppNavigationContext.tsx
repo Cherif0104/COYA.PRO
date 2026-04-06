@@ -1,5 +1,16 @@
 import React, { createContext, useContext } from 'react';
 
+/** sessionStorage : ouvrir un programme précis après navigation vers la vue `programme`. */
+export const NAV_SESSION_OPEN_PROGRAMME_ID = 'coya_nav_open_programme_id';
+/** sessionStorage : onglet détail programme (`collecte` | `projets` | …) après ouverture via `NAV_SESSION_OPEN_PROGRAMME_ID`. */
+export const NAV_SESSION_OPEN_PROGRAMME_DETAIL_TAB = 'coya_nav_open_programme_detail_tab';
+/** sessionStorage : ouvrir la fiche projet après navigation vers la vue `projects`. */
+export const NAV_SESSION_OPEN_PROJECT_ID = 'coya_nav_open_project_id';
+/** sessionStorage : préremplir une campagne « programme » dans la vue `collecte`. */
+export const NAV_SESSION_COLLECTE_PRESET_PROGRAMME_ID = 'coya_nav_collecte_preset_programme_id';
+/** sessionStorage : filtrer les formations (vue `courses`) par programme lié. */
+export const NAV_SESSION_COURSES_PROGRAMME_ID = 'coya_nav_courses_programme_id';
+
 export type AppNavigationContextValue = {
   setView: (view: string) => void;
 };

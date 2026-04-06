@@ -23,19 +23,16 @@ export const moduleDisplayNames: Record<ModuleName, string> = {
   'leave_management': 'Demandes de Congés',
   'finance': 'Finance',
   'comptabilite': 'Comptabilité',
-  'knowledge_base': 'Base de Connaissances',
+  'knowledge_base': 'Archives',
   'courses': 'Cours',
   'jobs': 'Offres d\'Emploi',
   'crm_sales': 'CRM & Ventes',
-  'partenariat': 'Partenariat',
   'analytics': 'Analytics',
   'talent_analytics': 'Talent Analytics',
   'qualite': 'Qualité',
   'rh': 'Ressources humaines',
   'trinite': 'Trinité',
   'programme': 'Programme / Budget',
-  'juridique': 'Juridique',
-  'studio': 'Studio',
   'tech': 'Tech',
   'collecte': 'Collecte',
   'conseil': 'Conseil',
@@ -50,7 +47,6 @@ export const moduleDisplayNames: Record<ModuleName, string> = {
   'logistique': 'Logistique',
   'parc_auto': 'Parc automobile',
   'ticket_it': 'Ticket IT',
-  'alerte_anonyme': 'Alerte anonyme',
   'messagerie': 'Messagerie / Discuss',
 };
 
@@ -81,25 +77,15 @@ const moduleCategories: Record<string, { label: string; icon: string; modules: M
     icon: 'fas fa-briefcase',
     modules: ['jobs'],
   },
-  partenariat: {
-    label: 'Prospection & Partenariat',
+  crm_ventes: {
+    label: 'CRM & Ventes',
     icon: 'fas fa-handshake',
-    modules: ['crm_sales', 'partenariat'],
+    modules: ['crm_sales'],
   },
   conseil_qualite: {
     label: 'Conseil & Qualité',
     icon: 'fas fa-chart-pie',
     modules: ['conseil', 'analytics', 'qualite', 'talent_analytics'],
-  },
-  juridique: {
-    label: 'Juridique',
-    icon: 'fas fa-gavel',
-    modules: ['juridique'],
-  },
-  studio: {
-    label: 'Audiovisuel / Studio',
-    icon: 'fas fa-video',
-    modules: ['studio'],
   },
   tech: {
     label: 'IT & Tech',
@@ -124,7 +110,7 @@ const moduleCategories: Record<string, { label: string; icon: string; modules: M
   communication_conformite: {
     label: 'Communication & Conformité',
     icon: 'fas fa-envelope',
-    modules: ['messagerie', 'alerte_anonyme'],
+    modules: ['messagerie'],
   },
   administration: {
     label: 'Administration (Paramètres)',
