@@ -178,7 +178,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true);
+      // Ne pas appeler setLoading(true) ici : App.tsx affiche un plein écran pendant authLoading && !user,
+      // ce qui démonte <Login /> et fait perdre l'état d'erreur après un échec de connexion.
       const { user: authUser, error } = await AuthService.signIn({ email, password });
       
       if (error) {

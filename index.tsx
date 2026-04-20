@@ -26,6 +26,13 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
             {this.state.error.message}
           </pre>
           <p>Ouvrez la console du navigateur (F12) pour plus de détails.</p>
+          <button
+            type="button"
+            style={{ marginTop: 16, padding: '8px 16px', cursor: 'pointer' }}
+            onClick={() => this.setState({ error: null })}
+          >
+            Réessayer
+          </button>
         </div>
       );
     }
@@ -47,14 +54,16 @@ declare global {
 const root = window.__COYA_APP_ROOT__ || ReactDOM.createRoot(rootElement);
 window.__COYA_APP_ROOT__ = root;
 
+// LocalizationProvider doit rester monté même si une erreur survient dans l’app :
+// sinon ErrorBoundary remplace tout le sous-arbre et les hooks (useLocalization) perdent leur provider.
 root.render(
-  <ErrorBoundary>
-    <AuthProvider>
-      <LocalizationProvider>
+  <LocalizationProvider>
+    <ErrorBoundary>
+      <AuthProvider>
         <ThemeProvider>
           <App />
         </ThemeProvider>
-      </LocalizationProvider>
-    </AuthProvider>
-  </ErrorBoundary>
+      </AuthProvider>
+    </ErrorBoundary>
+  </LocalizationProvider>
 );

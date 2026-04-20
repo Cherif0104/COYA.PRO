@@ -96,3 +96,31 @@ export async function createPoste(params: {
     updatedAt: data.updated_at,
   };
 }
+
+export async function updatePoste(
+  id: string,
+  params: {
+    name?: string;
+    slug?: string | null;
+    isActive?: boolean;
+  }
+): Promise<Poste> {
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (params.name !== undefined) payload.name = params.name.trim();
+  if (params.slug !== undefined) payload.slug = params.slug ?? null;
+  if (params.isActive !== undefined) payload.is_active = params.isActive;
+
+  const { data, error } = await supabase.from(TABLE).update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    organizationId: data.organization_id ?? null,
+    name: data.name,
+    slug: data.slug ?? undefined,
+    isActive: data.is_active !== false,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}

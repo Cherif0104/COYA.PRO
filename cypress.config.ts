@@ -2,7 +2,8 @@ import { defineConfig } from 'cypress';
 
 export default defineConfig({
   e2e: {
-    baseUrl: 'http://localhost:5173',
+    // Aligné sur vite.config.ts (server.port)
+    baseUrl: 'http://localhost:5174',
     setupNodeEvents(on, config) {
       // implémenter les event listeners ici
     },

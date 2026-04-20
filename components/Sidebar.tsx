@@ -19,7 +19,8 @@ const NavLink: React.FC<{
   viewName: string;
   currentView: string;
   setView: (view: string) => void;
-}> = ({ icon, label, viewName, currentView, setView }) => {
+  dataTestId?: string;
+}> = ({ icon, label, viewName, currentView, setView, dataTestId }) => {
   const isActive = currentView === viewName;
   const isSubActive =
     (viewName === 'projects' && currentView.startsWith('project')) ||
@@ -28,6 +29,7 @@ const NavLink: React.FC<{
   return (
     <a
       href="#"
+      data-testid={dataTestId}
       onClick={(e) => {
         e.preventDefault();
         setView(viewName);
@@ -48,7 +50,7 @@ const NavLink: React.FC<{
  * Modules visibles dans la sidebar (épurés).
  * - Supprimés en tant que modules distincts : Tech, Analytics.
  * - Talent Analytics et Offres d’emploi : sous-fonctionnalités du module RH (onglets dans Ressources humaines).
- * - Base documentaire → Archives (vision type Drive : dossiers / partages — en évolution).
+ * - Base documentaire → SENEGEL DRIVE (fichiers / dossiers — en évolution).
  */
 const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; view: ModuleName }[] = [
   { icon: 'fas fa-th-large', labelKey: 'dashboard', labelFallback: 'Tableau de bord', view: 'dashboard' },
@@ -65,7 +67,7 @@ const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; vi
   { icon: 'fas fa-car', labelKey: 'parc_auto', labelFallback: 'Parc automobile', view: 'parc_auto' },
   { icon: 'fas fa-envelope', labelKey: 'messagerie', labelFallback: 'Messagerie', view: 'messagerie' },
   { icon: 'fas fa-ticket-alt', labelKey: 'ticket_it', labelFallback: 'Ticket IT', view: 'ticket_it' },
-  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'Archives', view: 'knowledge_base' },
+  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'SENEGEL DRIVE', view: 'knowledge_base' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAccessModule, permissionsLoading }) => {
@@ -115,6 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
               viewName={item.view}
               currentView={currentView}
               setView={setView}
+              dataTestId={`nav-${item.view}`}
             />
           ))
         )}
@@ -129,6 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
             viewName={settingsItem.view}
             currentView={currentView}
             setView={setView}
+            dataTestId="nav-settings"
           />
         )}
       </div>

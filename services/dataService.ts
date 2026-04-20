@@ -5,6 +5,20 @@ import OrganizationService from './organizationService';
 import { CurrencyService } from './currencyService';
 import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
+/** Évite de spammer la console si la table notifications existe mais refuse lecture/écriture (RLS / 403). */
+let notificationAccessDeniedWarned = false;
+
+function isNotificationWriteDenied(error: unknown): boolean {
+  const e = error as { code?: string; message?: string; status?: number; statusCode?: number };
+  const status = e?.status ?? (e as any)?.statusCode;
+  const code = String(e?.code || '');
+  const msg = String(e?.message || '').toLowerCase();
+  if (status === 403 || status === 401) return true;
+  if (code === '42501') return true;
+  if (msg.includes('permission denied') || msg.includes('row-level security') || msg.includes('rls')) return true;
+  return false;
+}
+
 /** Résolution profiles.id / auth user_id pour notifications — cache + requêtes in-flight dédupliquées (évite tempête réseau). */
 const NOTIF_TARGET_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -969,9 +983,17 @@ export class DataService {
         .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'project_attachments', 'DataService.getProjectAttachments')) {
+          return { data: [], error: null };
+        }
+        throw error;
+      }
       return { data: data || [], error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'project_attachments', 'DataService.getProjectAttachments.catch')) {
+        return { data: [], error: null };
+      }
       return { data: [], error };
     }
   }
@@ -1007,6 +1029,9 @@ export class DataService {
       if (insertError) throw insertError;
       return { data: row, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'project_attachments', 'DataService.uploadProjectAttachment')) {
+        return { data: null, error: null };
+      }
       return { data: null, error };
     }
   }
@@ -4326,9 +4351,35 @@ export class DataService {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        if (handleOptionalTableError(error, 'notifications', 'DataService.getNotifications')) {
+          return { data: [], error: null };
+        }
+        if (isNotificationWriteDenied(error)) {
+          if (!notificationAccessDeniedWarned) {
+            notificationAccessDeniedWarned = true;
+            console.warn(
+              'Notifications : accès refusé (RLS / droits). Ajustez les politiques Supabase sur `notifications`.',
+            );
+          }
+          return { data: [], error: null };
+        }
+        throw error;
+      }
       return { data, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'notifications', 'DataService.getNotifications.catch')) {
+        return { data: [], error: null };
+      }
+      if (isNotificationWriteDenied(error)) {
+        if (!notificationAccessDeniedWarned) {
+          notificationAccessDeniedWarned = true;
+          console.warn(
+            'Notifications : accès refusé (RLS / droits). Ajustez les politiques Supabase sur `notifications`.',
+          );
+        }
+        return { data: [], error: null };
+      }
       console.error('Erreur récupération notifications:', error);
       return { data: null, error };
     }
@@ -4375,6 +4426,18 @@ export class DataService {
       if (error) throw error;
       return { data: { inserted: true, user_id: targetProfileId, created_at: createdAt }, error: null };
     } catch (error) {
+      if (handleOptionalTableError(error, 'notifications', 'DataService.createNotification')) {
+        return { data: null, error: null };
+      }
+      if (isNotificationWriteDenied(error)) {
+        if (!notificationAccessDeniedWarned) {
+          notificationAccessDeniedWarned = true;
+          console.warn(
+            'Notifications : accès refusé (RLS / droits). Ajustez les politiques Supabase sur `notifications` ou désactivez les notifications automatiques.',
+          );
+        }
+        return { data: null, error: null };
+      }
       console.error('Erreur création notification:', error);
       return { data: null, error };
     }

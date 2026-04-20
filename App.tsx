@@ -32,7 +32,7 @@ import Analytics from './components/Analytics';
 import TalentAnalytics from './components/TalentAnalytics';
 import Goals from './components/Goals';
 import CRM from './components/CRM';
-import KnowledgeBase from './components/KnowledgeBase';
+import Drive from './components/Drive';
 import CreateJob from './components/CreateJob';
 import UserManagement from './components/UserManagement';
 import AIAgent from './components/AIAgent';
@@ -2706,7 +2706,7 @@ const App: React.FC = () => {
   };
 
   
-  // DOCUMENTS (Knowledge Base)
+  // DOCUMENTS (SENEGEL DRIVE)
   const handleAddDocument = async (documentData: Omit<Document, 'id'>) => {
     setLoadingOperation('create_document');
     setIsLoading(true);
@@ -2918,16 +2918,7 @@ const App: React.FC = () => {
                     setView={handleSetView}
                 />;
       case 'knowledge_base':
-        return <KnowledgeBase 
-                    documents={documents} 
-                    users={users}
-                    projects={projects}
-                    onAddDocument={handleAddDocument}
-                    onUpdateDocument={handleUpdateDocument}
-                    onDeleteDocument={handleDeleteDocument}
-                    isLoading={isLoading}
-                    loadingOperation={loadingOperation}
-                />;
+        return <Drive />;
       case 'notifications_center':
         return (
           <NotificationsPage

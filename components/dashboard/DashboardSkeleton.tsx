@@ -5,7 +5,7 @@ import React from 'react';
  */
 const DashboardSkeleton: React.FC = () => {
   return (
-    <div className="animate-pulse">
+    <div className="animate-pulse" data-testid="dashboard">
       {/* Header skeleton */}
       <div className="bg-coya-card rounded-xl p-6 shadow-coya mb-6 border border-coya-border">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

@@ -424,7 +424,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ documents, users = [], pr
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                         <div className="flex items-center justify-between">
                             <div className="flex-1">
-                                <h1 className="text-4xl font-bold mb-2">{t('knowledge_base_title') || 'Archives'}</h1>
+                                <h1 className="text-4xl font-bold mb-2">{t('knowledge_base_title') || 'SENEGEL DRIVE'}</h1>
                                 <p className="text-emerald-50 text-sm max-w-2xl">
                                     {t('knowledge_base_subtitle') ||
                                       'Espace type Drive : dossiers, partage et mentions (accès ciblé), liens futurs vers projets / programmes / tâches — refonte progressive.'}

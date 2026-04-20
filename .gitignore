@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Secrets Cypress (copier depuis cypress.env.example.json)
+cypress.env.json
+cypress/videos/
+cypress/screenshots/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

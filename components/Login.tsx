@@ -214,7 +214,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToSignup }) => {
             <h2 className="text-lg font-semibold text-coya-text mb-4 text-center">{t('login_title')}</h2>
             <form className="space-y-4" onSubmit={handleLogin}>
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                <div data-testid="login-error" className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
                   {error}
                 </div>
               )}
@@ -232,6 +232,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToSignup }) => {
                   id="email"
                   name="email"
                   type="email"
+                  data-testid="login-email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -249,6 +250,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToSignup }) => {
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
+                    data-testid="login-password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -294,6 +296,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToSignup }) => {
               <div className="pt-1">
                 <button
                   type="submit"
+                  data-testid="login-submit"
                   disabled={loading}
                   className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-coya text-white bg-coya-primary hover:bg-coya-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-coya-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-coya"
                 >

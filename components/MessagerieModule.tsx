@@ -31,6 +31,7 @@ const MessagerieModule: React.FC = () => {
   const { language } = useLocalization();
   const { user: currentUser } = useAuth();
   const isFr = language === Language.FR;
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
 
   const [tab, setTab] = useState<Tab>(() => {
     try {
@@ -1035,94 +1036,7 @@ const MessagerieModule: React.FC = () => {
       </div>
 
       <div className="flex flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex-col lg:flex-row lg:min-h-[min(520px,calc(100dvh-11rem))] lg:max-h-full">
-        {/* Rail — charte COYA : fond slate-900, actif emerald */}
-        <nav
-          className="hidden lg:flex flex-col items-center py-5 gap-1 w-[56px] shrink-0 bg-slate-900 border-r border-slate-800"
-          aria-label={isFr ? 'Navigation messagerie' : 'Messaging navigation'}
-        >
-          <button
-            type="button"
-            onClick={() => setTab('channels')}
-            title={isFr ? 'Canaux' : 'Channels'}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
-              tab === 'channels' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <i className="fas fa-hashtag text-lg" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('direct')}
-            title={isFr ? 'Messages directs' : 'Direct messages'}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
-              tab === 'direct' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <i className="fas fa-comment-dots text-lg" />
-          </button>
-          <div className="flex-1 min-h-4" />
-          <div className="w-9 h-9 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-[10px] font-semibold text-slate-200">
-            {getDisplayName(currentProfileId).slice(0, 2).toUpperCase() || '?'}
-          </div>
-        </nav>
-
-        {/* Colonne navigation secondaire (style inbox) */}
-        <aside className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-slate-200 bg-slate-50/90 min-h-0 max-h-full">
-          <div className="p-4 border-b border-slate-200 shrink-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{isFr ? 'Espace' : 'Workspace'}</p>
-            <p className="text-lg font-semibold text-slate-900 mt-0.5">{isFr ? 'Boîte de réception' : 'Inbox'}</p>
-          </div>
-          <div className="p-2 space-y-0.5 flex-1 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => setTab('channels')}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
-                tab === 'channels' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:bg-white/60'
-              }`}
-            >
-              <i className="fas fa-hashtag w-5 text-slate-500" />
-              {isFr ? 'Canaux' : 'Channels'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('direct')}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
-                tab === 'direct' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' : 'text-slate-600 hover:bg-white/60'
-              }`}
-            >
-              <i className="fas fa-comment-dots w-5 text-slate-500" />
-              {isFr ? 'Direct' : 'Direct'}
-            </button>
-            <div className="pt-3 mt-2 border-t border-slate-200/80">
-              <p className="px-3 text-[10px] font-semibold uppercase text-slate-400 tracking-wide">{isFr ? 'Raccourcis' : 'Shortcuts'}</p>
-              <p className="px-3 py-2 text-xs text-slate-500 leading-relaxed">
-                {isFr ? 'Utilisez @prénom ou @everyone dans un canal pour notifier.' : 'Use @name or @everyone in channels to notify.'}
-              </p>
-            </div>
-          </div>
-          <div className="p-3 border-t border-slate-200 bg-white/50">
-            <p className="text-[10px] font-semibold uppercase text-slate-400 mb-2">{isFr ? 'Équipe' : 'Team'}</p>
-            <div className="space-y-1.5 max-h-28 overflow-y-auto">
-              {users.slice(0, 6).map((u) => {
-                const pid = String((u as any).profileId || u.id || '');
-                return (
-                  <button
-                    key={pid}
-                    type="button"
-                    onClick={() => {
-                      setTab('direct');
-                      void openDirectThread(pid);
-                    }}
-                    className="w-full flex items-center gap-2 text-left rounded-lg px-1 py-1 hover:bg-slate-100"
-                  >
-                    {avatarForProfile(pid)}
-                    <span className="text-xs text-slate-700 truncate">{u.fullName || u.email}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </aside>
+        {/* UI simplifiée: on garde seulement la liste (gauche) + la conversation (centre) + panneau info (optionnel). */}
 
       {tab === 'channels' && (
         <>
@@ -1268,6 +1182,15 @@ const MessagerieModule: React.FC = () => {
               </div>
               {isAdminMessaging && activeChannel && (
                 <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowInfoPanel((v) => !v)}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700"
+                    title={isFr ? 'Afficher/masquer les infos' : 'Toggle info'}
+                  >
+                    <i className="fas fa-circle-info mr-1.5" />
+                    {isFr ? 'Infos' : 'Info'}
+                  </button>
                   <button type="button" onClick={handleRenameActiveChannel} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700">
                     {isFr ? 'Renommer' : 'Rename'}
                   </button>
@@ -1275,6 +1198,16 @@ const MessagerieModule: React.FC = () => {
                     {isFr ? 'Archiver' : 'Archive'}
                   </button>
                 </div>
+              )}
+              {!isAdminMessaging && (
+                <button
+                  type="button"
+                  onClick={() => setShowInfoPanel((v) => !v)}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700"
+                >
+                  <i className="fas fa-circle-info mr-1.5" />
+                  {isFr ? 'Infos' : 'Info'}
+                </button>
               )}
             </div>
             {activeChannel && isAdminMessaging && (
@@ -1461,7 +1394,7 @@ const MessagerieModule: React.FC = () => {
             </div>
           </main>
 
-          <aside className="hidden xl:flex flex-col w-[260px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0">
+          <aside className={`hidden xl:${showInfoPanel ? 'flex' : 'hidden'} flex-col w-[280px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0`}>
             {activeChannel ? (
               <>
                 <div className="p-4 border-b border-slate-200 shrink-0">
@@ -1502,6 +1435,62 @@ const MessagerieModule: React.FC = () => {
               <div className="p-4 text-sm text-slate-500">{isFr ? 'Sélectionnez un canal dans la liste.' : 'Select a channel from the list.'}</div>
             )}
           </aside>
+
+          {/* Mobile/Tablet: drawer infos */}
+          {showInfoPanel && (
+            <div className="xl:hidden fixed inset-0 z-50">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setShowInfoPanel(false)} />
+              <div className="absolute right-0 top-0 bottom-0 w-[88vw] max-w-[360px] bg-white border-l border-slate-200 shadow-2xl flex flex-col">
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">{isFr ? 'Infos' : 'Info'}</p>
+                  <button type="button" onClick={() => setShowInfoPanel(false)} className="text-slate-700 hover:text-slate-900">
+                    <i className="fas fa-times" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-slate-50/60">
+                  {activeChannel ? (
+                    <>
+                      <div className="p-4 border-b border-slate-200 bg-white">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{isFr ? 'À propos' : 'About'}</p>
+                        <h2 className="text-lg font-semibold text-slate-900 mt-1 leading-tight">{activeChannel.name}</h2>
+                        {activeChannel.description ? (
+                          <p className="text-sm text-slate-600 mt-2 leading-relaxed">{activeChannel.description}</p>
+                        ) : null}
+                        <span className="inline-block mt-3 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-200/80">
+                          {activeChannel.type === 'public'
+                            ? isFr
+                              ? 'Public'
+                              : 'Public'
+                            : activeChannel.type === 'private'
+                              ? isFr
+                                ? 'Privé'
+                                : 'Private'
+                              : isFr
+                                ? 'Annonce'
+                                : 'Announcement'}
+                        </span>
+                      </div>
+                      <div className="p-4">
+                        <p className="text-[11px] font-semibold uppercase text-slate-400 mb-3">
+                          {isFr ? 'Membres' : 'Members'} ({activeChannelMembers.length})
+                        </p>
+                        <ul className="space-y-2.5">
+                          {activeChannelMembers.slice(0, 18).map((pid) => (
+                            <li key={pid} className="flex items-center gap-2.5 text-sm text-slate-800">
+                              <div className="scale-90 origin-left">{avatarForProfile(pid)}</div>
+                              <span className="truncate font-medium">{getDisplayName(pid)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-4 text-sm text-slate-500">{isFr ? 'Sélectionnez un canal.' : 'Select a channel.'}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1606,11 +1595,21 @@ const MessagerieModule: React.FC = () => {
           </aside>
 
           <main className="flex-1 flex flex-col min-h-0 min-w-0 bg-white border-t lg:border-t-0 lg:border-l border-slate-200 min-h-[240px] lg:min-h-0 lg:max-h-full">
-            <div className="px-4 py-3 border-b border-slate-200 shrink-0 bg-white">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Direct' : 'Direct'}</p>
-              <p className="font-semibold text-slate-900 truncate">
-                {activeThread ? threadLabel(activeThread) : isFr ? 'Conversation' : 'Conversation'}
-              </p>
+            <div className="px-4 py-3 border-b border-slate-200 shrink-0 bg-white flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{isFr ? 'Direct' : 'Direct'}</p>
+                <p className="font-semibold text-slate-900 truncate">
+                  {activeThread ? threadLabel(activeThread) : isFr ? 'Conversation' : 'Conversation'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInfoPanel((v) => !v)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700 shrink-0"
+              >
+                <i className="fas fa-circle-info mr-1.5" />
+                {isFr ? 'Infos' : 'Info'}
+              </button>
             </div>
             <div className="flex-1 min-h-0 p-4 space-y-3 overflow-y-auto overscroll-y-contain bg-slate-50/40 [scrollbar-gutter:stable]">
               {directMessages.map((m) => {
@@ -1739,7 +1738,7 @@ const MessagerieModule: React.FC = () => {
             </div>
           </main>
 
-          <aside className="hidden xl:flex flex-col w-[260px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0">
+          <aside className={`hidden xl:${showInfoPanel ? 'flex' : 'hidden'} flex-col w-[280px] shrink-0 border-l border-slate-200 bg-slate-50/60 min-h-0`}>
             {activeThread && directThreadPreviewId ? (
               <>
                 <div className="p-4 border-b border-slate-200 flex flex-col items-center text-center shrink-0">
@@ -1775,6 +1774,57 @@ const MessagerieModule: React.FC = () => {
               <div className="p-4 text-sm text-slate-500">{isFr ? 'Choisissez une conversation.' : 'Pick a conversation.'}</div>
             )}
           </aside>
+
+          {/* Mobile/Tablet: drawer infos (Direct) */}
+          {showInfoPanel && (
+            <div className="xl:hidden fixed inset-0 z-50">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setShowInfoPanel(false)} />
+              <div className="absolute right-0 top-0 bottom-0 w-[88vw] max-w-[360px] bg-white border-l border-slate-200 shadow-2xl flex flex-col">
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">{isFr ? 'Infos' : 'Info'}</p>
+                  <button type="button" onClick={() => setShowInfoPanel(false)} className="text-slate-700 hover:text-slate-900">
+                    <i className="fas fa-times" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-slate-50/60">
+                  {activeThread && directThreadPreviewId ? (
+                    <>
+                      <div className="p-4 border-b border-slate-200 bg-white flex flex-col items-center text-center">
+                        <div className="mb-3 scale-125 origin-center">{avatarForProfile(directThreadPreviewId)}</div>
+                        <h2 className="text-base font-semibold text-slate-900 leading-tight px-1">{threadLabel(activeThread)}</h2>
+                        <p className="text-xs text-slate-500 mt-1 break-all px-1">
+                          {userByProfileId.get(directThreadPreviewId)?.email || ''}
+                        </p>
+                        <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-900 px-2.5 py-1 font-medium border border-emerald-200/80">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                            {isFr ? 'Actif' : 'Active'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-4 text-sm text-slate-600 space-y-3">
+                        {activeThread.updatedAt ? (
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase text-slate-400">{isFr ? 'Dernière activité' : 'Last activity'}</p>
+                            <p className="mt-1">{formatMsgTime(activeThread.updatedAt)}</p>
+                          </div>
+                        ) : null}
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          {isFr
+                            ? 'Les notifications in-app vous alertent des nouveaux messages et mentions.'
+                            : 'In-app notifications alert you to new messages and mentions.'}
+                        </p>
+                      </div>
+                    </>
+                  ) : activeThread ? (
+                    <div className="p-4 text-sm text-slate-600">{isFr ? 'Conversation personnelle (notes).' : 'Personal conversation (notes).'}</div>
+                  ) : (
+                    <div className="p-4 text-sm text-slate-500">{isFr ? 'Choisissez une conversation.' : 'Pick a conversation.'}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
       </div>

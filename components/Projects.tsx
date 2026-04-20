@@ -2036,7 +2036,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
     const totalTasks = projects.reduce((sum, p) => sum + (Array.isArray(p.tasks) ? p.tasks.length : 0), 0);
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen bg-slate-50" data-testid="projects-list">
             {/* Header modernise et minimaliste */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -2064,6 +2064,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                     )}
                 {canCreateProject && (
                     <button
+                        type="button"
+                        data-testid="projects-create-btn"
                         onClick={() => handleOpenForm()}
                         disabled={isLoading}
                                     className="btn-3d-primary"
@@ -2199,6 +2201,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                             <div className="relative">
                                 <input
                                     type="text"
+                                    data-testid="projects-search"
                                     placeholder={localize("Search a project by name, description or team member...", "Rechercher un projet par nom, description ou membre d'équipe...")}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -2220,6 +2223,8 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                         <div className="flex flex-wrap gap-3">
                             {/* Filtre par statut */}
                             <select
+                                name="status-filter"
+                                data-testid="projects-status-filter"
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-300 focus:border-slate-400 bg-white"
@@ -2320,6 +2325,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                     return (
                                         <div 
                                             key={project.id} 
+                                            data-testid="project-item"
                                             className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all duration-200 overflow-hidden"
                                         >
                                             <div className="p-5 border-b border-slate-100">
@@ -2452,6 +2458,7 @@ const Projects: React.FC<ProjectsProps> = ({ projects, users, timeLogs, onUpdate
                                         return (
                                             <div 
                                                 key={project.id} 
+                                                data-testid="project-item"
                                                 className="p-5 hover:bg-slate-50 transition-colors"
                                             >
                                                 <div className="flex items-start justify-between">

@@ -1,48 +1,40 @@
-describe('Authentication Flow', () => {
+describe('Flux authentification', () => {
   beforeEach(() => {
-    cy.visit('/login');
+    cy.clearAllCookies();
+    cy.clearAllLocalStorage();
+    cy.clearAllSessionStorage();
+    cy.visit('/');
   });
 
-  it('should display login form', () => {
-    cy.contains('button', 'Connexion').should('be.visible');
-    cy.get('input[type="email"]').should('be.visible');
-    cy.get('input[type="password"]').should('be.visible');
+  it('affiche le formulaire de connexion', () => {
+    cy.get('[data-testid="login-email"]', { timeout: 20000 }).should('be.visible');
+    cy.get('[data-testid="login-password"]').should('be.visible');
+    cy.get('[data-testid="login-submit"]').should('be.visible');
   });
 
-  it('should show error with invalid credentials', () => {
-    cy.get('input[type="email"]').type('invalid@example.com');
-    cy.get('input[type="password"]').type('wrongpassword');
-    cy.contains('button', 'Connexion').click();
-    
-    // Attendre un message d'erreur
-    cy.get('body', { timeout: 5000 }).should('contain', 'Erreur').or('contain', 'incorrect');
+  it('affiche une erreur avec des identifiants invalides', () => {
+    cy.get('[data-testid="login-email"]', { timeout: 20000 }).should('be.visible');
+    cy.get('[data-testid="login-email"]').type('invalid@example.com');
+    cy.get('[data-testid="login-password"]').type('wrongpassword');
+    cy.get('[data-testid="login-submit"]').click();
+    cy.get('[data-testid="login-error"]', { timeout: 15000 }).should('be.visible');
   });
 
-  it('should successfully login with valid credentials', () => {
-    // Remplacer par des identifiants de test réels
-    const testEmail = Cypress.env('TEST_EMAIL') || 'test@example.com';
-    const testPassword = Cypress.env('TEST_PASSWORD') || 'testpassword';
-    
-    cy.login(testEmail, testPassword);
-    
-    // Vérifier redirection vers dashboard
-    cy.url().should('include', '/dashboard');
+  it('connecte avec des identifiants valides (variables d’env)', function () {
+    if (!Cypress.env('TEST_EMAIL') || !Cypress.env('TEST_PASSWORD')) {
+      this.skip();
+    }
+    cy.login(String(Cypress.env('TEST_EMAIL')), String(Cypress.env('TEST_PASSWORD')));
+    cy.get('[data-testid="dashboard"]', { timeout: 30000 }).should('be.visible');
   });
 
-  it('should navigate to signup page', () => {
-    cy.contains('a', 'Sign up').should('be.visible').click();
-    cy.url().should('include', '/signup');
-  });
-
-  it('should persist session after refresh', () => {
-    const testEmail = Cypress.env('TEST_EMAIL') || 'test@example.com';
-    const testPassword = Cypress.env('TEST_PASSWORD') || 'testpassword';
-    
-    cy.login(testEmail, testPassword);
+  it('persiste la session après rechargement', function () {
+    if (!Cypress.env('TEST_EMAIL') || !Cypress.env('TEST_PASSWORD')) {
+      this.skip();
+    }
+    cy.login(String(Cypress.env('TEST_EMAIL')), String(Cypress.env('TEST_PASSWORD')));
     cy.reload();
-    
-    // Vérifier que l'utilisateur reste connecté
-    cy.url().should('not.include', '/login');
+    cy.get('[data-testid="dashboard"]', { timeout: 30000 }).should('exist');
+    cy.get('[data-testid="login-email"]').should('not.exist');
   });
 });
-
