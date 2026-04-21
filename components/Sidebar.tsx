@@ -50,7 +50,7 @@ const NavLink: React.FC<{
  * Modules visibles dans la sidebar (épurés).
  * - Supprimés en tant que modules distincts : Tech, Analytics.
  * - Talent Analytics et Offres d’emploi : sous-fonctionnalités du module RH (onglets dans Ressources humaines).
- * - Base documentaire → SENEGEL DRIVE (fichiers / dossiers — en évolution).
+ * - DOCS SENEGEL (ex-base documentaire) : dossiers, ACL, fichiers bureau.
  */
 const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; view: ModuleName }[] = [
   { icon: 'fas fa-th-large', labelKey: 'dashboard', labelFallback: 'Tableau de bord', view: 'dashboard' },
@@ -67,7 +67,8 @@ const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; vi
   { icon: 'fas fa-car', labelKey: 'parc_auto', labelFallback: 'Parc automobile', view: 'parc_auto' },
   { icon: 'fas fa-envelope', labelKey: 'messagerie', labelFallback: 'Messagerie', view: 'messagerie' },
   { icon: 'fas fa-ticket-alt', labelKey: 'ticket_it', labelFallback: 'Ticket IT', view: 'ticket_it' },
-  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'SENEGEL DRIVE', view: 'knowledge_base' },
+  { icon: 'fas fa-folder-open', labelKey: 'knowledge_base', labelFallback: 'DOCS SENEGEL', view: 'knowledge_base' },
+  { icon: 'fas fa-clipboard-check', labelKey: 'daf_services', labelFallback: 'Moyens généraux & DAF', view: 'daf_services' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAccessModule, permissionsLoading }) => {

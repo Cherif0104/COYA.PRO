@@ -79,6 +79,7 @@ export interface AuthUser {
   full_name: string;
   role: string;
   avatar_url?: string;
+  phone_number?: string;
   organization_id?: string;
   status?: ProfileStatus;
   pending_role?: string | null;

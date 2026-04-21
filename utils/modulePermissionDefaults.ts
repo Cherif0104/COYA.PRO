@@ -35,6 +35,7 @@ const STANDARD_MODULES: ModuleName[] = [
   'finance',
   'comptabilite',
   'knowledge_base',
+  'daf_services',
   'courses',
   'jobs',
   'crm_sales',

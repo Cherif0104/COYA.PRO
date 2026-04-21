@@ -3,7 +3,7 @@ import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import DataAdapter from '../services/dataAdapter';
 import OrganizationService from '../services/organizationService';
-import { Employee, EmployeeHrAttachment, RESOURCE_MANAGEMENT_ROLES, User } from '../types';
+import { Employee, EmployeeHrAttachment, RESOURCE_MANAGEMENT_ROLES } from '../types';
 import { supabase } from '../services/supabaseService';
 import * as hrAnalyticsService from '../services/hrAnalyticsService';
 
@@ -21,8 +21,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Partial<Employee>>({});
-  /** Si `platformUsers` est vide, noms issus des profils org (fallback). */
-  const [hierarchyFallback, setHierarchyFallback] = useState<{ id: string; label: string }[]>([]);
+  /** Liste des profils de l'organisation, utilisée pour Manager/Superviseur. */
+  const [hierarchyOptions, setHierarchyOptions] = useState<{ id: string; label: string }[]>([]);
   const [uploadBusy, setUploadBusy] = useState<string | null>(null);
   const [presenceHoursMonth, setPresenceHoursMonth] = useState(0);
   const [leavesCount, setLeavesCount] = useState(0);
@@ -90,10 +90,6 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (platformUsers && platformUsers.length > 0) {
-        setHierarchyFallback([]);
-        return;
-      }
       const orgId = await OrganizationService.getCurrentUserOrganizationId();
       if (!orgId || cancelled) return;
       const { data: profiles } = await supabase
@@ -110,12 +106,12 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
             id: String(p.id),
             label: p.full_name || p.email || String(p.id).slice(0, 8),
           })) || [];
-      setHierarchyFallback(opts);
+      setHierarchyOptions(opts);
     })();
     return () => {
       cancelled = true;
     };
-  }, [profileId, platformUsers]);
+  }, [profileId]);
 
   useEffect(() => {
     const loadLinkedData = async () => {
@@ -243,15 +239,9 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
     }
   };
 
-  const hierarchyOptions = useMemo(() => {
-    if (platformUsers && platformUsers.length > 0) {
-      const opts = platformUsers
-        .map((u) => userToHierarchyOption(u, profileId))
-        .filter(Boolean) as { id: string; label: string }[];
-      return opts.sort((a, b) => a.label.localeCompare(b.label, fr ? 'fr' : 'en', { sensitivity: 'base' }));
-    }
-    return [...hierarchyFallback].sort((a, b) => a.label.localeCompare(b.label, fr ? 'fr' : 'en', { sensitivity: 'base' }));
-  }, [platformUsers, profileId, hierarchyFallback, fr]);
+  const hierarchyOptionsSorted = useMemo(() => {
+    return [...hierarchyOptions].sort((a, b) => a.label.localeCompare(b.label, fr ? 'fr' : 'en', { sensitivity: 'base' }));
+  }, [hierarchyOptions, fr]);
 
   if (!user) return null;
   if (loading) {
@@ -361,7 +351,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
             className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-900 disabled:opacity-70"
           >
             <option value="">{fr ? '— Aucun —' : '— None —'}</option>
-            {hierarchyOptions.map((o) => (
+            {hierarchyOptionsSorted.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
@@ -377,7 +367,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
             className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-900 disabled:opacity-70"
           >
             <option value="">{fr ? '— Aucun —' : '— None —'}</option>
-            {hierarchyOptions.map((o) => (
+            {hierarchyOptionsSorted.map((o) => (
               <option key={`s-${o.id}`} value={o.id}>
                 {o.label}
               </option>

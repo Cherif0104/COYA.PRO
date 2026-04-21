@@ -21,9 +21,8 @@ function isMissingTriniteSelfNotesTableError(err: unknown): boolean {
 
 function triniteSelfNotesSetupHint(): string {
   return (
-    'Tables absentes sur Supabase. 1) Dashboard → SQL Editor → ouvrir dans le dépôt le fichier ' +
-    'supabase/migrations/20260411120000_trinite_self_notes_manager_reviews_complete.sql, tout coller, Run. ' +
-    '2) Recharger cette page. Alternative : à la racine de coya-pro, supabase link puis supabase db push.'
+    'Tables absentes sur Supabase. Appliquez la migration ' +
+    '`supabase/migrations/20260421141000_trinite_self_notes_manager_reviews.sql` (SQL Editor ou `supabase db push`), puis rechargez la page.'
   );
 }
 

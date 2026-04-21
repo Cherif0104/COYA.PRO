@@ -33,6 +33,7 @@ import TalentAnalytics from './components/TalentAnalytics';
 import Goals from './components/Goals';
 import CRM from './components/CRM';
 import Drive from './components/Drive';
+import DafServicesModule from './components/DafServicesModule';
 import CreateJob from './components/CreateJob';
 import UserManagement from './components/UserManagement';
 import AIAgent from './components/AIAgent';
@@ -127,6 +128,8 @@ const App: React.FC = () => {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const mainScrollRef = useRef<HTMLElement>(null);
   const automationCycleRunningRef = useRef(false);
+  const automationLastRunAtRef = useRef<number>(0);
+  const automationSentActionRef = useRef<Map<string, number>>(new Map());
 
   const handleMainScroll = useCallback(() => {
     const el = mainScrollRef.current;
@@ -1077,6 +1080,14 @@ const App: React.FC = () => {
     let isCancelled = false;
     const timer = window.setTimeout(async () => {
       if (isCancelled || automationCycleRunningRef.current) return;
+      const now = Date.now();
+      // Anti-boucle: ce cycle modifie l'état (projects/objectives/...) et peut se relancer immédiatement.
+      // On limite volontairement la fréquence pour éviter une tempête de notifications.
+      const MIN_AUTOMATION_INTERVAL_MS =
+        (typeof import.meta !== 'undefined' && Number((import.meta as any).env?.VITE_WORKFLOW_AUTOMATION_INTERVAL_MS)) ||
+        6 * 60 * 60_000; // 6h
+      if (now - automationLastRunAtRef.current < MIN_AUTOMATION_INTERVAL_MS) return;
+      automationLastRunAtRef.current = now;
       automationCycleRunningRef.current = true;
       try {
         const cycle = runWorkflowCycle({
@@ -1153,16 +1164,44 @@ const App: React.FC = () => {
           });
           // Limite de concurrence : évite des centaines de requêtes profiles/notifications en parallèle (net::ERR_INSUFFICIENT_RESOURCES).
           const notifyConcurrency = 6;
+          const DEDUPE_WINDOW_MIN =
+            (typeof import.meta !== 'undefined' && Number((import.meta as any).env?.VITE_WORKFLOW_NOTIFICATION_DEDUPE_MINUTES)) ||
+            10;
+          const DEDUPE_WINDOW_MS = Math.max(1, DEDUPE_WINDOW_MIN) * 60_000;
+          // Nettoyage du cache de déduplication (taille bornée)
+          for (const [k, ts] of automationSentActionRef.current.entries()) {
+            if (now - ts > DEDUPE_WINDOW_MS) automationSentActionRef.current.delete(k);
+          }
           for (let i = 0; i < deliveries.length; i += notifyConcurrency) {
             const chunk = deliveries.slice(i, i + notifyConcurrency);
             await Promise.all(
               chunk.map(async ({ userId: recipientId, action }) => {
                 try {
+                  const persistWorkflowNotifications =
+                    typeof import.meta !== 'undefined' &&
+                    String((import.meta as any).env?.VITE_PERSIST_WORKFLOW_NOTIFICATIONS || 'false').toLowerCase() === 'true';
+                  if (!persistWorkflowNotifications) return;
+                  // Dédup forte : même événement workflow + même destinataire (aligné sur workflowEngine.eventId).
+                  const actionKey = `${String(recipientId)}::${String(action.eventId)}`;
+                  const lastSentAt = automationSentActionRef.current.get(actionKey) ?? 0;
+                  if (now - lastSentAt < DEDUPE_WINDOW_MS) return;
+                  automationSentActionRef.current.set(actionKey, now);
                   await DataService.createNotification({
                     userId: recipientId,
                     message: action.message,
                     type: action.severity,
+                    module: 'workflow',
+                    action: 'automate',
+                    title: 'Workflow',
+                    entityType: action.entityType,
                     entityId: action.entityId,
+                    metadata: {
+                      source: 'workflow_engine',
+                      eventId: action.eventId,
+                      workflowModule: action.module,
+                      workflowActionType: action.type,
+                      ...(action.metadata && typeof action.metadata === 'object' ? action.metadata : {}),
+                    },
                     read: false,
                   });
                 } catch (error) {
@@ -2706,7 +2745,7 @@ const App: React.FC = () => {
   };
 
   
-  // DOCUMENTS (SENEGEL DRIVE)
+  // DOCS SENEGEL (ex-base documentaire)
   const handleAddDocument = async (documentData: Omit<Document, 'id'>) => {
     setLoadingOperation('create_document');
     setIsLoading(true);
@@ -2919,6 +2958,8 @@ const App: React.FC = () => {
                 />;
       case 'knowledge_base':
         return <Drive />;
+      case 'daf_services':
+        return <DafServicesModule />;
       case 'notifications_center':
         return (
           <NotificationsPage

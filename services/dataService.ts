@@ -19,6 +19,15 @@ function isNotificationWriteDenied(error: unknown): boolean {
   return false;
 }
 
+/** Contrainte unique (ex. idx_notifications_workflow_user_event) — doublon attendu, pas une erreur métier. */
+function isDuplicateNotificationInsert(error: unknown): boolean {
+  const e = error as { code?: string; message?: string };
+  const code = String(e?.code || '');
+  if (code === '23505') return true;
+  const msg = String(e?.message || '').toLowerCase();
+  return msg.includes('duplicate key') || msg.includes('unique constraint');
+}
+
 /** Résolution profiles.id / auth user_id pour notifications — cache + requêtes in-flight dédupliquées (évite tempête réseau). */
 const NOTIF_TARGET_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -4423,9 +4432,17 @@ export class DataService {
         created_at: createdAt,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (isDuplicateNotificationInsert(error)) {
+          return { data: null, error: null };
+        }
+        throw error;
+      }
       return { data: { inserted: true, user_id: targetProfileId, created_at: createdAt }, error: null };
     } catch (error) {
+      if (isDuplicateNotificationInsert(error)) {
+        return { data: null, error: null };
+      }
       if (handleOptionalTableError(error, 'notifications', 'DataService.createNotification')) {
         return { data: null, error: null };
       }

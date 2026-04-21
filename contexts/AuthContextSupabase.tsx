@@ -1,5 +1,22 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { AuthService, AuthUser } from '../services/authService';
+
+/** Une seule alerte console par chargement si la session stockée est invalide. */
+let authInvalidSessionWarned = false;
+
+function shouldClearStoredSessionOnProfileError(err: unknown): boolean {
+  const e = err as { status?: number; code?: string; message?: string };
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  if (status === 401) return true;
+  // 403 au démarrage avec session « fantôme » (token révoqué / mauvaise clé) : on purge pour éviter la cascade REST.
+  if (status === 403) return true;
+  const code = String(e?.code || '');
+  if (code === 'PGRST301') return true;
+  const msg = String(e?.message || '').toLowerCase();
+  if (msg.includes('jwt') && (msg.includes('expired') || msg.includes('invalid'))) return true;
+  if (msg.includes('invalid_grant')) return true;
+  return false;
+}
 const sanitizeFullName = (fullName?: string | null, email?: string | null) => {
   if (fullName && fullName.trim().length > 0) {
     return fullName.trim();
@@ -103,6 +120,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Vérifier la session au chargement avec persistance
   useEffect(() => {
+    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+      }
+    });
+
     const initializeAuth = async () => {
       try {
         setLoading(true);
@@ -124,7 +148,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           try {
             profile = await ensureProfile(session.user);
           } catch (profileError) {
-            console.error('❌ Erreur récupération profil:', profileError);
+            if (shouldClearStoredSessionOnProfileError(profileError)) {
+              if (!authInvalidSessionWarned) {
+                authInvalidSessionWarned = true;
+                console.warn('Session expirée ou invalide — nettoyage et reconnexion nécessaire.');
+              }
+              try {
+                await supabase.auth.signOut({ scope: 'local' });
+              } catch {
+                /* ignore */
+              }
+            } else {
+              console.error('❌ Erreur récupération profil:', profileError);
+            }
             setUser(null);
             setProfile(null);
             setLoading(false);
@@ -132,7 +168,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           const userData = buildUserFromProfile({ ...profile, user_id: session.user.id });
-          const profileData: AuthUser = {
+          const profileData = {
             id: session.user.id,
             email: profile.email,
             full_name: profile.full_name,
@@ -147,7 +183,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             reviewed_by: profile.reviewed_by || null,
             poste_id: profile.poste_id ?? undefined,
             poste_name: profile.poste_name ?? undefined,
-          };
+          } as AuthUser;
           
           // Mettre à jour l'état de manière synchrone
           setUser(userData);
@@ -173,7 +209,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
-    initializeAuth();
+    void initializeAuth();
+
+    return () => {
+      authSub.subscription?.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

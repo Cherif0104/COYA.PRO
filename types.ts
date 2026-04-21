@@ -24,6 +24,7 @@ export type ModuleName =
   | 'finance'
   | 'comptabilite'
   | 'knowledge_base'
+  | 'daf_services'
   | 'courses'
   | 'jobs'
   | 'crm_sales'

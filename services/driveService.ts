@@ -14,6 +14,7 @@ export type DriveItem = {
   size_bytes?: number | null;
   storage_bucket?: string | null;
   storage_path?: string | null;
+  owner_profile_id?: string | null;
   created_by_id?: string | null;
   created_by_name?: string | null;
   created_at: string;
@@ -24,7 +25,20 @@ export type DriveItem = {
 const DRIVE_BUCKET = 'drive-files';
 const DRIVE_TABLE = 'drive_items';
 
+/** Fichiers « bureautiques » (PDF, Office, équivalents). */
+const OFFICE_NAME_PATTERN = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv|odt|ods|odp)$/i;
+
 export class DriveService {
+  /** Garantit un access_token sur le client REST (évite 403 RLS si la session n'est pas encore propagée). */
+  private static async requireRestSession() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return { error };
+    if (!data.session?.access_token) {
+      return { error: new Error('Session indisponible ou expirée. Reconnectez-vous pour utiliser DOCS SENEGEL.') };
+    }
+    return { error: null as null };
+  }
+
   static async getProfileContext() {
     const { data: userRes } = await supabase.auth.getUser();
     const userId = userRes.user?.id;
@@ -32,9 +46,9 @@ export class DriveService {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, full_name, organization_id, role')
+      .select('id, full_name, email, organization_id, role')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error || !profile?.organization_id) {
       return { data: null, error: error ?? new Error('Profil/organisation introuvable') };
@@ -115,12 +129,19 @@ export class DriveService {
     if (ctx.error || !ctx.data) return { data: [] as DriveItem[], error: ctx.error };
     const { profile } = ctx.data;
 
+    const safe = q
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_')
+      .replace(/,/g, ' ')
+      .slice(0, 120);
+    const pattern = `%${safe}%`;
     const { data, error } = await supabase
       .from('drive_items')
       .select('*')
       .eq('organization_id', profile.organization_id)
       .is('trashed_at', null)
-      .or(`name.ilike.%${q}%,description.ilike.%${q}%,mime_type.ilike.%${q}%`)
+      .or(`name.ilike.${pattern},description.ilike.${pattern},mime_type.ilike.${pattern}`)
       .order('item_type', { ascending: true })
       .order('name', { ascending: true })
       .limit(limit);
@@ -188,33 +209,64 @@ export class DriveService {
 
   static async createFolder(params: { parentId: string | null; name: string; description?: string }) {
     if (isTableUnavailable(DRIVE_TABLE)) {
-      return { data: null as DriveItem | null, error: new Error('Table drive_items absente : appliquez la migration Supabase (SENEGEL DRIVE).') };
+      return { data: null as DriveItem | null, error: new Error('Table drive_items absente : appliquez la migration Supabase (DOCS SENEGEL).') };
     }
     const ctx = await DriveService.getProfileContext();
     if (ctx.error || !ctx.data) return { data: null as DriveItem | null, error: ctx.error };
+    const sessErr = await DriveService.requireRestSession();
+    if (sessErr.error) return { data: null as DriveItem | null, error: sessErr.error };
     const { user, profile } = ctx.data;
 
-    const { data, error } = await supabase
-      .from('drive_items')
-      .insert({
-        organization_id: profile.organization_id,
-        parent_id: params.parentId,
-        item_type: 'folder',
-        name: params.name,
-        description: params.description ?? null,
-        created_by_id: profile.id,
-        created_by_name: profile.full_name ?? user.email ?? 'Utilisateur',
-      })
-      .select('*')
-      .single();
+    const id = globalThis.crypto?.randomUUID?.();
+    if (!id) return { data: null as DriveItem | null, error: new Error('Impossible de générer un identifiant pour le dossier.') };
 
-    return { data: (data as DriveItem) ?? null, error };
+    // Pas de .select() sur l’insert : PostgREST évite RETURNING * ; on relit la ligne (même politique SELECT, id connu).
+    const { error } = await supabase.from('drive_items').insert({
+      id,
+      organization_id: profile.organization_id,
+      parent_id: params.parentId,
+      item_type: 'folder',
+      name: params.name,
+      description: params.description ?? null,
+      owner_profile_id: profile.id,
+      created_by_id: profile.id,
+      created_by_name: profile.full_name ?? user.email ?? 'Utilisateur',
+    });
+    if (error) return { data: null as DriveItem | null, error };
+
+    const { data, error: readError } = await supabase.from('drive_items').select('*').eq('id', id).maybeSingle();
+    if (readError) return { data: null as DriveItem | null, error: readError };
+    return { data: (data as DriveItem) ?? null, error: null };
+  }
+
+  static isAllowedDocumentFile(file: File): boolean {
+    const name = file.name || '';
+    if (OFFICE_NAME_PATTERN.test(name)) return true;
+    const m = (file.type || '').toLowerCase();
+    if (!m) return false;
+    if (m === 'application/pdf') return true;
+    if (m.includes('wordprocessingml') || m.includes('msword')) return true;
+    if (m.includes('spreadsheetml') || m.includes('excel') || m === 'text/csv') return true;
+    if (m.includes('presentationml') || m.includes('powerpoint')) return true;
+    if (m.includes('opendocument')) return true;
+    return false;
   }
 
   static async uploadFile(params: { parentId: string | null; file: File }) {
     const ctx = await DriveService.getProfileContext();
     if (ctx.error || !ctx.data) return { data: null as DriveItem | null, error: ctx.error };
+    const sessErr = await DriveService.requireRestSession();
+    if (sessErr.error) return { data: null as DriveItem | null, error: sessErr.error };
     const { user, profile } = ctx.data;
+
+    if (!DriveService.isAllowedDocumentFile(params.file)) {
+      return {
+        data: null as DriveItem | null,
+        error: new Error(
+          'Format non autorisé : utilisez PDF, Word, Excel, PowerPoint ou équivalent (voir message sous le bouton envoi).',
+        ),
+      };
+    }
 
     const orgPrefix = String(profile.organization_id);
     const safeName = params.file.name.replace(/[^\w.\-()\s]/g, '_');
@@ -225,28 +277,32 @@ export class DriveService {
 
     const { data: publicUrl } = supabase.storage.from(DRIVE_BUCKET).getPublicUrl(path);
 
-    const { data, error } = await supabase
-      .from('drive_items')
-      .insert({
-        organization_id: profile.organization_id,
-        parent_id: params.parentId,
-        item_type: 'file',
-        name: params.file.name,
-        mime_type: params.file.type || null,
-        size_bytes: params.file.size,
-        storage_bucket: DRIVE_BUCKET,
-        storage_path: path,
-        description: publicUrl?.publicUrl ?? null,
-        created_by_id: profile.id,
-        created_by_name: profile.full_name ?? user.email ?? 'Utilisateur',
-      })
-      .select('*')
-      .single();
+    const id = globalThis.crypto?.randomUUID?.();
+    if (!id) return { data: null, error: new Error('Impossible de générer un identifiant pour le fichier.') };
+
+    const { error } = await supabase.from('drive_items').insert({
+      id,
+      organization_id: profile.organization_id,
+      parent_id: params.parentId,
+      item_type: 'file',
+      name: params.file.name,
+      mime_type: params.file.type || null,
+      size_bytes: params.file.size,
+      storage_bucket: DRIVE_BUCKET,
+      storage_path: path,
+      description: publicUrl?.publicUrl ?? null,
+      created_by_id: profile.id,
+      created_by_name: profile.full_name ?? user.email ?? 'Utilisateur',
+    });
 
     if (error && handleOptionalTableError(error, DRIVE_TABLE, 'DriveService.uploadFile')) {
-      return { data: null, error: new Error('Table drive_items absente : appliquez la migration Supabase (SENEGEL DRIVE).') };
+      return { data: null, error: new Error('Table drive_items absente : appliquez la migration Supabase (DOCS SENEGEL).') };
     }
-    return { data: (data as DriveItem) ?? null, error };
+    if (error) return { data: null, error };
+
+    const { data, error: readError } = await supabase.from('drive_items').select('*').eq('id', id).maybeSingle();
+    if (readError) return { data: null, error: readError };
+    return { data: (data as DriveItem) ?? null, error: null };
   }
 
   static async trashItem(itemId: string) {
@@ -318,8 +374,70 @@ export class DriveService {
     return { data, error };
   }
 
+  static async listOrganizationProfiles() {
+    const ctx = await DriveService.getProfileContext();
+    if (ctx.error || !ctx.data) return { data: [] as { id: string; full_name: string | null; email: string }[], error: ctx.error };
+    const { profile } = ctx.data;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('organization_id', profile.organization_id)
+      .order('full_name', { ascending: true });
+    if (error) return { data: [], error };
+    return { data: (data as { id: string; full_name: string | null; email: string }[]) ?? [], error: null };
+  }
+
+  static async listFolderAcl(folderId: string) {
+    const { data, error } = await supabase.from('drive_item_acl').select('profile_id, permission').eq('drive_item_id', folderId);
+    return { data: (data as { profile_id: string; permission: string }[]) ?? [], error };
+  }
+
+  static async addFolderAcl(folderId: string, profileId: string, permission: 'viewer' | 'editor') {
+    const { error } = await supabase.from('drive_item_acl').upsert(
+      { drive_item_id: folderId, profile_id: profileId, permission },
+      { onConflict: 'drive_item_id,profile_id' },
+    );
+    return { error };
+  }
+
+  static async removeFolderAcl(folderId: string, profileId: string) {
+    const { error } = await supabase.from('drive_item_acl').delete().eq('drive_item_id', folderId).eq('profile_id', profileId);
+    return { error };
+  }
+
+  static async getMyFolderCapability(
+    folderId: string,
+  ): Promise<{ level: 'owner' | 'editor' | 'viewer' | 'admin' | 'none'; error?: Error }> {
+    const ctx = await DriveService.getProfileContext();
+    if (ctx.error || !ctx.data) return { level: 'none', error: ctx.error ?? undefined };
+    const { profile } = ctx.data;
+    if (profile.role === 'super_administrator' || profile.role === 'administrator') return { level: 'admin' };
+    const { data: folder, error } = await supabase
+      .from('drive_items')
+      .select('owner_profile_id')
+      .eq('id', folderId)
+      .eq('item_type', 'folder')
+      .maybeSingle();
+    if (error || !folder) return { level: 'none' };
+    if (folder.owner_profile_id === profile.id) return { level: 'owner' };
+    const { data: acl } = await supabase
+      .from('drive_item_acl')
+      .select('permission')
+      .eq('drive_item_id', folderId)
+      .eq('profile_id', profile.id)
+      .maybeSingle();
+    if (acl?.permission === 'editor') return { level: 'editor' };
+    if (acl?.permission === 'viewer') return { level: 'viewer' };
+    return { level: 'none' };
+  }
+
   static async getDownloadUrl(item: DriveItem, expiresInSeconds = 60 * 10) {
     if (!item.storage_bucket || !item.storage_path) return { data: null as string | null, error: new Error('Item sans fichier') };
+    // Bucket public `drive-files` : URL publique directe (évite erreurs / latence sur signed URL).
+    if (item.storage_bucket === DRIVE_BUCKET) {
+      const { data } = supabase.storage.from(item.storage_bucket).getPublicUrl(item.storage_path);
+      if (data?.publicUrl) return { data: data.publicUrl, error: null };
+    }
     const { data, error } = await supabase.storage.from(item.storage_bucket).createSignedUrl(item.storage_path, expiresInSeconds);
     return { data: data?.signedUrl ?? null, error };
   }
