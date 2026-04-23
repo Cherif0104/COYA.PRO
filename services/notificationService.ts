@@ -254,13 +254,15 @@ export class NotificationService {
   // Marquer une notification comme lue
   static async markAsRead(notificationId: string): Promise<boolean> {
     try {
-      // Essayer via la fonction RPC
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('mark_notification_read', {
-        p_notification_id: notificationId
-      });
-
-      if (!rpcError && rpcResult) {
-        return true;
+      // RPC optionnelle (évite un 404 réseau si la fonction n’est pas déployée sur Supabase)
+      const useRpc = import.meta.env.VITE_USE_MARK_NOTIFICATION_READ_RPC === 'true';
+      if (useRpc) {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('mark_notification_read', {
+          p_notification_id: notificationId
+        });
+        if (!rpcError && rpcResult) {
+          return true;
+        }
       }
 
       // Fallback: UPDATE direct

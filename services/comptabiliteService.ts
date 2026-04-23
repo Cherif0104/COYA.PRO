@@ -40,6 +40,15 @@ const MATCHING_LINES = 'accounting_matching_lines';
 const RECONCILIATIONS = 'accounting_reconciliations';
 const PERIOD_CLOSURES = 'accounting_period_closures';
 
+function isMissingColumnError(err: unknown, column: string): boolean {
+  const e = err as { code?: string; message?: string; details?: string; hint?: string };
+  const code = String(e?.code || '');
+  const msg = `${e?.message || ''} ${e?.details || ''} ${e?.hint || ''}`.toLowerCase();
+  // PostgREST schema cache missing column
+  if (code === 'PGRST204') return msg.includes(String(column).toLowerCase());
+  return false;
+}
+
 function mapAccount(r: any): ChartOfAccount {
   return {
     id: r.id,
@@ -643,12 +652,24 @@ export async function createJournalEntry(params: {
     status: 'draft',
     updated_at: new Date().toISOString(),
   };
-  const { data: entry, error: entryErr } = await supabase
-    .from(ENTRIES)
-    .insert(row)
-    .select()
-    .single();
-  if (entryErr) throw entryErr;
+  // Compat: certaines bases n'ont pas encore la colonne `attachment_storage_path`.
+  let entry: any = null;
+  {
+    const { data, error } = await supabase.from(ENTRIES).insert(row).select().single();
+    if (error) {
+      if (isMissingColumnError(error, 'attachment_storage_path')) {
+        const retryRow = { ...row };
+        delete (retryRow as any).attachment_storage_path;
+        const { data: data2, error: err2 } = await supabase.from(ENTRIES).insert(retryRow).select().single();
+        if (err2) throw err2;
+        entry = data2;
+      } else {
+        throw error;
+      }
+    } else {
+      entry = data;
+    }
+  }
   if (params.lines.length > 0) {
     const lineRows = params.lines.map((l, i) => ({
       entry_id: entry.id,
@@ -682,7 +703,16 @@ export async function updateJournalEntry(
   if (updates.resourceDatabaseUrl !== undefined) row.resource_database_url = updates.resourceDatabaseUrl;
   if (updates.status !== undefined) row.status = updates.status;
   const { error } = await supabase.from(ENTRIES).update(row).eq('id', id);
-  if (error) throw error;
+  if (error) {
+    if (row.attachment_storage_path !== undefined && isMissingColumnError(error, 'attachment_storage_path')) {
+      const retryRow = { ...row };
+      delete (retryRow as any).attachment_storage_path;
+      const { error: err2 } = await supabase.from(ENTRIES).update(retryRow).eq('id', id);
+      if (err2) throw err2;
+      return;
+    }
+    throw error;
+  }
 }
 
 /** Passe une écriture au statut validé ou verrouillé (audit P2). */
