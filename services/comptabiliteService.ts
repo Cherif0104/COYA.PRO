@@ -40,13 +40,20 @@ const MATCHING_LINES = 'accounting_matching_lines';
 const RECONCILIATIONS = 'accounting_reconciliations';
 const PERIOD_CLOSURES = 'accounting_period_closures';
 
-function isMissingColumnError(err: unknown, column: string): boolean {
+function getMissingColumnName(err: unknown): string | null {
   const e = err as { code?: string; message?: string; details?: string; hint?: string };
   const code = String(e?.code || '');
-  const msg = `${e?.message || ''} ${e?.details || ''} ${e?.hint || ''}`.toLowerCase();
-  // PostgREST schema cache missing column
-  if (code === 'PGRST204') return msg.includes(String(column).toLowerCase());
-  return false;
+  if (code !== 'PGRST204') return null;
+  const msg = String(e?.message || '');
+  // Ex: "Could not find the 'attachment_type' column of 'journal_entries' in the schema cache"
+  const m = msg.match(/'([^']+)'\s+column/i);
+  return m?.[1] ? String(m[1]) : null;
+}
+
+function stripColumn(row: Record<string, unknown>, col: string): Record<string, unknown> {
+  const next = { ...row };
+  delete (next as any)[col];
+  return next;
 }
 
 function mapAccount(r: any): ChartOfAccount {
@@ -652,24 +659,21 @@ export async function createJournalEntry(params: {
     status: 'draft',
     updated_at: new Date().toISOString(),
   };
-  // Compat: certaines bases n'ont pas encore la colonne `attachment_storage_path`.
+  // Compat: certaines bases n'ont pas encore toutes les colonnes d'attachements (schema cache PostgREST).
   let entry: any = null;
-  {
-    const { data, error } = await supabase.from(ENTRIES).insert(row).select().single();
-    if (error) {
-      if (isMissingColumnError(error, 'attachment_storage_path')) {
-        const retryRow = { ...row };
-        delete (retryRow as any).attachment_storage_path;
-        const { data: data2, error: err2 } = await supabase.from(ENTRIES).insert(retryRow).select().single();
-        if (err2) throw err2;
-        entry = data2;
-      } else {
-        throw error;
-      }
-    } else {
+  let attemptRow: Record<string, unknown> = row;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { data, error } = await supabase.from(ENTRIES).insert(attemptRow).select().single();
+    if (!error) {
       entry = data;
+      break;
     }
+    const missing = getMissingColumnName(error);
+    if (!missing) throw error;
+    if (!(missing in attemptRow)) throw error;
+    attemptRow = stripColumn(attemptRow, missing);
   }
+  if (!entry) throw new Error('createJournalEntry: insertion échouée (colonnes manquantes)');
   if (params.lines.length > 0) {
     const lineRows = params.lines.map((l, i) => ({
       entry_id: entry.id,
@@ -702,17 +706,16 @@ export async function updateJournalEntry(
   if (updates.resourceName !== undefined) row.resource_name = updates.resourceName;
   if (updates.resourceDatabaseUrl !== undefined) row.resource_database_url = updates.resourceDatabaseUrl;
   if (updates.status !== undefined) row.status = updates.status;
-  const { error } = await supabase.from(ENTRIES).update(row).eq('id', id);
-  if (error) {
-    if (row.attachment_storage_path !== undefined && isMissingColumnError(error, 'attachment_storage_path')) {
-      const retryRow = { ...row };
-      delete (retryRow as any).attachment_storage_path;
-      const { error: err2 } = await supabase.from(ENTRIES).update(retryRow).eq('id', id);
-      if (err2) throw err2;
-      return;
-    }
-    throw error;
+  let attemptRow: Record<string, unknown> = row;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { error } = await supabase.from(ENTRIES).update(attemptRow).eq('id', id);
+    if (!error) return;
+    const missing = getMissingColumnName(error);
+    if (!missing) throw error;
+    if (!(missing in attemptRow)) throw error;
+    attemptRow = stripColumn(attemptRow, missing);
   }
+  throw new Error('updateJournalEntry: mise à jour échouée (colonnes manquantes)');
 }
 
 /** Passe une écriture au statut validé ou verrouillé (audit P2). */
