@@ -9,7 +9,7 @@ interface LocalizationContextType {
   t: (key: keyof Translation) => string;
 }
 
-const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined);
+export const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined);
 
 export const LocalizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Détecter la langue du navigateur ou charger depuis localStorage

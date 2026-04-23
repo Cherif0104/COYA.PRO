@@ -69,6 +69,12 @@ const DafServicesModule: React.FC = () => {
 
   const statusLabel = (s: DafRequestStatus) => t(`daf_status_${s}`) || s;
   const kindLabel = (k: DafRequestKind) => t(`daf_kind_${k}`) || k;
+  const assignmentLabel = (r: DafServiceRequest) => {
+    if (!isReviewer) return null;
+    if (!r.assignee_profile_id) return t('daf_assign_unassigned');
+    if (r.assignee_profile_id === myProfileId) return t('daf_assign_me');
+    return t('daf_assign_other');
+  };
 
   const onSave = async (status: 'draft' | 'submitted') => {
     if (!title.trim()) {
@@ -201,11 +207,11 @@ const DafServicesModule: React.FC = () => {
           </div>
           {loading ? (
             <div className="p-8 text-center text-slate-500 text-sm">…</div>
-          ) : requests.length === 0 ? (
+          ) : (isReviewer ? requests.filter((r) => !r.assignee_profile_id || r.assignee_profile_id === myProfileId) : requests).length === 0 ? (
             <div className="p-8 text-center text-slate-500 text-sm">{t('daf_empty_list')}</div>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {requests.map((r) => (
+              {(isReviewer ? requests.filter((r) => !r.assignee_profile_id || r.assignee_profile_id === myProfileId) : requests).map((r) => (
                 <li key={r.id}>
                   <button
                     type="button"
@@ -213,7 +219,23 @@ const DafServicesModule: React.FC = () => {
                     onClick={() => setDetail(r)}
                   >
                     <div className="min-w-0">
-                      <div className="font-medium text-slate-900 truncate">{r.title}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="font-medium text-slate-900 truncate">{r.title}</div>
+                        {isReviewer && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${
+                              !r.assignee_profile_id
+                                ? 'bg-slate-50 text-slate-700 border-slate-200'
+                                : r.assignee_profile_id === myProfileId
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                            title={assignmentLabel(r) || ''}
+                          >
+                            {assignmentLabel(r)}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {kindLabel(r.request_kind)} · {CATEGORIES.find((c) => c.id === r.category)?.labelFr ?? r.category} ·{' '}
                         {statusLabel(r.status)} · {new Date(r.created_at).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}

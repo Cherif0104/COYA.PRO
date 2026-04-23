@@ -1407,9 +1407,15 @@ function pickPayloadField(payload: Record<string, string>, keys: string[]): stri
   return '';
 }
 
+export type UpsertParticipantToCrmMeta = {
+  collectionId?: string;
+  submissionId?: string;
+};
+
 /** Dédoublonnage email puis création contact — pour soumissions collecte. */
 export async function upsertParticipantPayloadToCrm(
   payload: Record<string, string>,
+  meta?: UpsertParticipantToCrmMeta,
 ): Promise<{ contactId: string; created: boolean } | null> {
   const email = pickPayloadField(payload, ['email', 'workemail', 'e-mail', 'mail', 'courriel']);
   const phone = pickPayloadField(payload, ['phone', 'telephone', 'tel', 'mobile', 'portable']);
@@ -1476,6 +1482,8 @@ export async function upsertParticipantPayloadToCrm(
     position: position || undefined,
     status: 'Lead',
     source: 'collecte_submission',
+    sourceCollectionId: meta?.collectionId ?? undefined,
+    sourceSubmissionId: meta?.submissionId ?? undefined,
     notes: [
       whatsapp && `WhatsApp: ${whatsapp}`,
       ...noteLines,

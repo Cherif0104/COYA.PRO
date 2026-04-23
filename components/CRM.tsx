@@ -1,13 +1,20 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
-import { Contact, RESOURCE_MANAGEMENT_ROLES, DataCollection } from '../types';
+import { Contact, RESOURCE_MANAGEMENT_ROLES, DataCollection, Language, Translation } from '../types';
 import * as dataCollectionService from '../services/dataCollectionService';
 import OrganizationService from '../services/organizationService';
 import { draftSalesEmail } from '../services/geminiService';
 import ConfirmationModal from './common/ConfirmationModal';
 import ExtensibleSelect from './common/ExtensibleSelect';
 import * as referentialsService from '../services/referentialsService';
+import {
+    NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID,
+    NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID,
+} from '../contexts/AppNavigationContext';
+import CollecteModule from './CollecteModule';
+import CrmWebhookSettingsCard from './CrmWebhookSettingsCard';
+import CRMContactDetailPage from './CRMContactDetailPage';
 
 const statusStyles = {
     'Lead': 'bg-blue-100 text-blue-800',
@@ -20,8 +27,9 @@ const ContactFormModal: React.FC<{
     contact: Contact | null;
     onClose: () => void;
     onSave: (contact: Contact | Omit<Contact, 'id'>) => void;
-}> = ({ contact, onClose, onSave }) => {
-    const { t } = useLocalization();
+    t: (key: keyof Translation) => string;
+    language: Language;
+}> = ({ contact, onClose, onSave, t, language }) => {
     const isEditMode = contact !== null;
     const [organizationId, setOrganizationId] = useState<string | null>(null);
     const [categoryId, setCategoryId] = useState(contact?.categoryId ?? '');
@@ -117,6 +125,7 @@ const ContactFormModal: React.FC<{
                             value={categoryId}
                             onChange={(id) => setCategoryId(id)}
                             organizationId={organizationId}
+                            language={language}
                             canCreate={true}
                             canEdit={true}
                             label={t('contact_category') || 'Catégorie'}
@@ -143,30 +152,98 @@ const ContactFormModal: React.FC<{
 };
 
 
-const EmailDraftModal: React.FC<{ contact: Contact; onClose: () => void; emailBody: string; isLoading: boolean }> = ({ contact, onClose, emailBody, isLoading }) => {
-    const { t } = useLocalization();
+const MAILTO_BODY_MAX = 1700;
+
+const EmailDraftModal: React.FC<{
+    contact: Contact;
+    emailBody: string;
+    isLoading: boolean;
+    hadAiError: boolean;
+    onClose: () => void;
+    t: (key: keyof Translation) => string;
+}> = ({ contact, emailBody, isLoading, hadAiError, onClose, t }) => {
+    const [body, setBody] = useState(emailBody);
+    const [copyHint, setCopyHint] = useState<string | null>(null);
+
+    useEffect(() => {
+        setBody(emailBody);
+    }, [emailBody]);
+
+    const subjectLine = `${t('crm_draft_email_title')} — ${contact.name}`;
+    const toAddress = (contact.workEmail || contact.personalEmail || '').trim();
+    const mailtoHref = useMemo(() => {
+        if (!toAddress) return '';
+        return `mailto:${toAddress}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(body.slice(0, MAILTO_BODY_MAX))}`;
+    }, [toAddress, subjectLine, body]);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(body);
+            setCopyHint(t('crm_email_copy_ok'));
+            window.setTimeout(() => setCopyHint(null), 2500);
+        } catch {
+            setCopyHint(t('crm_email_copy_fail'));
+            window.setTimeout(() => setCopyHint(null), 3500);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
                 <div className="p-6 border-b">
-                    <h2 className="text-xl font-bold">Draft Email to {contact.name}</h2>
+                    <h2 className="text-xl font-bold text-slate-900">
+                        {t('crm_draft_email_title')} — {contact.name}
+                    </h2>
+                    {hadAiError && !isLoading && (
+                        <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            {t('crm_draft_ai_error')}
+                        </p>
+                    )}
                 </div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto">
                     {isLoading ? (
-                         <div className="flex justify-center items-center min-h-[200px]">
+                        <div className="flex justify-center items-center min-h-[200px]">
                             <i className="fas fa-spinner fa-spin text-3xl text-emerald-500"></i>
                         </div>
                     ) : (
                         <textarea
-                            className="w-full h-64 p-3 border rounded-md font-mono text-sm"
-                            defaultValue={emailBody}
+                            className="w-full h-64 p-3 border border-slate-200 rounded-md font-mono text-sm text-slate-900"
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            readOnly={false}
                         />
                     )}
+                    {copyHint && <p className="mt-2 text-sm text-slate-600">{copyHint}</p>}
                 </div>
-                <div className="p-4 bg-gray-50 border-t flex justify-end space-x-2">
-                    <button onClick={onClose} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300">Close</button>
-                    <button onClick={onClose} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700">Send Email</button>
+                <div className="p-4 bg-gray-50 border-t flex flex-wrap justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                    >
+                        {t('crm_email_close')}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={handleCopy}
+                        className="bg-slate-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-slate-800 disabled:opacity-50"
+                    >
+                        {t('crm_email_copy')}
+                    </button>
+                    <a
+                        href={mailtoHref || undefined}
+                        onClick={(e) => {
+                            if (!mailtoHref) e.preventDefault();
+                        }}
+                        className={`inline-flex items-center px-4 py-2 rounded-lg font-semibold ${
+                            mailtoHref
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-slate-300 text-slate-500 cursor-not-allowed pointer-events-none'
+                        }`}
+                    >
+                        {t('crm_email_open_mail')}
+                    </a>
                 </div>
             </div>
         </div>
@@ -175,10 +252,14 @@ const EmailDraftModal: React.FC<{ contact: Contact; onClose: () => void; emailBo
 
 interface CRMProps {
     contacts: Contact[];
-    onAddContact: (contact: Omit<Contact, 'id'>) => void;
-    onUpdateContact: (contact: Contact) => void;
-    onDeleteContact: (contactId: number) => void;
+    onAddContact: (contact: Omit<Contact, 'id'>) => Promise<{ contact: Contact; persisted: boolean } | null>;
+    onUpdateContact: (contact: Contact) => void | Promise<void>;
+    onDeleteContact: (contactId: string | number) => void | Promise<void>;
     setView?: (view: string) => void;
+    /** Recharge les contacts depuis Supabase (ex. après sync Collecte). */
+    onRefreshContacts?: () => Promise<void>;
+    isLoading?: boolean;
+    loadingOperation?: string | null;
 }
 
 const CRM: React.FC<CRMProps> = ({
@@ -187,35 +268,40 @@ const CRM: React.FC<CRMProps> = ({
     onUpdateContact,
     onDeleteContact,
     setView,
+    onRefreshContacts,
+    isLoading: _isLoading,
+    loadingOperation: _loadingOperation,
 }) => {
-    const { t } = useLocalization();
+    const { t, language } = useLocalization();
     const { user } = useAuth();
-    const [contactSubView, setContactSubView] = useState<'list' | 'pipeline'>('list');
+    const [contactSubView, setContactSubView] = useState<'list' | 'pipeline' | 'collecte'>('list');
     const [showCollecteEnrichModal, setShowCollecteEnrichModal] = useState(false);
     const [collecteEnrichCandidates, setCollecteEnrichCandidates] = useState<DataCollection[]>([]);
     const [collecteOrgId, setCollecteOrgId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('');
+    const [collecteCampaignFilter, setCollecteCampaignFilter] = useState<string>('');
     const [hideCollectePlaceholders, setHideCollectePlaceholders] = useState(true);
     const [categoryOptions, setCategoryOptions] = useState<referentialsService.ReferentialValue[]>([]);
     
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
     const [emailBody, setEmailBody] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [emailDraftHadAiError, setEmailDraftHadAiError] = useState(false);
+    const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
 
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact|null>(null);
     const [deletingContactId, setDeletingContactId] = useState<number | string | null>(null);
+    const [detailContactId, setDetailContactId] = useState<string | number | null>(null);
+
+    const openCollecteWorkspaceInCrm = useCallback(() => {
+        setContactSubView('collecte');
+        setView?.('crm_sales');
+    }, [setView]);
 
     // Tous les utilisateurs peuvent gérer les contacts (isolation gérée par RLS)
-    const userProfileId = useMemo(() => {
-        if (!user) return null;
-        if (user.profileId) return String(user.profileId);
-        if (user.id) return String(user.id);
-        return null;
-    }, [user?.profileId, user?.id]);
-
     const canManage = useMemo(() => {
         if (!user) return false;
         return RESOURCE_MANAGEMENT_ROLES.includes(user.role);
@@ -225,12 +311,13 @@ const CRM: React.FC<CRMProps> = ({
         (contact: Contact | null) => {
             if (!user || !contact) return false;
             const ownerId = contact.createdById ? contact.createdById.toString() : null;
-            return Boolean(
-                (userProfileId && ownerId && ownerId === userProfileId) ||
-                RESOURCE_MANAGEMENT_ROLES.includes(user.role)
-            );
+            const matchesOwner =
+                !!ownerId &&
+                (ownerId === String(user.profileId) ||
+                    ownerId === String(user.id));
+            return Boolean(matchesOwner || RESOURCE_MANAGEMENT_ROLES.includes(user.role));
         },
-        [user, userProfileId]
+        [user]
     );
     
     const pipelineStatuses: Contact['status'][] = ['Lead', 'Contacted', 'Prospect', 'Customer'];
@@ -250,6 +337,41 @@ const CRM: React.FC<CRMProps> = ({
         OrganizationService.getCurrentUserOrganizationId().then(setCollecteOrgId).catch(() => setCollecteOrgId(null));
     }, []);
 
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID);
+            if (raw) {
+                sessionStorage.removeItem(NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID);
+                setCollecteCampaignFilter(raw);
+            }
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!permissionMessage) return;
+        const tmr = window.setTimeout(() => setPermissionMessage(null), 5000);
+        return () => window.clearTimeout(tmr);
+    }, [permissionMessage]);
+
+    const collecteNameById = useMemo(() => {
+        const m = new Map<string, string>();
+        dataCollectionService.listDataCollections(collecteOrgId).forEach((c) => {
+            m.set(String(c.id), c.name);
+        });
+        return m;
+    }, [collecteOrgId]);
+
+    const collecteCampaignOptions = useMemo(() => {
+        const ids = new Set<string>();
+        contacts.forEach((c) => {
+            if (c.sourceCollectionId) ids.add(String(c.sourceCollectionId));
+        });
+        dataCollectionService.listDataCollections(collecteOrgId).forEach((dc) => ids.add(dc.id));
+        return Array.from(ids).sort();
+    }, [contacts, collecteOrgId]);
+
     const openCollecteEnrichModal = useCallback(() => {
         const list = dataCollectionService.listDataCollections(collecteOrgId).filter((c) => !c.linkedToCrm);
         setCollecteEnrichCandidates(list);
@@ -257,20 +379,30 @@ const CRM: React.FC<CRMProps> = ({
     }, [collecteOrgId]);
 
     const applyCollecteToCrm = useCallback(
-        (c: DataCollection) => {
+        async (c: DataCollection) => {
             const safeId = String(c.id).replace(/[^a-zA-Z0-9-]/g, '');
-            onAddContact({
-                name: c.name,
-                company: 'Collecte de données',
-                status: 'Lead',
-                workEmail: `collecte.${safeId || 'item'}@placeholder.local`,
-                personalEmail: '',
-                avatar: `https://picsum.photos/seed/collecte-${encodeURIComponent(String(c.id))}/100/100`,
-            });
-            dataCollectionService.markDataCollectionLinkedToCrm(c.id);
-            setShowCollecteEnrichModal(false);
+            try {
+                const result = await onAddContact({
+                    name: c.name,
+                    company: 'Collecte de données',
+                    status: 'Lead',
+                    workEmail: `collecte.${safeId || 'item'}@placeholder.local`,
+                    personalEmail: '',
+                    avatar: `https://picsum.photos/seed/collecte-${encodeURIComponent(String(c.id))}/100/100`,
+                    source: 'collecte_campaign_placeholder',
+                    sourceCollectionId: c.id,
+                });
+                if (result?.persisted) {
+                    dataCollectionService.markDataCollectionLinkedToCrm(c.id);
+                    setShowCollecteEnrichModal(false);
+                } else {
+                    setPermissionMessage(t('crm_persist_failed'));
+                }
+            } catch {
+                setPermissionMessage(t('crm_persist_failed'));
+            }
         },
-        [onAddContact]
+        [onAddContact, t]
     );
 
     // Métriques calculées
@@ -291,6 +423,18 @@ const CRM: React.FC<CRMProps> = ({
     }, [contacts]);
 
     // Filtrage des contacts
+    const detailContact = useMemo(
+        () =>
+            detailContactId == null
+                ? null
+                : contacts.find((c) => String(c.id) === String(detailContactId)) ?? null,
+        [contacts, detailContactId],
+    );
+
+    useEffect(() => {
+        if (contactSubView === 'collecte') setDetailContactId(null);
+    }, [contactSubView]);
+
     const filteredContacts = useMemo(() => {
         let filtered = contacts;
         
@@ -313,8 +457,18 @@ const CRM: React.FC<CRMProps> = ({
                 (c) => !String(c.workEmail || '').toLowerCase().includes('@placeholder.local')
             );
         }
+        if (collecteCampaignFilter) {
+            filtered = filtered.filter((c) => String(c.sourceCollectionId || '') === collecteCampaignFilter);
+        }
         return filtered;
-    }, [contacts, searchTerm, statusFilter, categoryFilter, hideCollectePlaceholders]);
+    }, [
+        contacts,
+        searchTerm,
+        statusFilter,
+        categoryFilter,
+        hideCollectePlaceholders,
+        collecteCampaignFilter,
+    ]);
 
     const handleDraftEmail = async (contact: Contact) => {
         if (!user) return;
@@ -334,16 +488,16 @@ const CRM: React.FC<CRMProps> = ({
         if ('id' in contactData) {
             const existing = contactData as Contact;
             if (!canManageContact(existing)) {
-                alert(t('project_permission_error'));
+                setPermissionMessage(t('crm_permission_denied'));
                 return;
             }
             onUpdateContact(existing);
         } else {
             if (!canManage) {
-                alert(t('project_permission_error'));
+                setPermissionMessage(t('crm_permission_denied'));
                 return;
             }
-            onAddContact(contactData);
+            void onAddContact(contactData);
         }
         setFormModalOpen(false);
         setEditingContact(null);
@@ -351,27 +505,30 @@ const CRM: React.FC<CRMProps> = ({
 
     const handleEdit = (contact: Contact) => {
         if (!canManageContact(contact)) {
-            alert(t('project_permission_error'));
+            setPermissionMessage(t('crm_permission_denied'));
             return;
         }
         setEditingContact(contact);
         setFormModalOpen(true);
     };
     
-    const handleDelete = (contactId: number | string) => {
+    const handleDelete = async (contactId: number | string) => {
         const target = contacts.find(c => String(c.id) === String(contactId)) || null;
         if (!canManageContact(target)) {
-            alert(t('project_permission_error'));
+            setPermissionMessage(t('crm_permission_denied'));
             setDeletingContactId(null);
             return;
         }
-        onDeleteContact(contactId as number);
+        await onDeleteContact(contactId);
         setDeletingContactId(null);
-    }
+        if (detailContactId != null && String(detailContactId) === String(contactId)) {
+            setDetailContactId(null);
+        }
+    };
     
     // Drag and Drop handlers
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, contactId: number | string) => {
-        const contact = contacts.find(c => String(c.id) === String(contactId)) || null;
+        const contact = filteredContacts.find(c => String(c.id) === String(contactId)) || null;
         if (!canManageContact(contact)) {
             e.preventDefault();
             return;
@@ -382,10 +539,10 @@ const CRM: React.FC<CRMProps> = ({
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: Contact['status']) => {
         e.preventDefault();
         const contactId = e.dataTransfer.getData("contactId");
-        const contactToMove = contacts.find(c => String(c.id) === contactId);
+        const contactToMove = filteredContacts.find(c => String(c.id) === contactId);
         if (contactToMove && contactToMove.status !== newStatus) {
             if (!canManageContact(contactToMove)) {
-                alert(t('project_permission_error'));
+                setPermissionMessage(t('crm_permission_denied'));
                 e.currentTarget.classList.remove('bg-emerald-100');
                 return;
             }
@@ -405,185 +562,190 @@ const CRM: React.FC<CRMProps> = ({
 
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                        <i className="fas fa-users text-slate-600" />
-                        {t('crm_title')}
-                    </h1>
-                    <p className="text-sm text-slate-500 mt-0.5">{t('crm_subtitle')}</p>
+        <>
+        {detailContact ? (
+            <CRMContactDetailPage
+                contact={detailContact}
+                onBack={() => setDetailContactId(null)}
+                onRequestEdit={(c) => {
+                    setDetailContactId(null);
+                    handleEdit(c);
+                }}
+                onRequestDelete={(id) => setDeletingContactId(id)}
+                onDraftEmail={(c) => {
+                    setDetailContactId(null);
+                    void handleDraftEmail(c);
+                }}
+                onGoToCollecteCampaign={(collectionId) => {
+                    try {
+                        sessionStorage.setItem(NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID, collectionId);
+                    } catch {
+                        /* ignore */
+                    }
+                    setDetailContactId(null);
+                    setContactSubView('collecte');
+                }}
+                canEdit={canManageContact(detailContact)}
+            />
+        ) : detailContactId != null ? (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center space-y-4 text-slate-900">
+                <p className="text-slate-600">{t('crm_contact_detail_not_found')}</p>
+                <button
+                    type="button"
+                    onClick={() => setDetailContactId(null)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                >
+                    {t('crm_contact_detail_back')}
+                </button>
+            </div>
+        ) : (
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+            <header className="bg-white border-b border-slate-200">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3 min-w-0">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white text-xs">
+                                <i className="fas fa-users" aria-hidden />
+                            </span>
+                            <div className="min-w-0">
+                                <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">{t('crm_title')}</h1>
+                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('crm_subtitle')}</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            {canManage && (
+                                <button
+                                    type="button"
+                                    onClick={openCollecteEnrichModal}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50"
+                                >
+                                    <i className="fas fa-database text-[11px]" />
+                                    {t('crm_enrich_from_collecte')}
+                                </button>
+                            )}
+                            {canManage && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFormModalOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+                                >
+                                    <i className="fas fa-plus text-[11px]" />
+                                    {t('create_contact')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                        <div className="bg-slate-100/90 rounded-xl border border-slate-200/80 p-0.5 inline-flex flex-wrap gap-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setContactSubView('list')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    contactSubView === 'list' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-white/80'
+                                }`}
+                            >
+                                <i className="fas fa-list text-[10px]" />
+                                {t('list_view')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setContactSubView('pipeline')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    contactSubView === 'pipeline' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-white/80'
+                                }`}
+                            >
+                                <i className="fas fa-columns text-[10px]" />
+                                {t('pipeline_view')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setContactSubView('collecte')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    contactSubView === 'collecte'
+                                        ? 'bg-emerald-700 text-white shadow-sm'
+                                        : 'text-slate-600 hover:bg-white/80'
+                                }`}
+                            >
+                                <i className="fas fa-clipboard-check text-[10px]" />
+                                {t('crm_tab_collecte')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                {setView && (
+            </header>
+
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            {permissionMessage && (
+                <div
+                    className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 flex items-start justify-between gap-3"
+                    role="alert"
+                >
+                    <span>{permissionMessage}</span>
                     <button
                         type="button"
-                        onClick={() => setView('collecte')}
-                        className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 shrink-0"
+                        onClick={() => setPermissionMessage(null)}
+                        className="shrink-0 text-amber-800 hover:text-amber-950 font-semibold"
+                        aria-label={t('crm_email_close')}
                     >
-                        <i className="fas fa-clipboard-list mr-2" />
-                        Collecte de données
-                    </button>
-                )}
-            </div>
-
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-                <div className="bg-white rounded-xl border border-slate-200 p-1.5 inline-flex flex-wrap gap-1">
-                    <button
-                        type="button"
-                        onClick={() => setContactSubView('list')}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                            contactSubView === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                    >
-                        <i className="fas fa-list mr-2" />
-                        {t('list_view')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setContactSubView('pipeline')}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                            contactSubView === 'pipeline' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                    >
-                        <i className="fas fa-columns mr-2" />
-                        {t('pipeline_view')}
+                        ×
                     </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {canManage && (
-                        <button
-                            type="button"
-                            onClick={openCollecteEnrichModal}
-                            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50"
-                        >
-                            <i className="fas fa-database mr-2" />
-                            Enrichir depuis une collecte
-                        </button>
-                    )}
-                    {canManage && (
-                        <button
-                            type="button"
-                            onClick={() => setFormModalOpen(true)}
-                            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
-                        >
-                            <i className="fas fa-plus mr-2" />
-                            {t('create_contact')}
-                        </button>
-                    )}
+            )}
+
+            {contactSubView !== 'collecte' && (
+            <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 mb-4">
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">
+                        {t('crm_kpi_total_contacts')}
+                    </p>
+                    <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 tabular-nums">{metrics.totalContacts}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">
+                        {t('crm_kpi_leads')}
+                    </p>
+                    <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 tabular-nums">{metrics.leads}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">
+                        {t('crm_kpi_prospects')}
+                    </p>
+                    <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 tabular-nums">{metrics.prospects}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">
+                        {t('crm_kpi_customers')}
+                    </p>
+                    <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 tabular-nums">{metrics.customers}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3 col-span-2 sm:col-span-1">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">
+                        {t('crm_kpi_conversion')}
+                    </p>
+                    <p className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 tabular-nums">{metrics.conversionRate}%</p>
                 </div>
             </div>
 
-            {/* Métriques */}
-            <div className="mb-8">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                    {/* Métrique 1: Total Contacts */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-sm font-medium">Total Contacts</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-2">{metrics.totalContacts}</p>
-                            </div>
-                            <div className="bg-blue-100 p-3 rounded-full">
-                                <i className="fas fa-users text-blue-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-green-600 text-sm">
-                            <i className="fas fa-arrow-up mr-1"></i>
-                            <span>Tous les contacts</span>
-                        </div>
-                    </div>
-
-                    {/* Métrique 2: Leads */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-sm font-medium">Leads</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-2">{metrics.leads}</p>
-                            </div>
-                            <div className="bg-yellow-100 p-3 rounded-full">
-                                <i className="fas fa-lightbulb text-yellow-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-blue-600 text-sm">
-                            <i className="fas fa-sparkles mr-1"></i>
-                            <span>Nouveaux prospects</span>
-                        </div>
-                    </div>
-
-                    {/* Métrique 3: Prospects */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-sm font-medium">Prospects</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-2">{metrics.prospects}</p>
-                            </div>
-                            <div className="bg-purple-100 p-3 rounded-full">
-                                <i className="fas fa-bullseye text-purple-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-orange-600 text-sm">
-                            <i className="fas fa-handshake mr-1"></i>
-                            <span>En négociation</span>
-                        </div>
-                    </div>
-
-                    {/* Métrique 4: Customers */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-sm font-medium">Clients</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-2">{metrics.customers}</p>
-                            </div>
-                            <div className="bg-green-100 p-3 rounded-full">
-                                <i className="fas fa-star text-green-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-green-600 text-sm">
-                            <i className="fas fa-check-circle mr-1"></i>
-                            <span>Clients fidèles</span>
-                        </div>
-                    </div>
-
-                    {/* Métrique 5: Taux de Conversion */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-sm font-medium">Conversion</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-2">{metrics.conversionRate}%</p>
-                            </div>
-                            <div className="bg-emerald-100 p-3 rounded-full">
-                                <i className="fas fa-chart-line text-emerald-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-emerald-600 text-sm">
-                            <i className="fas fa-trophy mr-1"></i>
-                            <span>Taux de réussite</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Contenu principal */}
-                {/* Barre de recherche et filtres */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex-1">
+                <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                        <div className="flex-1 min-w-0">
                             <div className="relative">
-                                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
                                 <input
                                     type="text"
-                                    placeholder="Rechercher par nom, entreprise ou email..."
+                                    placeholder={t('crm_search_contacts_placeholder')}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
+                                    className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-200 focus:border-slate-300 bg-white"
                                 />
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
+                                className="px-2.5 py-2 border border-slate-200 rounded-lg text-xs sm:text-sm bg-white min-w-[8.5rem]"
                             >
                                 <option value="all">Tous les statuts</option>
                                 <option value="Lead">Lead</option>
@@ -594,20 +756,33 @@ const CRM: React.FC<CRMProps> = ({
                             <select
                                 value={categoryFilter}
                                 onChange={(e) => setCategoryFilter(e.target.value)}
-                                className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-transparent"
+                                className="px-2.5 py-2 border border-slate-200 rounded-lg text-xs sm:text-sm bg-white min-w-[9rem]"
                             >
                                 <option value="">Toutes catégories</option>
                                 {categoryOptions.map((opt) => (
                                     <option key={opt.id} value={opt.id}>{opt.name}</option>
                                 ))}
                             </select>
-                            <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap">
+                            <select
+                                value={collecteCampaignFilter}
+                                onChange={(e) => setCollecteCampaignFilter(e.target.value)}
+                                className="px-2.5 py-2 border border-slate-200 rounded-lg text-xs sm:text-sm bg-white max-w-[12rem]"
+                            >
+                                <option value="">{t('crm_filter_all_campaigns')}</option>
+                                {collecteCampaignOptions.map((id) => (
+                                    <option key={id} value={id}>
+                                        {collecteNameById.get(id) ?? `${id.slice(0, 8)}…`}
+                                    </option>
+                                ))}
+                            </select>
+                            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
+                                    className="rounded border-slate-300 text-slate-900 shrink-0"
                                     checked={hideCollectePlaceholders}
                                     onChange={(e) => setHideCollectePlaceholders(e.target.checked)}
                                 />
-                                Masquer imports collecte (emails fictifs)
+                                <span className="leading-tight">{t('crm_hide_placeholder_emails')}</span>
                             </label>
                         </div>
                     </div>
@@ -615,71 +790,103 @@ const CRM: React.FC<CRMProps> = ({
 
                 {/* Vues */}
             {contactSubView === 'list' && (
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left text-gray-500">
-                                <thead className="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
+                        <table className="w-full text-left text-sm text-slate-600 min-w-[640px]">
+                                <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                     <tr>
-                                        <th scope="col" className="px-6 py-4 font-semibold">{t('contact_name')}</th>
-                                        <th scope="col" className="px-6 py-4 font-semibold">{t('contact_company')}</th>
-                                        <th scope="col" className="px-6 py-4 font-semibold">{t('contact_status')}</th>
-                                        <th scope="col" className="px-6 py-4 font-semibold">Email</th>
-                                        <th scope="col" className="px-6 py-4 text-right font-semibold">{t('actions')}</th>
+                                        <th scope="col" className="px-3 py-2.5">{t('contact_name')}</th>
+                                        <th scope="col" className="px-3 py-2.5">{t('contact_company')}</th>
+                                        <th scope="col" className="px-3 py-2.5">{t('contact_status')}</th>
+                                        <th scope="col" className="px-3 py-2.5">{t('crm_column_collecte')}</th>
+                                        <th scope="col" className="px-3 py-2.5">{t('work_email')}</th>
+                                        <th scope="col" className="px-3 py-2.5 text-right">{t('actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                                     {filteredContacts.map(contact => (
-                                        <tr key={contact.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                                        <th scope="row" className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap flex items-center">
-                                                <img src={contact.avatar || undefined} alt={contact.name} className="w-10 h-10 rounded-full mr-3" onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
-                                                <div>
-                                                    <div className="font-bold">{contact.name}</div>
-                                                    <div className="text-xs text-gray-500">{contact.workEmail || contact.personalEmail}</div>
+                                        <tr
+                                            key={contact.id}
+                                            className="bg-white hover:bg-slate-50/80 transition-colors cursor-pointer"
+                                            onClick={(e) => {
+                                                if ((e.target as HTMLElement).closest('button, a')) return;
+                                                setDetailContactId(contact.id);
+                                            }}
+                                        >
+                                        <th scope="row" className="px-3 py-2 font-medium text-slate-900 align-middle">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <img src={contact.avatar || undefined} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-100" onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+                                                <div className="min-w-0 text-left">
+                                                    <div className="font-semibold text-slate-900 truncate text-sm">{contact.name}</div>
+                                                    <div className="text-[11px] text-slate-500 truncate">{contact.workEmail || contact.personalEmail || '—'}</div>
                                                 </div>
+                                            </div>
                                         </th>
-                                            <td className="px-6 py-4">
-                                                <div className="font-semibold text-gray-900">{contact.company}</div>
+                                            <td className="px-3 py-2 align-middle">
+                                                <div className="font-medium text-slate-800 text-sm truncate max-w-[10rem] sm:max-w-[14rem]">{contact.company}</div>
                                                 {contact.officePhone && (
-                                                    <div className="text-xs text-gray-500">
-                                                        <i className="fas fa-phone mr-1"></i>
+                                                    <div className="text-[11px] text-slate-500 mt-0.5">
+                                                        <i className="fas fa-phone mr-1 opacity-70" />
                                                         {contact.officePhone}
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-3 py-1 font-semibold leading-tight rounded-full text-xs ${statusStyles[contact.status]}`}>
+                                            <td className="px-3 py-2 align-middle">
+                                                <span className={`inline-flex px-2 py-0.5 font-medium rounded-md text-[11px] ${statusStyles[contact.status]}`}>
                                                     {t(contact.status.toLowerCase())}
                                                 </span>
                                             </td>
-                                        <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-600">
-                                                    {contact.workEmail || '-'}
+                                            <td className="px-3 py-2 align-middle">
+                                                {contact.sourceCollectionId ? (
+                                                    <span className="inline-flex max-w-[9rem] truncate px-2 py-0.5 rounded-md text-[11px] font-medium bg-sky-50 text-sky-900 border border-sky-100">
+                                                        {collecteNameById.get(String(contact.sourceCollectionId)) ??
+                                                            `${String(contact.sourceCollectionId).slice(0, 8)}…`}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400">—</span>
+                                                )}
+                                            </td>
+                                        <td className="px-3 py-2 align-middle">
+                                                <div className="text-xs text-slate-600 truncate max-w-[11rem]">
+                                                    {contact.workEmail || '—'}
                                                 </div>
                                         </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end space-x-2">
+                                            <td className="px-3 py-2 text-right align-middle">
+                                                <div className="inline-flex items-center justify-end gap-0.5">
                                         <button 
-                                            onClick={() => handleDraftEmail(contact)} 
-                                            className="text-emerald-600 hover:text-emerald-800 p-2 hover:bg-emerald-50 rounded-lg transition-all"
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleDraftEmail(contact);
+                                            }} 
+                                            className="text-emerald-600 hover:text-emerald-800 p-1.5 hover:bg-emerald-50 rounded-md transition-colors"
                                             title={t('draft_email_with_ai')}
                                         >
-                                            <i className="fas fa-magic"></i>
+                                            <i className="fas fa-magic text-xs" />
                                         </button>
                                              {canManageContact(contact) && (
                                                 <>
                                                             <button 
-                                                                onClick={() => handleEdit(contact)} 
-                                                                className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-lg transition-all"
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEdit(contact);
+                                                                }} 
+                                                                className="text-blue-600 hover:text-blue-800 p-1.5 hover:bg-blue-50 rounded-md transition-colors"
                                                                 title={t('edit')}
                                                             >
-                                                                <i className="fas fa-edit"></i>
+                                                                <i className="fas fa-edit text-xs" />
                                                             </button>
                                                             <button 
-                                                                onClick={() => setDeletingContactId(contact.id)} 
-                                                                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-lg transition-all"
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setDeletingContactId(contact.id);
+                                                                }} 
+                                                                className="text-red-600 hover:text-red-800 p-1.5 hover:bg-red-50 rounded-md transition-colors"
                                                                 title={t('delete')}
                                                             >
-                                                                <i className="fas fa-trash"></i>
+                                                                <i className="fas fa-trash text-xs" />
                                                             </button>
                                                 </>
                                             )}
@@ -690,10 +897,10 @@ const CRM: React.FC<CRMProps> = ({
                             </tbody>
                         </table>
                             {filteredContacts.length === 0 && (
-                                <div className="text-center py-12">
-                                    <i className="fas fa-search text-5xl text-gray-300 mb-4"></i>
-                                    <p className="text-gray-500 text-lg">Aucun contact trouvé</p>
-                                    <p className="text-gray-400 text-sm mt-2">Essayez de modifier vos critères de recherche</p>
+                                <div className="text-center py-8 px-4 border-t border-slate-100">
+                                    <i className="fas fa-search text-3xl text-slate-200 mb-2" />
+                                    <p className="text-slate-600 text-sm font-medium">{language === Language.FR ? 'Aucun contact trouvé' : 'No contacts found'}</p>
+                                    <p className="text-slate-400 text-xs mt-1">{language === Language.FR ? 'Modifiez recherche ou filtres.' : 'Try adjusting search or filters.'}</p>
                                 </div>
                             )}
                     </div>
@@ -701,67 +908,87 @@ const CRM: React.FC<CRMProps> = ({
             )}
 
             {contactSubView === 'pipeline' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                     {pipelineStatuses.map(status => (
                         <div 
                             key={status} 
-                                className="bg-slate-50 rounded-xl p-4 transition-colors border border-slate-200"
+                                className="bg-slate-50/80 rounded-xl p-3 transition-colors border border-slate-200"
                             onDrop={(e) => handleDrop(e, status)}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                         >
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className={`font-semibold text-sm uppercase px-3 py-1 rounded-full ${statusStyles[status]}`}>
+                                <div className="flex items-center justify-between mb-2 gap-2">
+                                    <h3 className={`font-semibold text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-md ${statusStyles[status]}`}>
                                         {t(status.toLowerCase())}
                                     </h3>
-                                    <span className="bg-white text-gray-600 text-xs font-bold px-2 py-1 rounded-full">
-                                        {contacts.filter(c => c.status === status).length}
+                                    <span className="bg-white text-slate-600 text-[11px] font-bold px-1.5 py-0.5 rounded-md border border-slate-200 tabular-nums">
+                                        {filteredContacts.filter(c => c.status === status).length}
                                     </span>
                                 </div>
-                                <div className="space-y-3 min-h-[200px]">
-                                {contacts.filter(c => c.status === status).map(contact => (
+                                <div className="space-y-2 min-h-[140px]">
+                                {filteredContacts.filter(c => c.status === status).map(contact => (
                                     <div 
                                         key={contact.id} 
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                setDetailContactId(contact.id);
+                                            }
+                                        }}
+                                        onClick={(e) => {
+                                            if ((e.target as HTMLElement).closest('button')) return;
+                                            setDetailContactId(contact.id);
+                                        }}
                                         draggable={canManageContact(contact)}
                                         onDragStart={(e) => canManageContact(contact) && handleDragStart(e, contact.id)}
-                                            className="bg-white p-4 rounded-lg shadow hover:shadow-md cursor-grab active:cursor-grabbing transition-all group"
+                                            className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm hover:border-slate-200 cursor-grab active:cursor-grabbing transition-all group"
                                     >
-                                            <div className="flex items-start mb-2">
-                                                <img src={contact.avatar || undefined} alt={contact.name} className="w-8 h-8 rounded-full mr-2" onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
-                                                <div className="flex-1">
-                                                    <p className="font-bold text-sm text-gray-900">{contact.name}</p>
-                                        <p className="text-xs text-gray-500">{contact.company}</p>
+                                            <div className="flex items-start gap-2 mb-1">
+                                                <img src={contact.avatar || undefined} alt="" className="w-7 h-7 rounded-md object-cover shrink-0 border border-slate-100" onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-xs text-slate-900 truncate">{contact.name}</p>
+                                        <p className="text-[11px] text-slate-500 truncate">{contact.company}</p>
                                                 </div>
                                             </div>
                                             {contact.workEmail && (
-                                                <div className="text-xs text-gray-400 mb-2">
-                                                    <i className="fas fa-envelope mr-1"></i>
+                                                <div className="text-[10px] text-slate-400 mb-1.5 truncate">
+                                                    <i className="fas fa-envelope mr-0.5 opacity-70" />
                                                     {contact.workEmail}
                                                 </div>
                                             )}
-                                            <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 gap-1 flex-wrap">
                                                 {canManageContact(contact) ? (
                                                 <button 
-                                                    onClick={() => handleEdit(contact)}
-                                                    className="text-blue-600 hover:text-blue-800 text-xs"
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleEdit(contact);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-800 text-[11px] font-medium"
                                                 >
-                                                    <i className="fas fa-edit mr-1"></i>
-                                                    Éditer
+                                                    <i className="fas fa-edit mr-0.5" />
+                                                    {language === Language.FR ? 'Éditer' : 'Edit'}
                                                 </button>
                                                 ) : <span />}
                                             <button 
-                                                onClick={() => handleDraftEmail(contact)}
-                                                className="text-emerald-600 hover:text-emerald-800 text-xs"
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleDraftEmail(contact);
+                                                }}
+                                                className="text-emerald-600 hover:text-emerald-800 text-[11px] font-medium"
                                             >
-                                                <i className="fas fa-magic mr-1"></i>
+                                                <i className="fas fa-magic mr-0.5" />
                                                 IA
                                             </button>
                                             </div>
                                     </div>
                                 ))}
-                                    {contacts.filter(c => c.status === status).length === 0 && (
-                                        <div className="text-center py-8 text-gray-400 text-sm">
-                                            Aucun contact
+                                    {filteredContacts.filter(c => c.status === status).length === 0 && (
+                                        <div className="text-center py-6 text-slate-400 text-xs">
+                                            {language === Language.FR ? 'Aucun contact' : 'No contacts'}
                                         </div>
                                     )}
                             </div>
@@ -769,27 +996,57 @@ const CRM: React.FC<CRMProps> = ({
                     ))}
                 </div>
             )}
+            </>
+            )}
+
+            {contactSubView === 'collecte' && (
+                <div className="space-y-4">
+                    <CollecteModule embeddedInCrm onAfterCrmBulkSync={() => void onRefreshContacts?.()} />
+                    <CrmWebhookSettingsCard organizationId={collecteOrgId} canManage={canManage} t={t} />
+                </div>
+            )}
 
             {showCollecteEnrichModal && (
                 <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6">
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">Enrichir le CRM depuis une collecte</h3>
-                        <p className="text-sm text-slate-600 mb-4">
-                            Choisissez une collecte non encore liée au CRM. Un contact prospect sera créé (nom = titre de la collecte).
-                        </p>
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('crm_collecte_enrich_modal_title')}</h3>
+                        <p className="text-sm text-slate-600 mb-4">{t('crm_collecte_enrich_modal_body')}</p>
                         {collecteEnrichCandidates.length === 0 ? (
-                            <p className="text-sm text-slate-500 mb-4">Aucune collecte éligible. Créez-en dans le module Collecte de données.</p>
+                            <p className="text-sm text-slate-500 mb-4">{t('crm_collecte_enrich_modal_empty_hint')}</p>
                         ) : (
-                            <ul className="space-y-2 mb-4">
+                            <ul className="space-y-3 mb-4">
                                 {collecteEnrichCandidates.map((c) => (
-                                    <li key={c.id}>
-                                        <button
-                                            type="button"
-                                            onClick={() => applyCollecteToCrm(c)}
-                                            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-800"
-                                        >
-                                            {c.name}
-                                        </button>
+                                    <li key={c.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
+                                        <div className="text-sm font-semibold text-slate-900">{c.name}</div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {setView && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        try {
+                                                            sessionStorage.setItem(
+                                                                NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID,
+                                                                c.id,
+                                                            );
+                                                        } catch {
+                                                            /* ignore */
+                                                        }
+                                                        setShowCollecteEnrichModal(false);
+                                                        openCollecteWorkspaceInCrm();
+                                                    }}
+                                                    className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+                                                >
+                                                    {t('crm_import_submissions')}
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => void applyCollecteToCrm(c)}
+                                                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50"
+                                            >
+                                                {t('crm_collecte_placeholder_note')}
+                                            </button>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -800,15 +1057,15 @@ const CRM: React.FC<CRMProps> = ({
                                 onClick={() => setShowCollecteEnrichModal(false)}
                                 className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50"
                             >
-                                Fermer
+                                {t('cancel')}
                             </button>
                             {setView && (
                                 <button
                                     type="button"
-                                    onClick={() => { setShowCollecteEnrichModal(false); setView('collecte'); }}
+                                    onClick={() => { setShowCollecteEnrichModal(false); openCollecteWorkspaceInCrm(); }}
                                     className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800"
                                 >
-                                    Ouvrir Collecte de données
+                                    {t('crm_open_collecte')}
                                 </button>
                             )}
                         </div>
@@ -816,11 +1073,36 @@ const CRM: React.FC<CRMProps> = ({
                 </div>
             )}
 
-            {/* Modals */}
-            {selectedContact && <EmailDraftModal contact={selectedContact} onClose={handleCloseModal} emailBody={emailBody} isLoading={isLoading} />}
-            {isFormModalOpen && <ContactFormModal contact={editingContact} onClose={() => {setFormModalOpen(false); setEditingContact(null);}} onSave={handleSaveContact} />}
-            {deletingContactId !== null && <ConfirmationModal title={t('delete_contact')} message={t('confirm_delete_message')} onConfirm={() => handleDelete(deletingContactId)} onCancel={() => setDeletingContactId(null)} />}
+            </div>
         </div>
+        )}
+
+            {/* Modals */}
+            {selectedContact && (
+                <EmailDraftModal
+                    contact={selectedContact}
+                    onClose={handleCloseModal}
+                    emailBody={emailBody}
+                    isLoading={isLoading}
+                    hadAiError={emailDraftHadAiError}
+                    t={t}
+                />
+            )}
+            {isFormModalOpen && (
+                <ContactFormModal
+                    contact={editingContact}
+                    onClose={() => {
+                        setFormModalOpen(false);
+                        setEditingContact(null);
+                    }}
+                    onSave={handleSaveContact}
+                    t={t}
+                    language={language}
+                />
+            )}
+            {deletingContactId !== null && <ConfirmationModal title={t('delete_contact')} message={t('confirm_delete_message')} onConfirm={() => handleDelete(deletingContactId)} onCancel={() => setDeletingContactId(null)} />}
+
+        </>
     );
 };
 

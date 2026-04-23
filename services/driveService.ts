@@ -20,6 +20,7 @@ export type DriveItem = {
   created_at: string;
   updated_at: string;
   trashed_at?: string | null;
+  visibility?: 'private' | 'org_public';
 };
 
 const DRIVE_BUCKET = 'drive-files';
@@ -228,6 +229,7 @@ export class DriveService {
       item_type: 'folder',
       name: params.name,
       description: params.description ?? null,
+      visibility: 'private',
       owner_profile_id: profile.id,
       created_by_id: profile.id,
       created_by_name: profile.full_name ?? user.email ?? 'Utilisateur',
@@ -237,6 +239,21 @@ export class DriveService {
     const { data, error: readError } = await supabase.from('drive_items').select('*').eq('id', id).maybeSingle();
     if (readError) return { data: null as DriveItem | null, error: readError };
     return { data: (data as DriveItem) ?? null, error: null };
+  }
+
+  static async setFolderVisibility(folderId: string, visibility: 'private' | 'org_public') {
+    if (isTableUnavailable(DRIVE_TABLE)) return { data: null as DriveItem | null, error: null };
+    const { data, error } = await supabase
+      .from('drive_items')
+      .update({ visibility })
+      .eq('id', folderId)
+      .eq('item_type', 'folder')
+      .select('*')
+      .single();
+    if (error && handleOptionalTableError(error, DRIVE_TABLE, 'DriveService.setFolderVisibility')) {
+      return { data: null as DriveItem | null, error: null };
+    }
+    return { data: (data as DriveItem) ?? null, error };
   }
 
   static isAllowedDocumentFile(file: File): boolean {
@@ -359,6 +376,126 @@ export class DriveService {
       return { data: null, error: null };
     }
     return { data: (data as DriveItem) ?? null, error };
+  }
+
+  static async getItem(itemId: string) {
+    if (isTableUnavailable(DRIVE_TABLE)) return { data: null as DriveItem | null, error: null };
+    const { data, error } = await supabase.from('drive_items').select('*').eq('id', itemId).maybeSingle();
+    if (error && handleOptionalTableError(error, DRIVE_TABLE, 'DriveService.getItem')) {
+      return { data: null as DriveItem | null, error: null };
+    }
+    return { data: (data as DriveItem) ?? null, error };
+  }
+
+  static async copyItem(itemId: string, targetParentId: string | null) {
+    const ctx = await DriveService.getProfileContext();
+    if (ctx.error || !ctx.data) return { data: null as DriveItem | null, error: ctx.error };
+    const sessErr = await DriveService.requireRestSession();
+    if (sessErr.error) return { data: null as DriveItem | null, error: sessErr.error };
+    const { user, profile } = ctx.data;
+
+    const { data: src, error: srcErr } = await DriveService.getItem(itemId);
+    if (srcErr) return { data: null as DriveItem | null, error: srcErr };
+    if (!src) return { data: null as DriveItem | null, error: new Error('Élément introuvable') };
+
+    if (src.item_type === 'folder') {
+      const res = await DriveService.copyFolderRecursive(src, targetParentId, {
+        userEmail: user.email ?? null,
+        requesterName: profile.full_name ?? user.email ?? 'Utilisateur',
+        ownerProfileId: profile.id,
+      });
+      return res;
+    }
+
+    const res = await DriveService.copyFileLike(src, targetParentId, {
+      orgId: String(profile.organization_id),
+      createdById: profile.id,
+      createdByName: profile.full_name ?? user.email ?? 'Utilisateur',
+    });
+    return res;
+  }
+
+  private static async copyFileLike(
+    src: DriveItem,
+    targetParentId: string | null,
+    meta: { orgId: string; createdById: string; createdByName: string },
+  ) {
+    if (!src.storage_bucket || !src.storage_path) {
+      return { data: null as DriveItem | null, error: new Error('Ce fichier n’a pas de stockage associé') };
+    }
+    const id = globalThis.crypto?.randomUUID?.();
+    if (!id) return { data: null as DriveItem | null, error: new Error('Impossible de générer un identifiant.') };
+
+    const safeName = (src.name || 'copie').replace(/[^\w.\-()\s]/g, '_');
+    const newPath = `${meta.orgId}/${Date.now()}_${safeName}`;
+
+    const { error: copyErr } = await supabase.storage.from(src.storage_bucket).copy(src.storage_path, newPath);
+    if (copyErr) return { data: null as DriveItem | null, error: copyErr };
+
+    const { data: publicUrl } = supabase.storage.from(src.storage_bucket).getPublicUrl(newPath);
+
+    const { error: insErr } = await supabase.from('drive_items').insert({
+      id,
+      organization_id: src.organization_id,
+      parent_id: targetParentId,
+      item_type: src.item_type,
+      name: DriveService.withCopySuffix(src.name),
+      mime_type: src.mime_type ?? null,
+      size_bytes: src.size_bytes ?? null,
+      storage_bucket: src.storage_bucket,
+      storage_path: newPath,
+      description: publicUrl?.publicUrl ?? null,
+      created_by_id: meta.createdById,
+      created_by_name: meta.createdByName,
+    });
+    if (insErr) return { data: null as DriveItem | null, error: insErr };
+
+    const { data, error: readError } = await supabase.from('drive_items').select('*').eq('id', id).maybeSingle();
+    if (readError) return { data: null as DriveItem | null, error: readError };
+    return { data: (data as DriveItem) ?? null, error: null };
+  }
+
+  private static async copyFolderRecursive(
+    srcFolder: DriveItem,
+    targetParentId: string | null,
+    meta: { userEmail: string | null; requesterName: string; ownerProfileId: string },
+  ) {
+    if (srcFolder.item_type !== 'folder') {
+      return { data: null as DriveItem | null, error: new Error('copyFolderRecursive: source invalide') };
+    }
+
+    const created = await DriveService.createFolder({
+      parentId: targetParentId,
+      name: DriveService.withCopySuffix(srcFolder.name),
+      description: srcFolder.description ?? undefined,
+    });
+    if (created.error || !created.data) return { data: null as DriveItem | null, error: created.error ?? new Error('Création dossier échouée') };
+
+    const children = await DriveService.list(srcFolder.id);
+    if (children.error) return { data: created.data, error: children.error };
+
+    for (const child of children.data) {
+      if (child.item_type === 'folder') {
+        const r = await DriveService.copyFolderRecursive(child, created.data.id, meta);
+        if (r.error) return { data: created.data, error: r.error };
+      } else {
+        const r = await DriveService.copyFileLike(child, created.data.id, {
+          orgId: String(created.data.organization_id),
+          createdById: meta.ownerProfileId,
+          createdByName: meta.requesterName,
+        });
+        if (r.error) return { data: created.data, error: r.error };
+      }
+    }
+
+    return { data: created.data, error: null };
+  }
+
+  private static withCopySuffix(name: string) {
+    const n = (name || '').trim();
+    if (!n) return 'Copie';
+    if (/\(copie\)$/i.test(n)) return n;
+    return `${n} (copie)`;
   }
 
   static async deletePermanently(item: DriveItem) {

@@ -41,7 +41,7 @@ interface StatusSelectorProps {
 const StatusSelector: React.FC<StatusSelectorProps> = ({ onConfirm }) => {
   const { t } = useLocalization();
   const { setCurrentSession } = usePresence();
-  const [selected, setSelected] = useState<PresenceStatus>('present');
+  const [selected, setSelected] = useState<PresenceStatus>('absent');
   const [skipNextTime, setSkipNextTime] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

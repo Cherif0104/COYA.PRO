@@ -118,15 +118,20 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
       if (!profileId) return;
       const { data: profileRow } = await supabase.from('profiles').select('user_id').eq('id', profileId).maybeSingle();
       const authUserId = (profileRow as any)?.user_id ? String((profileRow as any).user_id) : null;
-      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      const monthStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1, 0, 0, 0, 0);
+      const monthEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999);
+      const monthStart = monthStartDate.toISOString();
       const sessions = authUserId ? await DataAdapter.getPresenceSessions({ userId: authUserId, from: monthStart }) : [];
-      const hours = sessions.reduce((acc, s) => {
-        const start = new Date(s.startedAt).getTime();
-        const end = s.endedAt ? new Date(s.endedAt).getTime() : Date.now();
-        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return acc;
-        return acc + (end - start) / 3600000;
-      }, 0);
-      setPresenceHoursMonth(hours);
+      const workedSec = authUserId
+        ? hrAnalyticsService.computeEffectiveWorkedSecondsFromSessions(
+            sessions,
+            authUserId,
+            monthStartDate.getTime(),
+            monthEndDate.getTime(),
+            Date.now(),
+          )
+        : 0;
+      setPresenceHoursMonth(workedSec / 3600);
       const leaves = await DataAdapter.getLeaveRequests();
       const mine = leaves.filter((l) => l.userId === profileId);
       setLeavesCount(mine.length);
@@ -298,7 +303,7 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
           <p className="text-xs text-emerald-800">
             {payrollRow.periodLabel} ({payrollRow.periodStartIso} → {payrollRow.periodEndIso})
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 text-sm">
             <div>
               <span className="text-xs text-emerald-700 block">{fr ? 'Temps connecté (sessions)' : 'Session time'}</span>
               <span className="font-mono font-medium text-emerald-950">{hms}</span>
@@ -312,6 +317,10 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
               <span className="font-mono font-medium text-emerald-950">{payrollRow.distinctWorkDays}</span>
             </div>
             <div>
+              <span className="text-xs text-emerald-700 block">{fr ? 'Équiv. jours (9 h)' : 'Equiv. days (9 h)'}</span>
+              <span className="font-mono font-medium text-emerald-950">{payrollRow.fullDayEquivalents.toFixed(2)}</span>
+            </div>
+            <div>
               <span className="text-xs text-emerald-700 block">{fr ? 'Montant estimé' : 'Estimated pay'}</span>
               <span className="font-mono font-medium text-emerald-950">
                 {payrollRow.estimatedPay.toLocaleString()} {fr ? 'XOF' : 'XOF'}
@@ -320,8 +329,8 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
           </div>
           <p className="text-[11px] text-emerald-800/90">
             {fr
-              ? `Conversion paie : 1 h = ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} min réelles (modifiable dans hrAnalyticsService). Secondes incluses dans le total.`
-              : `Pay rule: 1 paid hour = ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} wall-clock minutes (edit in hrAnalyticsService). Seconds included in totals.`}
+              ? `Règles présence : 60 s = 1 min, 60 min = 1 h ; fenêtre ${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_START_HOUR}h–${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_END_HOUR}h ; ${hrAnalyticsService.ATTENDANCE_DAILY_TARGET_HOURS} h effectives ≈ 1 jour ; quota ${hrAnalyticsService.ATTENDANCE_WEEKLY_TARGET_HOURS} h/sem. Paie : 1 h = ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} min (hrAnalyticsService).`
+              : `Attendance: 60 s = 1 min, 60 min = 1 h; window ${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_START_HOUR}:00–${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_END_HOUR}:00; ${hrAnalyticsService.ATTENDANCE_DAILY_TARGET_HOURS} effective h ≈ 1 day; ${hrAnalyticsService.ATTENDANCE_WEEKLY_TARGET_HOURS} h/week quota. Pay: 1 h = ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} min.`}
           </p>
         </div>
       )}
@@ -330,6 +339,11 @@ const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ selectedEmployee = nu
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="text-xs text-slate-500 uppercase">{fr ? 'Présence (mois civil)' : 'Attendance (calendar month)'}</p>
           <p className="text-xl font-semibold text-slate-900 mt-1">{presenceHoursMonth.toFixed(1)} h</p>
+          <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+            {fr
+              ? `Compté dans la plage ${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_START_HOUR}h–${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_END_HOUR}h (local), pauses déduites ; objectif ${hrAnalyticsService.ATTENDANCE_DAILY_TARGET_HOURS}h/j et ${hrAnalyticsService.ATTENDANCE_WEEKLY_TARGET_HOURS}h/sem.`
+              : `Counted in local ${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_START_HOUR}:00–${hrAnalyticsService.ATTENDANCE_WORK_WINDOW_END_HOUR}:00 window, breaks deducted; target ${hrAnalyticsService.ATTENDANCE_DAILY_TARGET_HOURS}h/day and ${hrAnalyticsService.ATTENDANCE_WEEKLY_TARGET_HOURS}h/week.`}
+          </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="text-xs text-slate-500 uppercase">{fr ? 'Demandes de congés' : 'Leave requests'}</p>

@@ -1,0 +1,5 @@
+# Configuration locale / CI Supabase. Renseigner project_id pour `supabase link`.
+# Déploiement Edge : `supabase functions deploy crm-webhook-dispatch --project-ref <ref>`
+
+[functions.crm-webhook-dispatch]
+verify_jwt = true

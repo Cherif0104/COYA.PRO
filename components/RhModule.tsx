@@ -12,6 +12,7 @@ import PayrollTab from './PayrollTab';
 import SalariésList from './SalariésList';
 import EmployeeProfile from './EmployeeProfile';
 import Jobs from './Jobs';
+import PresenceEmployeeDetailPanel from './PresenceEmployeeDetailPanel';
 import * as hrAnalyticsService from '../services/hrAnalyticsService';
 import { usePresence } from '../contexts/PresenceContext';
 import { DataService } from '../services/dataService';
@@ -39,24 +40,21 @@ type PresenceLiveRow = {
   displayName: string;
   currentStatus: PresenceStatus | 'absent';
   lastConnectionAt: string | null;
-  todayMinutes: number;
-  currentHourMinutes: number;
-  weekMinutes: number;
-  monthMinutes: number;
+  /** Secondes effectives (plage 9h–19h locale, pauses déduites, hors absent) */
+  hourWorkedSeconds: number;
+  todayWorkedSeconds: number;
+  weekWorkedSeconds: number;
+  monthWorkedSeconds: number;
+  dailyTargetSeconds: number;
+  weekTargetSeconds: number;
+  monthTargetSeconds: number;
   dayRate: number;
+  todayPresentSeconds: number;
+  todayPauseSeconds: number;
+  todayIncoherenceSeconds: number;
   /** Segment de statut encore ouvert (pas de ended_at) pour afficher la durée live */
   openStatusSegment: PresenceStatusEvent | null;
 };
-
-function overlapMinutes(session: PresenceSession, rangeStartMs: number, rangeEndMs: number): number {
-  const start = new Date(session.startedAt).getTime();
-  const end = session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  const overlapStart = Math.max(start, rangeStartMs);
-  const overlapEnd = Math.min(end, rangeEndMs);
-  if (overlapEnd <= overlapStart) return 0;
-  return Math.round((overlapEnd - overlapStart) / 60000);
-}
 
 const RhModule: React.FC<RhModuleProps> = ({
   leaveRequests,
@@ -96,6 +94,11 @@ const RhModule: React.FC<RhModuleProps> = ({
   const [historyFilterMonth, setHistoryFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [historyStatusFilter, setHistoryStatusFilter] = useState<PresenceStatus | 'all'>('all');
   const [historyLiveTick, setHistoryLiveTick] = useState(0);
+  const [detailSessions, setDetailSessions] = useState<PresenceSession[]>([]);
+  const [detailStatusEvents, setDetailStatusEvents] = useState<PresenceStatusEvent[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [presenceDetailOpen, setPresenceDetailOpen] = useState(false);
+  const [presenceDetailInitialProfile, setPresenceDetailInitialProfile] = useState<string>('');
   const [selectedEmployeeSheet, setSelectedEmployeeSheet] = useState<Employee | null>(null);
   const [employeeListVersion, setEmployeeListVersion] = useState(0);
   const fr = language === 'fr';
@@ -160,6 +163,29 @@ const RhModule: React.FC<RhModuleProps> = ({
     setComplianceRows(compliance);
   }, [employees, presencePeriod]);
 
+  const loadPresenceDetailForRange = useCallback(async (fromIso: string, toIso: string) => {
+    const orgId = await OrganizationService.getCurrentUserOrganizationId();
+    if (!orgId) return;
+    setDetailLoading(true);
+    const from = `${fromIso}T00:00:00.000`;
+    const to = `${toIso}T23:59:59.999`;
+    try {
+      const [sessions, evts] = await Promise.all([
+        DataAdapter.getPresenceSessions({ organizationId: orgId, from, to }),
+        DataAdapter.listPresenceStatusEvents({
+          organizationId: orgId,
+          from,
+          to,
+          defaultRecentWindow: false,
+        }),
+      ]);
+      setDetailSessions(sessions || []);
+      setDetailStatusEvents(evts || []);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
   const livePresenceRows = useMemo<PresenceLiveRow[]>(() => {
     const now = new Date();
     const nowMs = now.getTime();
@@ -167,13 +193,16 @@ const RhModule: React.FC<RhModuleProps> = ({
     const dayOfWeek = (now.getDay() + 6) % 7;
     const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
-    const expectedDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 480);
+    const orgDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 540);
 
     const openSegmentByUserId = new Map<string, PresenceStatusEvent>();
     (presenceStatusEvents || []).forEach((evt) => {
       if (!evt.endedAt) openSegmentByUserId.set(String(evt.userId), evt);
     });
+
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     return employees.map((employee) => {
       const profileId = String(employee.profileId);
@@ -181,31 +210,87 @@ const RhModule: React.FC<RhModuleProps> = ({
       const sessions = presenceSessions
         .filter((s) => String(s.userId) === authUserId)
         .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      const active = sessions.find((s) => !s.endedAt);
+      const active = sessions.find((s) => !s.endedAt && hrAnalyticsService.presenceStatusCountsTowardDuration(s.status));
       const latest = sessions[0];
       const linkedUser = users.find((u) => String((u as any).profileId || '') === profileId);
       const displayName = linkedUser?.fullName || linkedUser?.name || linkedUser?.email || profileId.slice(0, 8);
 
-      const todayMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfDay, nowMs), 0);
-      const currentHourMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfHour, nowMs), 0);
-      const weekMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfWeek, nowMs), 0);
-      const monthMinutes = sessions.reduce((acc, s) => acc + overlapMinutes(s, startOfMonth, nowMs), 0);
-      const dayRate = Math.min(100, (todayMinutes / expectedDailyMinutes) * 100);
+      const dailyTargetSeconds = Math.max(60, (employee.expectedDailyMinutes ?? orgDailyMinutes) * 60);
+      const weekTargetSeconds = hrAnalyticsService.ATTENDANCE_WEEKLY_TARGET_SECONDS;
+      const monthTargetSeconds = Math.max(
+        60,
+        hrAnalyticsService.expectedWeeklyScaledHoursBetween(startOfMonth, endOfMonth) * 3600,
+      );
+
+      const hourWorkedSeconds = hrAnalyticsService.computeEffectiveWorkedSecondsFromSessions(
+        presenceSessions,
+        authUserId,
+        startOfHour,
+        nowMs,
+        nowMs,
+      );
+      const todayWorkedSeconds = hrAnalyticsService.computeEffectiveWorkedSecondsFromSessions(
+        presenceSessions,
+        authUserId,
+        startOfDay,
+        nowMs,
+        nowMs,
+      );
+      const weekWorkedSeconds = hrAnalyticsService.computeEffectiveWorkedSecondsFromSessions(
+        presenceSessions,
+        authUserId,
+        startOfWeek,
+        nowMs,
+        nowMs,
+      );
+      const monthWorkedSeconds = hrAnalyticsService.computeEffectiveWorkedSecondsFromSessions(
+        presenceSessions,
+        authUserId,
+        startOfMonth,
+        endOfMonth,
+        nowMs,
+      );
+
+      const dayRate = Math.min(100, dailyTargetSeconds > 0 ? (todayWorkedSeconds / dailyTargetSeconds) * 100 : 0);
+
+      const breakdown = hrAnalyticsService.computeDailyPresenceBreakdown({
+        events: presenceStatusEvents || [],
+        dateIso: todayIso,
+        userId: authUserId,
+        nowMs,
+        sessionById,
+      });
+      const split = hrAnalyticsService.computeDailyQuotaSplitFromBreakdown(breakdown, dailyTargetSeconds);
 
       return {
         profileId,
         displayName,
         currentStatus: (active?.status || 'absent') as PresenceStatus | 'absent',
         lastConnectionAt: latest?.startedAt || null,
-        todayMinutes,
-        currentHourMinutes,
-        weekMinutes,
-        monthMinutes,
+        hourWorkedSeconds,
+        todayWorkedSeconds,
+        weekWorkedSeconds,
+        monthWorkedSeconds,
+        dailyTargetSeconds,
+        weekTargetSeconds,
+        monthTargetSeconds,
         dayRate,
+        todayPresentSeconds: split.presentSeconds,
+        todayPauseSeconds: split.pauseSeconds,
+        todayIncoherenceSeconds: split.incoherenceSeconds,
         openStatusSegment: openSegmentByUserId.get(String(authUserId)) || null,
       };
     });
-  }, [employees, presenceSessions, presenceStatusEvents, userIdByProfile, policy?.expectedDailyMinutes, users]);
+  }, [
+    employees,
+    presenceSessions,
+    presenceStatusEvents,
+    userIdByProfile,
+    policy?.expectedDailyMinutes,
+    users,
+    sessionById,
+    historyLiveTick,
+  ]);
 
   const profileIdByUserId = useMemo(() => {
     const reverse: Record<string, string> = {};
@@ -333,21 +418,65 @@ const RhModule: React.FC<RhModuleProps> = ({
 
   const formatSegmentDuration = useCallback(
     (evt: PresenceStatusEvent) => {
-      const sec = hrAnalyticsService.presenceEventDurationSeconds(evt, Date.now(), sessionById);
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      if (fr) return `${m} min ${String(s).padStart(2, '0')} s`;
-      return `${m}m ${String(s).padStart(2, '0')}s`;
+      if (!hrAnalyticsService.presenceStatusCountsTowardDuration(evt.status)) return '—';
+      const nowMs = Date.now();
+      let sec = hrAnalyticsService.presenceEventDurationSeconds(evt, nowMs, sessionById);
+      const isOpen = !evt.endedAt;
+      let capped = false;
+      if (isOpen && sec > hrAnalyticsService.PRESENCE_OPEN_SEGMENT_DISPLAY_CAP_SECONDS) {
+        sec = hrAnalyticsService.PRESENCE_OPEN_SEGMENT_DISPLAY_CAP_SECONDS;
+        capped = true;
+      }
+      const base =
+        sec >= 3600
+          ? hrAnalyticsService.formatWorkedSecondsClockCompact(sec, fr)
+          : (() => {
+              const m = Math.floor(sec / 60);
+              const s = sec % 60;
+              return fr ? `${m} min ${String(s).padStart(2, '0')} s` : `${m}m ${String(s).padStart(2, '0')}s`;
+            })();
+      if (capped) return fr ? `${base} (ouvert, plaf.)` : `${base} (open, cap)`;
+      return base;
     },
     [fr, sessionById, historyLiveTick],
   );
 
+  /** Détail périodes + ventilation (infobulle tableau principal). */
+  const livePresenceTooltip = useCallback(
+    (row: PresenceLiveRow) => {
+      const line = (label: string, value: string) => `${label}: ${value}`;
+      return [
+        line(fr ? 'Cette heure' : 'This hour', hrAnalyticsService.formatWorkedSecondsClockCompact(row.hourWorkedSeconds, fr)),
+        line(fr ? 'Semaine' : 'Week', hrAnalyticsService.formatWorkedVsTargetSeconds(row.weekWorkedSeconds, row.weekTargetSeconds, fr, row.dailyTargetSeconds)),
+        line(fr ? 'Mois' : 'Month', hrAnalyticsService.formatWorkedVsTargetSeconds(row.monthWorkedSeconds, row.monthTargetSeconds, fr, row.dailyTargetSeconds)),
+        '—',
+        line(fr ? 'Présent' : 'Present', hrAnalyticsService.formatWorkedSecondsClockCompact(row.todayPresentSeconds, fr)),
+        line(fr ? 'Pauses' : 'Breaks', hrAnalyticsService.formatWorkedSecondsClockCompact(row.todayPauseSeconds, fr)),
+        line(fr ? 'Écart' : 'Gap', hrAnalyticsService.formatWorkedSecondsClockCompact(row.todayIncoherenceSeconds, fr)),
+      ].join('\n');
+    },
+    [fr],
+  );
+
+  const formatDelayReadable = useCallback((minutes: number) => {
+    if (minutes <= 0) return fr ? '0 min' : '0 min';
+    if (minutes < 60) return fr ? `${minutes} min` : `${minutes} min`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return fr ? `${h} h ${m} min` : `${h}h ${m}m`;
+  }, [fr]);
+
   const exportHistoryCsv = useCallback(() => {
     const sep = ';';
+    const nowMs = Date.now();
     const head = ['Salarié', 'Statut', 'Début', 'Fin', 'Durée', 'Source'];
     const lines = statusHistoryRows.map((row) => {
-      const sec = hrAnalyticsService.presenceEventDurationSeconds(row, Date.now(), sessionById);
-      const dur = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+      let sec = hrAnalyticsService.presenceEventDurationSeconds(row, nowMs, sessionById);
+      if (!row.endedAt && sec > hrAnalyticsService.PRESENCE_OPEN_SEGMENT_DISPLAY_CAP_SECONDS) {
+        sec = hrAnalyticsService.PRESENCE_OPEN_SEGMENT_DISPLAY_CAP_SECONDS;
+      }
+      const parts = hrAnalyticsService.secondsToHmsParts(sec);
+      const dur = hrAnalyticsService.formatHmsFrench(parts);
       return [
         row.displayName,
         row.status,
@@ -416,6 +545,71 @@ const RhModule: React.FC<RhModuleProps> = ({
       }),
     [employees, presenceSessions, policy, userIdByProfile, displayNameByProfileId],
   );
+
+  const presenceMetricsEnriched = useMemo(() => {
+    const orgDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 540);
+    const bounds = hrAnalyticsService.periodBounds(presencePeriod);
+    const startIso = hrAnalyticsService.toLocalDateIso(bounds.start);
+    const endIso = hrAnalyticsService.toLocalDateIso(bounds.end);
+    const dayCount = hrAnalyticsService.enumerateLocalDateIsoInclusive(startIso, endIso).length;
+    const skipRollup = dayCount > 62 || !presenceSessions.length;
+    return presenceMetrics.map((m) => {
+      if (skipRollup) return { ...m, workedDayCount: undefined, avgHoursPerWorkedDay: undefined };
+      const emp = employees.find((e) => String(e.profileId) === String(m.profileId));
+      const authUserId = userIdByProfile[m.profileId] || m.profileId;
+      const dailyTargetSeconds = Math.max(60, (emp?.expectedDailyMinutes ?? orgDailyMinutes) * 60);
+      const series = hrAnalyticsService.computePresenceDailySeries({
+        sessions: presenceSessions,
+        authUserId,
+        startDateIso: startIso,
+        endDateIso: endIso,
+        dailyTargetSeconds,
+        nowMs: Date.now(),
+      });
+      const roll = hrAnalyticsService.summarizePresenceDailySeries(series);
+      return {
+        ...m,
+        workedDayCount: roll.workedDayCount,
+        avgHoursPerWorkedDay: roll.avgHoursPerWorkedDay,
+      };
+    });
+  }, [presenceMetrics, presenceSessions, presencePeriod, employees, policy, userIdByProfile]);
+
+  const exportAssiduityRollupCsv = useCallback(() => {
+    const orgDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 540);
+    const bounds = hrAnalyticsService.periodBounds(presencePeriod);
+    const startIso = hrAnalyticsService.toLocalDateIso(bounds.start);
+    const endIso = hrAnalyticsService.toLocalDateIso(bounds.end);
+    const rows: hrAnalyticsService.PresenceRollupCsvRow[] = presenceMetrics.map((m) => {
+      const emp = employees.find((e) => String(e.profileId) === String(m.profileId));
+      const authUserId = userIdByProfile[m.profileId] || m.profileId;
+      const dailyTargetSeconds = Math.max(60, (emp?.expectedDailyMinutes ?? orgDailyMinutes) * 60);
+      const series = hrAnalyticsService.computePresenceDailySeries({
+        sessions: presenceSessions,
+        authUserId,
+        startDateIso: startIso,
+        endDateIso: endIso,
+        dailyTargetSeconds,
+        nowMs: Date.now(),
+      });
+      const roll = hrAnalyticsService.summarizePresenceDailySeries(series);
+      const proj = hrAnalyticsService.projectPeriodCompletionFromDailySeries(series);
+      const displayName = displayNameByProfileId[m.profileId] || m.profileId.slice(0, 8);
+      return {
+        displayName,
+        profileId: m.profileId,
+        ...roll,
+        projectedAssiduityPct: proj.projectedAssiduityPct,
+      };
+    });
+    const csv = hrAnalyticsService.buildPresenceRollupMultiCsv(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `assiduite_recap_${presencePeriod}_${startIso}_${endIso}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [presenceMetrics, presenceSessions, presencePeriod, employees, policy, userIdByProfile, displayNameByProfileId]);
 
   const liveCounters = useMemo(() => {
     const present = livePresenceRows.filter((r) => ['online', 'present'].includes(r.currentStatus)).length;
@@ -535,7 +729,10 @@ const RhModule: React.FC<RhModuleProps> = ({
       {currentTab === 'presence' && (
         <section className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Assiduité et présence multi-périodes' : 'Multi-period attendance'}</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Indicateurs par période' : 'Period indicators'}</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{fr ? 'Vue d’ensemble assiduité (hors détail temps réel ci-dessous).' : 'Assiduity overview (separate from live table below).'}</p>
+            </div>
             <div className="flex items-center gap-2">
               <select value={presencePeriod} onChange={(e) => setPresencePeriod(e.target.value as any)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
                 <option value="day">{fr ? 'Jour' : 'Day'}</option>
@@ -547,8 +744,13 @@ const RhModule: React.FC<RhModuleProps> = ({
               <button type="button" onClick={loadPresenceAndAbsences} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm">{fr ? 'Actualiser' : 'Refresh'}</button>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
-            <h3 className="text-md font-semibold text-slate-900">{fr ? 'Politique présence et paie' : 'Attendance and payroll policy'}</h3>
+          <details className="bg-white rounded-xl border border-slate-200 overflow-hidden group">
+            <summary className="px-4 py-3 cursor-pointer text-sm font-semibold text-slate-800 hover:bg-slate-50 list-none flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+              <span>{fr ? 'Politique présence & paie (optionnel)' : 'Attendance & payroll policy (optional)'}</span>
+              <span className="text-slate-400 text-xs font-normal group-open:hidden">{fr ? 'Afficher' : 'Show'}</span>
+              <span className="text-slate-400 text-xs font-normal hidden group-open:inline">{fr ? 'Masquer' : 'Hide'}</span>
+            </summary>
+            <div className="px-4 pb-4 pt-0 border-t border-slate-100 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <input
                 type="number"
@@ -616,7 +818,8 @@ const RhModule: React.FC<RhModuleProps> = ({
               />
               <label htmlFor="enforceIp">{fr ? 'Bloquer les sessions "bureau" hors IP autorisées' : 'Block "office" sessions outside allowed IPs'}</label>
             </div>
-          </div>
+            </div>
+          </details>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
               <p className="text-xs uppercase text-emerald-700">{fr ? 'Présents maintenant' : 'Present now'}</p>
@@ -636,66 +839,104 @@ const RhModule: React.FC<RhModuleProps> = ({
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200">
-              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Présence en direct par salarié' : 'Live attendance by employee'}</h3>
+            <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-md font-semibold text-slate-900">{fr ? 'Qui est là maintenant ?' : 'Who is here now?'}</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {fr
+                    ? 'Temps effectif aujourd’hui vs quota. Survolez « Aujourd’hui » pour le détail périodes / ventilation.'
+                    : 'Effective time today vs quota. Hover « Today » for periods / breakdown.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPresenceDetailInitialProfile('');
+                  setPresenceDetailOpen(true);
+                }}
+                className="shrink-0 text-sm px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+              >
+                {fr ? 'Analyse salarié' : 'Employee analysis'}
+              </button>
             </div>
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Statut actuel' : 'Current status'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Durée sur ce statut' : 'Time on status'}</th>
-                  <th className="px-4 py-3 text-left">{fr ? 'Dernière connexion' : 'Last connection'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Cette heure' : 'This hour'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Aujourd’hui' : 'Today'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Semaine' : 'Week'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Mois' : 'Month'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Taux jour' : 'Day rate'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {livePresenceRows.map((row) => (
-                  <tr key={row.profileId} className="border-b border-slate-100">
-                    <td className="px-4 py-3">{row.displayName}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadgeClass(row.currentStatus)}`}>
-                        {statusLabel(row.currentStatus)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                      {row.openStatusSegment ? formatSegmentDuration(row.openStatusSegment) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {row.lastConnectionAt
-                        ? new Date(row.lastConnectionAt).toLocaleString(fr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">{(row.currentHourMinutes / 60).toFixed(2)} h</td>
-                    <td className="px-4 py-3 text-right font-mono">{(row.todayMinutes / 60).toFixed(2)} h</td>
-                    <td className="px-4 py-3 text-right font-mono">{(row.weekMinutes / 60).toFixed(2)} h</td>
-                    <td className="px-4 py-3 text-right font-mono">{(row.monthMinutes / 60).toFixed(2)} h</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${row.dayRate >= 90 ? 'bg-emerald-100 text-emerald-700' : row.dayRate >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                        {row.dayRate.toFixed(1)}%
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Statut' : 'Status'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Vu à' : 'Last seen'}</th>
+                    <th className="px-4 py-3 text-left">{fr ? 'Aujourd’hui' : 'Today'}</th>
                   </tr>
-                ))}
-                {livePresenceRows.length === 0 && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence en direct.' : 'No live attendance data.'}</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {livePresenceRows.map((row) => (
+                    <tr key={row.profileId} className="border-b border-slate-100">
+                      <td className="px-4 py-3 font-medium text-slate-900">{row.displayName}</td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-col gap-1">
+                          <span className={`text-xs px-2 py-0.5 rounded-full w-fit ${statusBadgeClass(row.currentStatus)}`}>
+                            {statusLabel(row.currentStatus)}
+                          </span>
+                          {row.openStatusSegment ? (
+                            <span className="text-[11px] text-slate-500">
+                              {fr ? 'Depuis ' : 'For '}
+                              <span className="font-mono text-slate-700">{formatSegmentDuration(row.openStatusSegment)}</span>
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">
+                        {row.lastConnectionAt
+                          ? new Date(row.lastConnectionAt).toLocaleString(fr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+                          : '—'}
+                      </td>
+                      <td
+                        className="px-4 py-3 align-top"
+                        title={livePresenceTooltip(row)}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${row.dayRate >= 90 ? 'bg-emerald-100 text-emerald-800' : row.dayRate >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                            {row.dayRate.toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-900 mt-1 font-mono">
+                          {hrAnalyticsService.formatWorkedSecondsClockCompact(row.todayWorkedSeconds, fr)}
+                          <span className="text-slate-400 font-sans text-xs font-normal">
+                            {' '}
+                            / {hrAnalyticsService.formatWorkedSecondsClockCompact(row.dailyTargetSeconds, fr)}
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{fr ? 'Survolez pour semaine, mois…' : 'Hover for week, month…'}</p>
+                        <button
+                          type="button"
+                          className="text-[11px] text-emerald-700 hover:underline mt-1"
+                          onClick={() => {
+                            setPresenceDetailInitialProfile(row.profileId);
+                            setPresenceDetailOpen(true);
+                          }}
+                        >
+                          {fr ? 'Analyse & export' : 'Analysis & export'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {livePresenceRows.length === 0 && (
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence en direct.' : 'No live attendance data.'}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-md font-semibold text-slate-900">{fr ? 'Historique des statuts' : 'Status history'}</h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-3xl">
+                  <p className="text-xs text-slate-500 mt-1 max-w-2xl">
                     {fr
-                      ? 'Les durées des segments ouverts s’arrêtent à la déconnexion (fin de session). Le total journalier « temps suivi » exclut le statut Absent. Pauses : nombre de segments et segments de plus de 2 minutes.'
-                      : 'Open segment durations end at sign-out (session end). Daily « tracked time » excludes Absent status. Breaks: segment count and segments over 2 min.'}
+                      ? 'Durées lisibles ; segments ouverts plafonnés si non clôturés. « Absent » ne compte pas comme temps travaillé.'
+                      : 'Readable durations; open segments capped if not closed. « Absent » does not count as worked time.'}
                   </p>
                 </div>
                 <button
@@ -797,16 +1038,15 @@ const RhModule: React.FC<RhModuleProps> = ({
                     </div>
                   )}
                   {dailyBreakdownView && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 space-y-3">
-                      <h4 className="text-sm font-semibold text-slate-900">
-                        {fr ? 'Bilan du jour (hors absence)' : 'Daily summary (excluding absence)'}
-                        <span className="font-normal text-slate-500"> — {dailyBreakdownView.dateIso}</span>
-                      </h4>
-                      <p className="text-xs text-slate-600">
-                        {fr
-                          ? 'Tous les statuts sont comptés sauf « absent ». Détail par catégorie ci-dessous. Le tableau des lignes respecte le filtre Statut.'
-                          : 'All statuses count except « absent ». Breakdown by category below. The row table respects the Status filter.'}
-                      </p>
+                    <details className="rounded-xl border border-slate-200 bg-slate-50/80 overflow-hidden group">
+                      <summary className="px-3 py-2.5 cursor-pointer text-sm font-semibold text-slate-900 hover:bg-slate-100/80 list-none flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                        <span>
+                          {fr ? 'Détail par catégorie (jour)' : 'Category breakdown (day)'}
+                          <span className="font-normal text-slate-500"> — {dailyBreakdownView.dateIso}</span>
+                        </span>
+                        <span className="text-xs font-normal text-slate-400">{fr ? 'Afficher / masquer' : 'Show / hide'}</span>
+                      </summary>
+                      <div className="px-3 pb-3 pt-0 space-y-3 border-t border-slate-200/80">
                       {dailyBreakdownView.kind === 'single' && dailyBreakdownView.missingLink && (
                         <p className="text-sm text-amber-800">{fr ? 'Profil sans user_id : impossible d’agréger les segments.' : 'Profile has no linked user_id.'}</p>
                       )}
@@ -901,7 +1141,8 @@ const RhModule: React.FC<RhModuleProps> = ({
                           )}
                         </div>
                       )}
-                    </div>
+                      </div>
+                    </details>
                   )}
                 </div>
               </div>
@@ -946,51 +1187,91 @@ const RhModule: React.FC<RhModuleProps> = ({
               </table>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
+          <details className="bg-white rounded-xl border border-slate-200 overflow-hidden group">
+            <summary className="px-4 py-3 cursor-pointer text-sm font-semibold text-slate-900 hover:bg-slate-50 list-none flex items-center justify-between gap-2 border-b border-slate-200 [&::-webkit-details-marker]:hidden">
+              <span>{fr ? 'Assiduité, paie et absences (déplier si besoin)' : 'Assiduity, payroll & absences (expand if needed)'}</span>
+              <span className="text-xs font-normal text-slate-400">{fr ? 'Ouvrir' : 'Open'}</span>
+            </summary>
+            <div className="p-4 space-y-4 border-t border-slate-100">
+            <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
+              <p className="text-xs text-slate-500">
+                {fr ? 'Selon la période choisie en haut de page (jour / semaine / mois…).' : 'Uses the period selected at the top of this tab.'}
+              </p>
+              <button
+                type="button"
+                onClick={exportAssiduityRollupCsv}
+                className="text-xs px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100"
+              >
+                {fr ? 'Export CSV récap (tous)' : 'Export CSV summary (all)'}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Heures réalisées' : 'Hours done'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Heures prévues' : 'Expected hours'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Assiduité' : 'Assiduity'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'J. trav.' : 'Days'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Moy. h/j' : 'Avg h/d'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Réalisé' : 'Done'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Prévu' : 'Target'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Taux' : 'Rate'}</th>
                 </tr>
               </thead>
               <tbody>
-                {presenceMetrics.map((m) => {
-                  const emp = employees.find((e) => e.profileId === m.profileId);
+                {presenceMetricsEnriched.map((m) => {
+                  const name = displayNameByProfileId[m.profileId] || m.profileId.slice(0, 8);
                   return (
                     <tr key={m.profileId} className="border-b border-slate-100">
-                      <td className="px-4 py-3">{emp?.profileId?.slice(0, 8) || m.profileId.slice(0, 8)}</td>
-                      <td className="px-4 py-3 text-right font-mono">{m.totalHours.toFixed(1)} h</td>
-                      <td className="px-4 py-3 text-right font-mono">{m.expectedHours.toFixed(1)} h</td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-slate-900">{name}</span>
+                        <button
+                          type="button"
+                          className="block text-[11px] text-emerald-700 hover:underline mt-0.5"
+                          onClick={() => {
+                            setPresenceDetailInitialProfile(m.profileId);
+                            setPresenceDetailOpen(true);
+                          }}
+                        >
+                          {fr ? 'Analyse & export…' : 'Analysis & export…'}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">
+                        {m.workedDayCount == null ? '—' : m.workedDayCount}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">
+                        {m.avgHoursPerWorkedDay == null ? '—' : `${m.avgHoursPerWorkedDay.toFixed(1)} h`}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">{m.totalHours.toFixed(1)} h</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-500">{m.expectedHours.toFixed(1)} h</td>
                       <td className="px-4 py-3 text-right">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${m.assiduityRate >= 90 ? 'bg-emerald-100 text-emerald-700' : m.assiduityRate >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                          {m.assiduityRate.toFixed(1)}%
+                          {m.assiduityRate.toFixed(0)}%
                         </span>
                       </td>
                     </tr>
                   );
                 })}
-                {presenceMetrics.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence.' : 'No attendance data.'}</td></tr>
+                {presenceMetricsEnriched.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">{fr ? 'Aucune donnée de présence.' : 'No attendance data.'}</td></tr>
                 )}
               </tbody>
             </table>
+            </div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200">
-              <h3 className="text-md font-semibold text-slate-900">{fr ? 'Contrôle mensuel paie (présence/retards/absences)' : 'Monthly payroll compliance (attendance/delays/absences)'}</h3>
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50">
+              <h3 className="text-sm font-semibold text-slate-900">{fr ? 'Contrôle paie (mois comptable)' : 'Payroll check (accounting month)'}</h3>
             </div>
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Déconnexions' : 'Logouts'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Retard (min)' : 'Delay (min)'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Absence NA (min)' : 'Unauthorized absence (min)'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Heures payables' : 'Payable hours'}</th>
-                  <th className="px-4 py-3 text-right">{fr ? 'Montant estimé' : 'Estimated amount'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Déco.' : 'Out'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Retard' : 'Late'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Abs. NA' : 'Unauth.'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Payable' : 'Payable'}</th>
+                  <th className="px-4 py-3 text-right">{fr ? 'Montant' : 'Amount'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -999,11 +1280,11 @@ const RhModule: React.FC<RhModuleProps> = ({
                   return (
                     <tr key={row.profileId} className="border-b border-slate-100">
                       <td className="px-4 py-3">{displayUser?.fullName || displayUser?.name || row.profileId.slice(0, 8)}</td>
-                      <td className="px-4 py-3 text-right">{row.disconnectCount}</td>
-                      <td className="px-4 py-3 text-right">{row.delayMinutes}</td>
-                      <td className="px-4 py-3 text-right">{row.unauthorizedAbsenceMinutes}</td>
-                      <td className="px-4 py-3 text-right font-mono">{(row.paidMinutes / 60).toFixed(2)} h</td>
-                      <td className="px-4 py-3 text-right font-mono">{row.payableAmount.toLocaleString()} XOF</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{row.disconnectCount}</td>
+                      <td className="px-4 py-3 text-right text-sm" title={`${row.delayMinutes} min`}>{formatDelayReadable(row.delayMinutes)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{row.unauthorizedAbsenceMinutes}</td>
+                      <td className="px-4 py-3 text-right font-mono">{(row.paidMinutes / 60).toFixed(1)} h</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs">{row.payableAmount.toLocaleString()} XOF</td>
                     </tr>
                   );
                 })}
@@ -1013,15 +1294,15 @@ const RhModule: React.FC<RhModuleProps> = ({
               </tbody>
             </table>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200">
-              <h3 className="text-md font-semibold text-slate-900">
-                {fr ? 'Base rémunération (période comptable & sessions)' : 'Pay base (accounting period & sessions)'}
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {fr ? 'Base rémunération' : 'Pay base'}
               </h3>
               <p className="text-xs text-slate-500 mt-1">
                 {fr
-                  ? `Temps = sessions de présence sur la période définie par la politique (début de mois comptable). Heures paie = minutes réelles ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} (voir hrAnalyticsService). Montant = heures paie × taux horaire fiche salarié.`
-                  : `Time = presence sessions in the payroll window from policy. Pay hours = wall minutes ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR}. Amount = pay hours × employee hourly rate.`}
+                  ? `Période comptable · heures paie = minutes ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} · montant = heures × taux fiche salarié.`
+                  : `Accounting period · pay hours = minutes ÷ ${hrAnalyticsService.PAYROLL_MINUTES_PER_PAID_HOUR} · amount = hours × employee rate.`}
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -1030,11 +1311,11 @@ const RhModule: React.FC<RhModuleProps> = ({
                   <tr>
                     <th className="px-4 py-3 text-left">{fr ? 'Salarié' : 'Employee'}</th>
                     <th className="px-4 py-3 text-left">{fr ? 'Période' : 'Period'}</th>
-                    <th className="px-4 py-3 text-right">{fr ? 'Temps (h min s)' : 'Time (h m s)'}</th>
-                    <th className="px-4 py-3 text-right">{fr ? 'Heures paie' : 'Pay hours'}</th>
-                    <th className="px-4 py-3 text-right">{fr ? 'Jours actifs' : 'Active days'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Temps' : 'Time'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'H. paie' : 'Pay h.'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Jours' : 'Days'}</th>
                     <th className="px-4 py-3 text-right">{fr ? 'Taux' : 'Rate'}</th>
-                    <th className="px-4 py-3 text-right">{fr ? 'Montant estimé' : 'Est. pay'}</th>
+                    <th className="px-4 py-3 text-right">{fr ? 'Montant' : 'Amount'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1043,7 +1324,9 @@ const RhModule: React.FC<RhModuleProps> = ({
                       <td className="px-4 py-3">{row.displayName}</td>
                       <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{row.periodLabel}</td>
                       <td className="px-4 py-3 text-right font-mono text-xs">
-                        {hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(row.workedSeconds))}
+                        {row.workedSeconds >= 72 * 3600
+                          ? hrAnalyticsService.formatWorkedSecondsAsDayAndClock(row.workedSeconds, fr)
+                          : hrAnalyticsService.formatHmsFrench(hrAnalyticsService.secondsToHmsParts(row.workedSeconds))}
                       </td>
                       <td className="px-4 py-3 text-right font-mono">{row.payableHours.toFixed(3)} h</td>
                       <td className="px-4 py-3 text-right">{row.distinctWorkDays}</td>
@@ -1062,12 +1345,16 @@ const RhModule: React.FC<RhModuleProps> = ({
               </table>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
-            <h3 className="text-md font-semibold text-slate-900">{fr ? 'Codifier une absence (autorisée / non autorisée)' : 'Classify absence (authorized / unauthorized)'}</h3>
+          <div className="rounded-lg border border-slate-200 p-4 space-y-3 bg-slate-50/30">
+            <h3 className="text-sm font-semibold text-slate-900">{fr ? 'Absence codifiée' : 'Record absence'}</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
               <select value={absenceProfileId} onChange={(e) => setAbsenceProfileId(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">
                 <option value="">{fr ? 'Salarié' : 'Employee'}</option>
-                {employees.map((e) => <option key={e.id} value={e.profileId}>{e.profileId.slice(0, 8)}</option>)}
+                {employees.map((e) => (
+                  <option key={e.id} value={e.profileId}>
+                    {displayNameByProfileId[e.profileId] || e.profileId.slice(0, 8)}
+                  </option>
+                ))}
               </select>
               <input type="date" value={absenceDate} onChange={(e) => setAbsenceDate(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               <input type="number" value={absenceDuration} onChange={(e) => setAbsenceDuration(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="minutes" />
@@ -1098,11 +1385,27 @@ const RhModule: React.FC<RhModuleProps> = ({
               </button>
             </div>
             <input value={absenceReason} onChange={(e) => setAbsenceReason(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder={fr ? 'Motif' : 'Reason'} />
-            <div className="text-sm text-slate-600">
-              {fr ? 'Derniers événements : ' : 'Latest events: '}
+            <div className="text-xs text-slate-500">
+              {fr ? 'Récent : ' : 'Recent: '}
               {absenceEvents.slice(0, 5).map((a) => `${a.absenceDate} (${a.isAuthorized ? 'A' : 'NA'})`).join(', ') || '—'}
             </div>
           </div>
+            </div>
+          </details>
+          <PresenceEmployeeDetailPanel
+            open={presenceDetailOpen}
+            onClose={() => setPresenceDetailOpen(false)}
+            fr={fr}
+            employees={employees}
+            userIdByProfile={userIdByProfile}
+            displayNameByProfileId={displayNameByProfileId}
+            policy={policy}
+            detailSessions={detailSessions}
+            detailStatusEvents={detailStatusEvents}
+            detailLoading={detailLoading}
+            onLoadRange={loadPresenceDetailForRange}
+            initialProfileId={presenceDetailInitialProfile || undefined}
+          />
         </section>
       )}
 

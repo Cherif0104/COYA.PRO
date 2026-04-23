@@ -35,7 +35,6 @@ export type ModuleName =
   | 'trinite'
   | 'programme'
   | 'tech'
-  | 'collecte'
   | 'conseil'
   | 'user_management'
   | 'course_management'
@@ -1111,6 +1110,16 @@ export interface Contact {
   categoryName?: string | null;
   createdById?: string;
   createdByName?: string;
+  /** Origine métier (ex. collecte_submission, manual) — colonne `source` */
+  source?: string | null;
+  /** UUID campagne Collecte locale liée à la création */
+  sourceCollectionId?: string | null;
+  /** UUID soumission Collecte liée à la création */
+  sourceSubmissionId?: string | null;
+  /** Multi-tenant : colonne `contacts.organization_id` */
+  organizationId?: string | null;
+  notes?: string | null;
+  tags?: string[] | null;
 }
 
 export interface Document {
@@ -1202,9 +1211,15 @@ export interface PresencePolicy {
   delayThresholdMinutes: number;
   /** Durée max d'une pause en minutes (au-delà = dépassement) */
   maxPauseMinutes: number;
-  /** Heures hebdomadaires de travail (ex. 44) */
+  /** Quota hebdomadaire (ex. 44 h) */
   weeklyHours: number;
-  /** Heures max par jour (ex. 10) */
+  /** Heures de travail effectives comptant pour « 1 jour » (ex. 9 h dans la plage horaire) */
+  dailyTargetWorkHours: number;
+  /** Début de la plage horaire comptabilisée (heure locale, 0–23), ex. 9 → 09:00 */
+  workWindowStartHour: number;
+  /** Fin de la plage horaire comptabilisée (heure locale, exclue en fin d’intervalle), ex. 19 → jusqu’à 19:00 */
+  workWindowEndHour: number;
+  /** @deprecated Utiliser dailyTargetWorkHours (alias historique « max heures / jour ») */
   maxHoursPerDay: number;
 }
 
@@ -1212,7 +1227,10 @@ export const DEFAULT_PRESENCE_POLICY: PresencePolicy = {
   delayThresholdMinutes: 15,
   maxPauseMinutes: 60,
   weeklyHours: 44,
-  maxHoursPerDay: 10
+  dailyTargetWorkHours: 9,
+  workWindowStartHour: 9,
+  workWindowEndHour: 19,
+  maxHoursPerDay: 9,
 };
 
 /** Pièce jointe RH (URL publique Storage après upload) */
@@ -1258,6 +1276,39 @@ export interface PresencePeriodMetric {
   assiduityRate: number;
   hourlyRate?: number | null;
   estimatedAmount?: number | null;
+  /** Jours avec activité ≥ seuil (présence journalière) — optionnel, rempli par agrégations récentes */
+  workedDayCount?: number;
+  /** Moyenne heures / jour effectivement travaillé (jours comptés = workedDayCount) */
+  avgHoursPerWorkedDay?: number;
+}
+
+/** Une ligne de série journalière temps effectif vs quota (calendrier local). */
+export interface PresenceDailyRow {
+  dateIso: string;
+  workedSeconds: number;
+  targetSeconds: number;
+  /** 0–100+ (peut dépasser 100 si dépassement quota) */
+  ratePct: number;
+}
+
+/** Synthèse sur une plage de jours pour un salarié. */
+export interface PresencePeriodRollup {
+  workedDayCount: number;
+  totalWorkedSeconds: number;
+  totalTargetSeconds: number;
+  avgHoursPerWorkedDay: number;
+  assiduityPct: number;
+}
+
+/**
+ * Heuristique « tendance » : ratio temps réalisé / cible sur la partie **écoulée** de la plage (jours ≤ aujourd’hui local).
+ * Ce n’est pas une prévision contractuelle ni du ML.
+ */
+export interface PresenceProjection {
+  /** null si impossible (pas de cible écoulée) */
+  projectedAssiduityPct: number | null;
+  elapsedDayCount: number;
+  totalDayCount: number;
 }
 
 export interface HrAbsenceEvent {

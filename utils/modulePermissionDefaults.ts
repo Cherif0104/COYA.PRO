@@ -45,7 +45,6 @@ const STANDARD_MODULES: ModuleName[] = [
   'trinite',
   'programme',
   'tech',
-  'collecte',
   'settings',
   'logistique',
   'parc_auto',

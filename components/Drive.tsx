@@ -3,6 +3,8 @@ import { useLocalization } from '../contexts/LocalizationContext';
 import { DriveItem, DriveService } from '../services/driveService';
 
 type ViewMode = 'browse' | 'recent' | 'search' | 'trash';
+type LayoutMode = 'grid' | 'list';
+type SortKey = 'name' | 'updated_at' | 'created_at';
 
 function formatSize(bytes?: number | null) {
   if (typeof bytes !== 'number' || Number.isNaN(bytes)) return '';
@@ -24,6 +26,7 @@ const Drive: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderVisibility, setNewFolderVisibility] = useState<'private' | 'org_public'>('private');
   const [trashedItems, setTrashedItems] = useState<DriveItem[]>([]);
   const [recentItems, setRecentItems] = useState<DriveItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,9 +40,29 @@ const Drive: React.FC = () => {
   const [orgProfiles, setOrgProfiles] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
   const [aclAddProfileId, setAclAddProfileId] = useState('');
   const [aclAddPermission, setAclAddPermission] = useState<'viewer' | 'editor'>('viewer');
+  const [layout, setLayout] = useState<LayoutMode>('grid');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [clipboard, setClipboard] = useState<{ mode: 'copy' | 'cut'; itemId: string; name: string } | null>(null);
 
-  const folders = useMemo(() => items.filter((i) => i.item_type === 'folder'), [items]);
-  const files = useMemo(() => items.filter((i) => i.item_type !== 'folder'), [items]);
+  const sortItems = useCallback(
+    (arr: DriveItem[]) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      const key = sortKey;
+      const copy = [...arr];
+      copy.sort((a, b) => {
+        if (key === 'name') return dir * a.name.localeCompare(b.name);
+        const av = new Date((a as any)[key]).getTime();
+        const bv = new Date((b as any)[key]).getTime();
+        return dir * (av - bv);
+      });
+      return copy;
+    },
+    [sortDir, sortKey],
+  );
+
+  const folders = useMemo(() => sortItems(items.filter((i) => i.item_type === 'folder')), [items, sortItems]);
+  const files = useMemo(() => sortItems(items.filter((i) => i.item_type !== 'folder')), [items, sortItems]);
   const folderById = useMemo(() => {
     const m = new Map<string, DriveItem>();
     allFoldersForMove.forEach((f) => m.set(f.id, f));
@@ -166,6 +189,10 @@ const Drive: React.FC = () => {
     try {
       const res = await DriveService.createFolder({ parentId, name });
       if (res.error) throw res.error;
+      if (res.data?.id && newFolderVisibility === 'org_public') {
+        const visRes = await DriveService.setFolderVisibility(res.data.id, 'org_public');
+        if (visRes.error) throw visRes.error;
+      }
       setNewFolderName('');
       await refresh();
     } catch (e: any) {
@@ -173,7 +200,7 @@ const Drive: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [newFolderName, parentId, refresh]);
+  }, [newFolderName, newFolderVisibility, parentId, refresh]);
 
   const onUpload = useCallback(
     async (file: File | null) => {
@@ -236,6 +263,37 @@ const Drive: React.FC = () => {
     const res = await DriveService.listAllFolders();
     if (!res.error) setAllFoldersForMove(res.data.filter((f) => f.id !== item.id));
   }, []);
+
+  const onCopyToClipboard = useCallback((item: DriveItem) => {
+    setClipboard({ mode: 'copy', itemId: item.id, name: item.name });
+    setActiveItem(null);
+  }, []);
+
+  const onCutToClipboard = useCallback((item: DriveItem) => {
+    setClipboard({ mode: 'cut', itemId: item.id, name: item.name });
+    setActiveItem(null);
+  }, []);
+
+  const onPasteHere = useCallback(async () => {
+    if (!clipboard || view !== 'browse') return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      if (clipboard.mode === 'cut') {
+        const res = await DriveService.moveItem(clipboard.itemId, parentId);
+        if (res.error) throw res.error;
+        setClipboard(null);
+      } else {
+        const res = await DriveService.copyItem(clipboard.itemId, parentId);
+        if (res.error) throw res.error;
+      }
+      await refresh();
+    } catch (e: any) {
+      setErrorMsg(String(e?.message ?? e));
+    } finally {
+      setLoading(false);
+    }
+  }, [clipboard, parentId, refresh, view]);
 
   const onAddFolderAcl = useCallback(async () => {
     if (!activeItem || activeItem.item_type !== 'folder' || !aclAddProfileId) return;
@@ -535,11 +593,22 @@ const Drive: React.FC = () => {
                     <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-rotate-right'}`}></i>
                     {t('drive_refresh') || 'Actualiser'}
                   </button>
+                  {view === 'browse' && clipboard && (
+                    <button
+                      onClick={() => void onPasteHere()}
+                      disabled={loading}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                      title={clipboard.mode === 'cut' ? 'Déplacer ici' : 'Copier ici'}
+                    >
+                      <i className="fas fa-paste"></i>
+                      {t('drive_paste') || 'Coller'}
+                    </button>
+                  )}
                 </div>
               </div>
 
               {view === 'browse' && (
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <button
                     onClick={() => navigateToFolder(null)}
                     onDragOver={(e) => e.preventDefault()}
@@ -550,18 +619,60 @@ const Drive: React.FC = () => {
                     <i className="fas fa-house"></i>
                     {t('drive_root') || 'Racine'}
                   </button>
-                  {breadcrumbs.map((c) => (
-                    <React.Fragment key={c.id}>
-                      <span className="text-slate-300">/</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {breadcrumbs.map((c) => (
+                      <React.Fragment key={c.id}>
+                        <span className="text-slate-300">/</span>
+                        <button
+                          onClick={() => navigateToFolder(c.id)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 truncate max-w-[260px]"
+                          title={c.name}
+                        >
+                          {c.name}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="inline-flex rounded-xl overflow-hidden border border-slate-200 bg-white">
                       <button
-                        onClick={() => navigateToFolder(c.id)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 truncate max-w-[260px]"
-                        title={c.name}
+                        type="button"
+                        onClick={() => setLayout('grid')}
+                        className={`px-3 py-1.5 text-xs font-semibold ${layout === 'grid' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+                        title={t('drive_view_grid') || 'Grille'}
                       >
-                        {c.name}
+                        <i className="fas fa-grip"></i>
                       </button>
-                    </React.Fragment>
-                  ))}
+                      <button
+                        type="button"
+                        onClick={() => setLayout('list')}
+                        className={`px-3 py-1.5 text-xs font-semibold ${layout === 'list' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+                        title={t('drive_view_list') || 'Liste'}
+                      >
+                        <i className="fas fa-list"></i>
+                      </button>
+                    </div>
+
+                    <select
+                      value={`${sortKey}:${sortDir}`}
+                      onChange={(e) => {
+                        const [k, d] = e.target.value.split(':');
+                        setSortKey(k as SortKey);
+                        setSortDir(d as 'asc' | 'desc');
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800"
+                      disabled={loading}
+                      title={t('drive_sort') || 'Tri'}
+                    >
+                      <option value="name:asc">{t('drive_sort_name_asc') || 'Nom (A→Z)'}</option>
+                      <option value="name:desc">{t('drive_sort_name_desc') || 'Nom (Z→A)'}</option>
+                      <option value="updated_at:desc">{t('drive_sort_updated_desc') || 'Modifié (récent)'}</option>
+                      <option value="updated_at:asc">{t('drive_sort_updated_asc') || 'Modifié (ancien)'}</option>
+                      <option value="created_at:desc">{t('drive_sort_created_desc') || 'Créé (récent)'}</option>
+                      <option value="created_at:asc">{t('drive_sort_created_asc') || 'Créé (ancien)'}</option>
+                    </select>
+                  </div>
                 </div>
               )}
             </div>
@@ -585,6 +696,16 @@ const Drive: React.FC = () => {
                 disabled={loading}
               />
             </div>
+            <select
+              value={newFolderVisibility}
+              onChange={(e) => setNewFolderVisibility(e.target.value as 'private' | 'org_public')}
+              className="px-4 py-2 border border-slate-200 rounded-xl bg-white text-sm"
+              disabled={loading}
+              title={t('drive_folder_visibility') || 'Visibilité'}
+            >
+              <option value="private">{t('drive_visibility_private') || 'Privé (invitation)'}</option>
+              <option value="org_public">{t('drive_visibility_org_public') || 'Public (organisation)'}</option>
+            </select>
             <button
               onClick={() => void onCreateFolder()}
               disabled={loading || !newFolderName.trim()}
@@ -746,6 +867,66 @@ const Drive: React.FC = () => {
               </div>
             )}
           </div>
+        ) : layout === 'list' ? (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-200 font-semibold text-slate-800 flex items-center justify-between">
+              <span>
+                <i className="fas fa-folder-tree mr-2 text-slate-700"></i>
+                {t('drive_items') || 'Éléments'}
+              </span>
+              <span className="text-xs font-normal text-slate-500">{items.length} élément(s)</span>
+            </div>
+            {items.length === 0 ? (
+              <div className="p-5 text-sm text-slate-600">{t('drive_empty') || 'Aucun élément.'}</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {[...folders, ...files].map((it) => (
+                  <div key={it.id} className="px-5 py-3 flex items-center justify-between hover:bg-slate-50">
+                    <button
+                      className="flex-1 text-left min-w-0"
+                      onClick={() => {
+                        if (it.item_type === 'folder') navigateToFolder(it.id);
+                        else void onOpenFile(it);
+                      }}
+                      draggable={it.item_type !== 'folder'}
+                      onDragStart={(e) => it.item_type !== 'folder' && onDragStart(e, it)}
+                      title={it.item_type === 'folder' ? 'Ouvrir' : 'Ouvrir / glisser-déposer'}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <i className={`fas ${it.item_type === 'folder' ? 'fa-folder text-amber-600' : 'fa-file text-indigo-500'}`}></i>
+                        <span className="truncate font-medium text-slate-900">{it.name}</span>
+                        {clipboard?.itemId === it.id && (
+                          <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {clipboard.mode === 'cut' ? 'Couper' : 'Copié'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5 truncate">
+                        {new Date(it.updated_at).toLocaleString('fr-FR')}
+                        {it.item_type !== 'folder' ? ` • ${formatSize(it.size_bytes)}` : ''}
+                      </div>
+                    </button>
+                    <div className="ml-3 flex items-center gap-2">
+                      <button
+                        className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg"
+                        onClick={() => void openActions(it)}
+                        title="Actions"
+                      >
+                        <i className="fas fa-ellipsis-vertical"></i>
+                      </button>
+                      <button
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        onClick={() => void onTrash(it)}
+                        title="Mettre à la corbeille"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="space-y-6">
             {/* Folder "classeur" cards */}
@@ -888,6 +1069,41 @@ const Drive: React.FC = () => {
               </div>
 
               <div className="p-6 space-y-5">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onCopyToClipboard(activeItem)}
+                    disabled={loading}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                    title="Copier (clipboard)"
+                  >
+                    <i className="fas fa-copy mr-2"></i>
+                    {t('drive_copy') || 'Copier'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCutToClipboard(activeItem)}
+                    disabled={loading}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                    title="Couper (déplacer ensuite)"
+                  >
+                    <i className="fas fa-scissors mr-2"></i>
+                    {t('drive_cut') || 'Couper'}
+                  </button>
+                  {clipboard && view === 'browse' && (
+                    <button
+                      type="button"
+                      onClick={() => void onPasteHere()}
+                      disabled={loading}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60"
+                      title="Coller dans le dossier courant"
+                    >
+                      <i className="fas fa-paste mr-2"></i>
+                      {t('drive_paste') || 'Coller'}
+                    </button>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Renommer</label>
                   <div className="flex gap-2">
@@ -938,6 +1154,38 @@ const Drive: React.FC = () => {
 
                 {activeItem.item_type === 'folder' && (
                   <div className="border-t border-gray-100 pt-5 space-y-3">
+                    <div className="space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">{t('drive_folder_visibility') || 'Visibilité du dossier'}</div>
+                      <p className="text-xs text-gray-500">{t('drive_folder_visibility_help') || "Privé = seulement invités. Public = visible par toute l'organisation."}</p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <select
+                          value={(activeItem.visibility as any) || 'private'}
+                          onChange={async (e) => {
+                            const v = e.target.value as 'private' | 'org_public';
+                            setLoading(true);
+                            setErrorMsg(null);
+                            try {
+                              const res = await DriveService.setFolderVisibility(activeItem.id, v);
+                              if (res.error) throw res.error;
+                              if (res.data) setActiveItem(res.data);
+                              await refresh();
+                            } catch (err: any) {
+                              setErrorMsg(String(err?.message ?? err));
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          disabled={loading || !(folderAclCap === 'owner' || folderAclCap === 'admin' || folderAclCap === 'editor')}
+                        >
+                          <option value="private">{t('drive_visibility_private') || 'Privé (invitation)'}</option>
+                          <option value="org_public">{t('drive_visibility_org_public') || 'Public (organisation)'}</option>
+                        </select>
+                        {!(folderAclCap === 'owner' || folderAclCap === 'admin' || folderAclCap === 'editor') && (
+                          <span className="text-xs text-gray-500">{t('drive_visibility_no_rights') || "Vous n'avez pas le droit de changer la visibilité."}</span>
+                        )}
+                      </div>
+                    </div>
                     <div className="text-sm font-semibold text-gray-900">{t('drive_acl_title')}</div>
                     <p className="text-xs text-gray-500">{t('drive_acl_help')}</p>
                     {folderAclCap === 'owner' || folderAclCap === 'admin' || folderAclCap === 'editor' ? (

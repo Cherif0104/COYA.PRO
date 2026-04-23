@@ -28,6 +28,93 @@ function isDuplicateNotificationInsert(error: unknown): boolean {
   return msg.includes('duplicate key') || msg.includes('unique constraint');
 }
 
+/** Statut UI CRM (PascalCase) → valeur colonne `contacts.status` Supabase */
+const CONTACT_UI_STATUS_TO_DB: Record<string, string> = {
+  Lead: 'lead',
+  Contacted: 'contacted',
+  Prospect: 'prospect',
+  Customer: 'customer',
+};
+
+function contactStatusUiToDb(status: string | undefined): string {
+  if (!status) return 'lead';
+  return CONTACT_UI_STATUS_TO_DB[status] ?? String(status).toLowerCase();
+}
+
+/** Prénom / nom à partir du modèle CRM (`name`) ou champs legacy firstName/lastName */
+function splitContactNameParts(contact: {
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+}): { first_name: string; last_name: string } {
+  let firstName = contact.firstName || '';
+  let lastName = contact.lastName || '';
+  if (contact.name && !firstName && !lastName) {
+    const nameParts = contact.name.trim().split(/\s+/);
+    firstName = nameParts[0] || '';
+    lastName = nameParts.slice(1).join(' ') || '';
+  }
+  return { first_name: firstName, last_name: lastName };
+}
+
+function contactPhonesToDb(c: Partial<Contact>): string {
+  return String(c.officePhone || c.mobilePhone || c.whatsappNumber || '').trim();
+}
+
+/** Payload insert `contacts` depuis le shape CRM / legacy */
+function buildContactInsertRow(contact: Partial<Contact> & Record<string, unknown>): Record<string, unknown> {
+  const { first_name, last_name } = splitContactNameParts(contact as any);
+  const emailRaw = String(
+    (contact.workEmail as string) || (contact.email as string) || (contact.personalEmail as string) || ''
+  ).trim();
+  const companyTrim = String(contact.company ?? '').trim();
+  return {
+    first_name,
+    last_name,
+    email: emailRaw || null,
+    phone: contactPhonesToDb(contact) || null,
+    company: companyTrim || 'N/A',
+    position: contact.position ?? null,
+    status: contactStatusUiToDb(contact.status as string | undefined),
+    source: contact.source ?? null,
+    notes: contact.notes ?? null,
+    tags: Array.isArray(contact.tags) ? contact.tags : [],
+    category_id: contact.categoryId ?? null,
+    source_collection_id: contact.sourceCollectionId ?? null,
+    source_submission_id: contact.sourceSubmissionId ?? null,
+  };
+}
+
+/** Patch `contacts` depuis `Partial<Contact>` — uniquement les clés présentes sur `updates` */
+function buildContactUpdatePatch(updates: Partial<Contact>): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  const u = updates as Partial<Contact> & { firstName?: string; lastName?: string; email?: string };
+  if ('name' in u || 'firstName' in u || 'lastName' in u) {
+    const { first_name, last_name } = splitContactNameParts(u as any);
+    row.first_name = first_name;
+    row.last_name = last_name;
+  }
+  if ('workEmail' in u || 'personalEmail' in u || 'email' in u) {
+    const em = String((u.workEmail ?? u.email ?? u.personalEmail ?? '')).trim();
+    row.email = em || null;
+  }
+  if ('officePhone' in u || 'mobilePhone' in u || 'whatsappNumber' in u) {
+    row.phone = contactPhonesToDb(u);
+  }
+  if ('company' in u) row.company = String(u.company ?? '').trim();
+  if ('position' in u) row.position = u.position ?? null;
+  if ('status' in u) row.status = contactStatusUiToDb(u.status);
+  if ('source' in u) row.source = u.source ?? null;
+  if ('notes' in u) row.notes = u.notes ?? null;
+  if ('tags' in u) row.tags = Array.isArray(u.tags) ? u.tags : [];
+  if ('categoryId' in u) row.category_id = u.categoryId ?? null;
+  if ('sourceCollectionId' in u) row.source_collection_id = u.sourceCollectionId ?? null;
+  if ('sourceSubmissionId' in u) row.source_submission_id = u.sourceSubmissionId ?? null;
+  return row;
+}
+
 /** Résolution profiles.id / auth user_id pour notifications — cache + requêtes in-flight dédupliquées (évite tempête réseau). */
 const NOTIF_TARGET_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -2099,79 +2186,51 @@ export class DataService {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, organization_id')
         .eq('user_id', currentUser.id)
-        .single();
+        .maybeSingle();
 
-      // Extrait le prénom et nom depuis le champ 'name' si nécessaire
-      let firstName = contact.firstName || '';
-      let lastName = contact.lastName || '';
-      
-      // Si le contact a un champ 'name' (format du CRM), on le split
-      if (contact.name && !firstName && !lastName) {
-        const nameParts = contact.name.trim().split(' ');
-        firstName = nameParts[0] || '';
-        lastName = nameParts.slice(1).join(' ') || '';
+      if (!profile?.id) {
+        throw new Error('Profil utilisateur introuvable');
       }
-      
-      // Convertit le status en minuscules pour correspondre à Supabase
-      const statusMap: Record<string, string> = {
-        'Lead': 'lead',
-        'Contacted': 'contacted',
-        'Prospect': 'prospect',
-        'Customer': 'customer'
-      };
-      const supabaseStatus = statusMap[contact.status] || contact.status?.toLowerCase() || 'lead';
 
-      const ownerId = profile.id;
       const creatorName = profile.full_name || currentUser.email || null;
-      
+      let organizationId = (profile as { organization_id?: string | null }).organization_id ?? null;
+      if (!organizationId) {
+        organizationId = await OrganizationService.getCurrentUserOrganizationId();
+      }
+      const baseRow = buildContactInsertRow(contact as Partial<Contact>);
+
+      // `contacts.created_by` référence `auth.users` (table `users` côté PostgREST), pas `profiles.id`.
+      const insertRow: Record<string, unknown> = {
+        ...baseRow,
+        created_by: currentUser.id,
+        created_by_name: creatorName,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      if (organizationId) {
+        insertRow.organization_id = organizationId;
+      }
+
       const { data, error } = await supabase
         .from('contacts')
-        .insert({
-          first_name: firstName,
-          last_name: lastName,
-          email: contact.workEmail || contact.email || '',
-          phone: contact.officePhone || contact.mobilePhone || '',
-          company: contact.company || '',
-          position: contact.position,
-          status: supabaseStatus,
-          source: contact.source,
-          notes: contact.notes,
-          tags: contact.tags || [],
-          category_id: contact.categoryId || null,
-          created_by: ownerId || currentUser.id,
-          created_by_name: creatorName,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(insertRow)
         .select()
         .single();
       
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('Erreur création contact:', error);
+      const e = error as { message?: string; code?: string; details?: string; hint?: string };
+      console.error('Erreur création contact:', e?.message || error, e?.code, e?.details, e?.hint);
       return { data: null, error };
     }
   }
 
   static async updateContact(id: string, updates: Partial<Contact>) {
     try {
-      const row: Record<string, unknown> = {
-        first_name: updates.firstName,
-        last_name: updates.lastName,
-        email: updates.email,
-        phone: updates.phone,
-        company: updates.company,
-        position: updates.position,
-        status: updates.status,
-        source: updates.source,
-        notes: updates.notes,
-        tags: updates.tags,
-        updated_at: new Date().toISOString()
-      };
-      if (updates.categoryId !== undefined) row.category_id = updates.categoryId;
+      const row = buildContactUpdatePatch(updates);
       const { data, error } = await supabase
         .from('contacts')
         .update(row)
@@ -2403,7 +2462,7 @@ export class DataService {
       id: row.id,
       organizationId: row.organization_id,
       payrollPeriodStartDay: row.payroll_period_start_day ?? 1,
-      expectedDailyMinutes: row.expected_daily_minutes ?? 480,
+      expectedDailyMinutes: row.expected_daily_minutes ?? 540,
       expectedWorkStartTime: row.expected_work_start_time ?? '09:00:00',
       monthlyDelayToleranceMinutes: row.monthly_delay_tolerance_minutes ?? 45,
       monthlyUnjustifiedAbsenceToleranceMinutes: row.monthly_unjustified_absence_tolerance_minutes ?? 480,
@@ -2453,7 +2512,12 @@ export class DataService {
         .limit(1)
         .maybeSingle();
       if (error) return { data: null, error };
-      return { data: data ? this.mapPresenceRow(data) : null, error: null };
+      const mapped = data ? this.mapPresenceRow(data) : null;
+      // « Absent » = pas de session active : pas de chronomètre ni de durée continue.
+      if (mapped && mapped.status === 'absent') {
+        return { data: null, error: null };
+      }
+      return { data: mapped, error: null };
     } catch (e) {
       console.error('getCurrentPresenceSession error:', e);
       return { data: null, error: e };
@@ -2485,7 +2549,7 @@ export class DataService {
         organization_id: organizationId,
         started_at: session.startedAt || new Date().toISOString(),
         ended_at: session.endedAt ?? null,
-        status: session.status || 'online',
+        status: session.status ?? 'absent',
         meeting_id: session.meetingId ?? null,
         pause_minutes: session.pauseMinutes ?? 0,
         notes: session.notes ?? null,

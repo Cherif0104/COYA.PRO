@@ -1,5 +1,5 @@
 import { DataCollection, DataCollectionSubmission } from '../types';
-import * as programmeService from './programmeService';
+import * as crmIngestService from './crmIngestService';
 
 const STORAGE_KEY = 'coya_data_collections_v1';
 const SUBMISSIONS_KEY = 'coya_data_collection_submissions_v1';
@@ -118,8 +118,42 @@ export function listSubmissionsForOrg(organizationId?: string | null): DataColle
   return all.filter((s) => !s.organizationId || s.organizationId === organizationId);
 }
 
+/** Soumission par id (stockage local). */
+export function getSubmissionById(id: string): DataCollectionSubmission | null {
+  return readSubmissions().find((s) => s.id === id) ?? null;
+}
+
+/**
+ * Retrouve la soumission Collecte liée au contact (id soumission, ou `crmContactId` après sync).
+ */
+export function resolveCollecteContext(contact: {
+  id: number | string;
+  source?: string | null;
+  sourceCollectionId?: string | null;
+  sourceSubmissionId?: string | null;
+}): { submission: DataCollectionSubmission | null; collection: DataCollection | null } {
+  let submission: DataCollectionSubmission | null = null;
+  if (contact.sourceSubmissionId) {
+    submission = getSubmissionById(String(contact.sourceSubmissionId));
+  }
+  if (!submission && contact.source === 'collecte_submission') {
+    submission =
+      readSubmissions().find((s) => s.crmContactId && String(s.crmContactId) === String(contact.id)) ?? null;
+  }
+  const collectionId = submission?.collectionId || contact.sourceCollectionId || null;
+  const collection = collectionId ? getDataCollection(collectionId) : null;
+  return { submission, collection };
+}
+
+export type BulkSyncCollecteOptions = {
+  /** Si défini, seules les soumissions de cette campagne sont synchronisées. */
+  collectionId?: string;
+};
+
 /** Pousse vers le CRM les soumissions non synchronisées (email dédoublonné). */
-export async function bulkSyncPendingSubmissionsToCrm(): Promise<{ ok: number; fail: number }> {
+export async function bulkSyncPendingSubmissionsToCrm(
+  options?: BulkSyncCollecteOptions,
+): Promise<{ ok: number; fail: number }> {
   const all = readSubmissions();
   let ok = 0;
   let fail = 0;
@@ -127,8 +161,12 @@ export async function bulkSyncPendingSubmissionsToCrm(): Promise<{ ok: number; f
   for (let i = 0; i < next.length; i++) {
     const s = next[i];
     if (s.syncedToCrm) continue;
+    if (options?.collectionId && s.collectionId !== options.collectionId) continue;
     try {
-      const res = await programmeService.upsertParticipantPayloadToCrm(s.payload);
+      const res = await crmIngestService.ingestCollecteSubmission(s.payload, {
+        collectionId: s.collectionId,
+        submissionId: s.id,
+      });
       if (res) {
         next[i] = {
           ...s,

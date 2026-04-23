@@ -5,6 +5,8 @@ import { mockProjects, mockGoals } from './constants/data';
 import { Course, Job, Project, Objective, Contact, Document, User, Role, TimeLog, LeaveRequest, Invoice, Expense, AppNotification, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, ProjectModuleSettings } from './types';
 import { useLocalization } from './contexts/LocalizationContext';
 import DataAdapter from './services/dataAdapter';
+import { dispatchCrmOutboundEvent } from './services/crmIntegrationHub';
+import { logContactDossierFromCrm } from './services/contactDossierService';
 import DataService from './services/dataService';
 import { logger } from './services/loggerService';
 import NotificationHelper from './services/notificationHelper';
@@ -87,7 +89,8 @@ const App: React.FC = () => {
   }, [signOut]);
   
   // Récupérer la vue précédente depuis localStorage (pour éviter le flash au refresh)
-  const savedView = typeof window !== 'undefined' ? localStorage.getItem('lastView') : null;
+  const rawSavedView = typeof window !== 'undefined' ? localStorage.getItem('lastView') : null;
+  const savedView = rawSavedView === 'collecte' ? 'crm_sales' : rawSavedView;
   // Valider que la vue sauvegardée est valide (pas login/signup)
   const validInitialView = savedView && savedView !== 'login' && savedView !== 'signup' && savedView !== 'no_access' && savedView !== 'status_selector' ? savedView : 'dashboard';
   const [currentView, setCurrentView] = useState(validInitialView);
@@ -367,18 +370,19 @@ const App: React.FC = () => {
 
   // Handler pour setView qui persiste dans localStorage
   const handleSetView = useCallback((view: string) => {
-    logger.logNavigation(currentView, view, 'handleSetView');
-    logger.debug('state', `Setting currentView: ${currentView} → ${view}`);
-    setCurrentView(view);
+    const nextView = view === 'collecte' ? 'crm_sales' : view;
+    logger.logNavigation(currentView, nextView, 'handleSetView');
+    logger.debug('state', `Setting currentView: ${currentView} → ${nextView}`);
+    setCurrentView(nextView);
     
     // Persister la vue sauf pour login/signup
-    if (view !== 'login' && view !== 'signup') {
-      localStorage.setItem('lastView', view);
-      logger.debug('session', `Persisted view to localStorage: ${view}`);
+    if (nextView !== 'login' && nextView !== 'signup') {
+      localStorage.setItem('lastView', nextView);
+      logger.debug('session', `Persisted view to localStorage: ${nextView}`);
     }
     
     // Gérer le selectedCourseId
-    if (view !== 'course_detail') {
+    if (nextView !== 'course_detail') {
       setSelectedCourseId(null);
     }
     
@@ -1251,6 +1255,16 @@ const App: React.FC = () => {
     projectModuleSettings,
     updateProjectsWithProducer,
   ]);
+
+  /** Toujours déclaré ici (avant tout return) pour respecter l’ordre des Hooks. */
+  const refreshContactsFromServer = useCallback(async () => {
+    try {
+      const list = await DataAdapter.getContacts();
+      setContacts(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.error('refreshContactsFromServer', e);
+    }
+  }, []);
 
   // Overlay de chargement unique : initialisation et vérification auth
   if (!isInitialized || (authLoading && !user)) {
@@ -2662,15 +2676,16 @@ const App: React.FC = () => {
     }
   };
 
-
-  // CONTACTS (CRM)
-  const handleAddContact = async (contactData: Omit<Contact, 'id'>) => {
+  const handleAddContact = async (
+    contactData: Omit<Contact, 'id'>
+  ): Promise<{ contact: Contact; persisted: boolean } | null> => {
     setLoadingOperation('create_contact');
     setIsLoading(true);
     try {
       const newContact = await DataAdapter.createContact(contactData);
       if (newContact) {
         setContacts(prev => [newContact, ...prev]);
+        dispatchCrmOutboundEvent({ kind: 'contact.created', contact: newContact });
         if (user) {
           AuditLogService.logAction({
             action: 'create',
@@ -2680,16 +2695,19 @@ const App: React.FC = () => {
             actor: user as any,
             metadata: {
               summary: `${user.name} a ajouté le contact ${newContact.name}`,
-              stage: newContact.stage
+              status: newContact.status
             }
           });
         }
+        void logContactDossierFromCrm(newContact, 'created', user?.id);
+        return { contact: newContact, persisted: true };
       }
+      return null;
     } catch (error) {
       console.error('Erreur création contact:', error);
-      // Fallback vers l'ancienne méthode
       const fallbackContact: Contact = { ...contactData, id: Date.now() };
       setContacts(prev => [fallbackContact, ...prev]);
+      return { contact: fallbackContact, persisted: false };
     } finally {
       setLoadingOperation(null);
       setIsLoading(false);
@@ -2698,34 +2716,64 @@ const App: React.FC = () => {
   const handleUpdateContact = async (updatedContact: Contact) => {
     setLoadingOperation('update_contact');
     setIsLoading(true);
-    const previousContact = contacts.find(c => c.id === updatedContact.id);
+    const previousContact = contacts.find(c => String(c.id) === String(updatedContact.id));
     try {
-      setContacts(prev => prev.map(c => c.id === updatedContact.id ? updatedContact : c));
+      const saved = await DataAdapter.updateContact(updatedContact.id, updatedContact);
+      if (!saved) {
+        console.error('Échec mise à jour contact (API)');
+        return;
+      }
+      setContacts(prev => prev.map(c => (String(c.id) === String(saved.id) ? saved : c)));
+      dispatchCrmOutboundEvent({
+        kind: 'contact.updated',
+        contact: saved,
+        previous: previousContact ?? undefined,
+      });
       if (user) {
-        const diff = previousContact ? buildDiff(previousContact, updatedContact, ['name', 'email', 'stage', 'company']) : undefined;
+        const diff = previousContact
+          ? buildDiff(previousContact, saved, [
+              'name',
+              'workEmail',
+              'personalEmail',
+              'status',
+              'company',
+              'categoryId',
+              'officePhone',
+              'mobilePhone',
+              'whatsappNumber'
+            ])
+          : undefined;
         AuditLogService.logAction({
           action: 'update',
           module: 'crm',
           entityType: 'contact',
-          entityId: updatedContact.id as string,
+          entityId: String(saved.id),
           actor: user as any,
           metadata: {
-            summary: `${user.name} a mis à jour le contact ${updatedContact.name}`,
+            summary: `${user.name} a mis à jour le contact ${saved.name}`,
             diff
           }
         });
       }
+      void logContactDossierFromCrm(saved, 'updated', user?.id, previousContact ?? null);
+    } catch (error) {
+      console.error('Erreur mise à jour contact:', error);
     } finally {
       setLoadingOperation(null);
       setIsLoading(false);
     }
   };
-  const handleDeleteContact = async (contactId: number) => {
+  const handleDeleteContact = async (contactId: number | string) => {
     setLoadingOperation('delete_contact');
     setIsLoading(true);
-    const contactToDelete = contacts.find(c => c.id === contactId);
+    const contactToDelete = contacts.find(c => String(c.id) === String(contactId));
     try {
-      setContacts(prev => prev.filter(c => c.id !== contactId));
+      const ok = await DataAdapter.deleteContact(contactId);
+      if (!ok) {
+        console.error('Échec suppression contact (API)');
+        return;
+      }
+      setContacts(prev => prev.filter(c => String(c.id) !== String(contactId)));
       if (user && contactToDelete) {
         AuditLogService.logAction({
           action: 'delete',
@@ -2738,6 +2786,8 @@ const App: React.FC = () => {
           }
         });
       }
+    } catch (error) {
+      console.error('Erreur suppression contact:', error);
     } finally {
       setLoadingOperation(null);
       setIsLoading(false);
@@ -2955,6 +3005,7 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     loadingOperation={loadingOperation}
                     setView={handleSetView}
+                    onRefreshContacts={refreshContactsFromServer}
                 />;
       case 'knowledge_base':
         return <Drive />;

@@ -132,6 +132,7 @@ const DafRequestDetailModal: React.FC<Props> = ({
   };
 
   const isRequester = request && request.requester_profile_id === myProfileId;
+  const isAssignee = request && request.assignee_profile_id === myProfileId;
 
   if (!open || !request) return null;
 
@@ -281,6 +282,17 @@ const DafRequestDetailModal: React.FC<Props> = ({
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
               <div className="text-sm font-semibold text-amber-900">{t('daf_reviewer_actions')}</div>
 
+              {request.assignee_profile_id == null && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void patchRequest({ assignee_profile_id: myProfileId })}
+                  className="rounded-lg bg-amber-900 text-white text-xs font-semibold px-3 py-1.5"
+                >
+                  {t('daf_action_take_ownership')}
+                </button>
+              )}
+
               {request.status === 'submitted' && (
                 <button
                   type="button"
@@ -292,7 +304,7 @@ const DafRequestDetailModal: React.FC<Props> = ({
                 </button>
               )}
 
-              {request.status === 'in_review' && (
+              {request.status === 'in_review' && (isAssignee || request.assignee_profile_id == null) && (
                 <div className="flex flex-wrap gap-2 items-end">
                   <button
                     type="button"

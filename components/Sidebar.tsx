@@ -61,7 +61,6 @@ const SIDEBAR_ITEMS: { icon: string; labelKey: string; labelFallback: string; vi
   { icon: 'fas fa-chart-line', labelKey: 'programme', labelFallback: 'Programme & Budget', view: 'programme' },
   { icon: 'fas fa-book-open', labelKey: 'courses', labelFallback: 'Cours', view: 'courses' },
   { icon: 'fas fa-users', labelKey: 'crm_sales', labelFallback: 'CRM & Ventes', view: 'crm_sales' },
-  { icon: 'fas fa-clipboard-list', labelKey: 'collecte', labelFallback: 'Collecte de données', view: 'collecte' },
   { icon: 'fas fa-gem', labelKey: 'trinite', labelFallback: 'Trinité', view: 'trinite' },
   { icon: 'fas fa-boxes', labelKey: 'logistique', labelFallback: 'Logistique', view: 'logistique' },
   { icon: 'fas fa-car', labelKey: 'parc_auto', labelFallback: 'Parc automobile', view: 'parc_auto' },
@@ -86,7 +85,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
 
   const getLabel = (item: { labelKey: string; labelFallback: string }) => {
     if (item.labelKey === 'rh') return 'Ressources humaines';
-    if (item.labelKey === 'collecte') return getDisplayName(item.labelKey) || t(item.labelKey) || 'Collecte de données';
     if (item.labelKey === 'comptabilite') return 'Comptabilité';
     return getDisplayName(item.labelKey) || t(item.labelKey) || item.labelFallback;
   };

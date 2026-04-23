@@ -1,6 +1,11 @@
 import { supabase } from './supabaseService';
 import { DataService } from './dataService';
 import { PresenceSession, TriniteScore } from '../types';
+import {
+  ATTENDANCE_WEEKLY_TARGET_HOURS,
+  computeEffectiveWorkedSecondsFromSessions,
+  expectedWeeklyScaledHoursBetween,
+} from './hrAnalyticsService';
 
 const TRINITE_TABLE = 'trinite_scores';
 const TRINITE_SELF_NOTES = 'trinite_self_notes';
@@ -135,14 +140,24 @@ export function buildTriniteScore(params: {
   qualityIncidents: number;
   generatedById?: string | null;
 }): Omit<TriniteScore, 'id' | 'createdAt' | 'updatedAt'> {
-  const sessionHours = params.presenceSessions.reduce((acc, s) => {
-    const start = new Date(s.startedAt).getTime();
-    const end = s.endedAt ? new Date(s.endedAt).getTime() : Date.now();
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return acc;
-    return acc + (end - start) / 3600000;
-  }, 0);
-
-  const presenceScore = bounded((sessionHours / 160) * 100);
+  const periodStartMs = new Date(`${params.periodStart}T00:00:00.000Z`).getTime();
+  const periodEndMs = new Date(`${params.periodEnd}T23:59:59.999Z`).getTime();
+  const uid = params.presenceSessions[0]?.userId ?? '';
+  const workedSeconds = uid
+    ? computeEffectiveWorkedSecondsFromSessions(
+        params.presenceSessions,
+        uid,
+        periodStartMs,
+        periodEndMs,
+        Date.now(),
+      )
+    : 0;
+  const sessionHours = workedSeconds / 3600;
+  const targetPresenceHours = Math.max(
+    ATTENDANCE_WEEKLY_TARGET_HOURS * 0.25,
+    expectedWeeklyScaledHoursBetween(periodStartMs, periodEndMs),
+  );
+  const presenceScore = bounded(targetPresenceHours <= 0 ? 0 : (sessionHours / targetPresenceHours) * 100);
   const performanceScore = bounded(params.totalTasks <= 0 ? 60 : (params.completedTasks / params.totalTasks) * 100);
   const objectiveScore = bounded(params.objectivesTotal <= 0 ? 60 : (params.objectivesDone / params.objectivesTotal) * 100);
   const qualityScore = bounded(100 - params.qualityIncidents * 10);
@@ -168,6 +183,7 @@ export function buildTriniteScore(params: {
     generatedById: params.generatedById ?? null,
     sourceSnapshot: {
       sessionHours,
+      targetPresenceHours,
       completedTasks: params.completedTasks,
       totalTasks: params.totalTasks,
       objectivesDone: params.objectivesDone,

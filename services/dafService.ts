@@ -40,6 +40,7 @@ export type DafServiceRequest = {
   id: string;
   organization_id: string;
   requester_profile_id: string;
+  assignee_profile_id: string | null;
   title: string;
   description: string | null;
   category: DafRequestCategory;
@@ -87,6 +88,7 @@ function mapRow(r: any): DafServiceRequest {
     id: r.id,
     organization_id: r.organization_id,
     requester_profile_id: r.requester_profile_id,
+    assignee_profile_id: r.assignee_profile_id ?? null,
     title: r.title,
     description: r.description ?? null,
     category: r.category,
@@ -203,7 +205,7 @@ export class DafService {
     patch: Partial<
       Pick<
         DafServiceRequest,
-        'title' | 'description' | 'category' | 'request_kind' | 'signature_phase' | 'status' | 'daf_comment'
+        'title' | 'description' | 'category' | 'request_kind' | 'signature_phase' | 'status' | 'daf_comment' | 'assignee_profile_id'
       >
     >,
   ) {

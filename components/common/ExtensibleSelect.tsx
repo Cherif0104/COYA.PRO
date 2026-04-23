@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useLocalization } from '../../contexts/LocalizationContext';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
+import { LocalizationContext } from '../../contexts/LocalizationContext';
 import { Language } from '../../types';
 import * as referentialsService from '../../services/referentialsService';
 import { ReferentialValue } from '../../services/referentialsService';
@@ -11,6 +11,8 @@ interface ExtensibleSelectProps {
   value: string;
   onChange: (id: string, item: ReferentialValue | null) => void;
   organizationId: string | null;
+  /** Si fourni (ex. depuis un parent qui a déjà lu le contexte), évite une dépendance au contexte seul — utile si chunk / arbre atypique. */
+  language?: Language;
   canCreate?: boolean;
   canEdit?: boolean;
   placeholder?: string;
@@ -24,6 +26,7 @@ const ExtensibleSelect: React.FC<ExtensibleSelectProps> = ({
   value,
   onChange,
   organizationId,
+  language: languageProp,
   canCreate = true,
   canEdit = true,
   placeholder,
@@ -31,7 +34,8 @@ const ExtensibleSelect: React.FC<ExtensibleSelectProps> = ({
   className = '',
   disabled = false,
 }) => {
-  const { language } = useLocalization();
+  const loc = useContext(LocalizationContext);
+  const language = languageProp ?? loc?.language ?? Language.EN;
   const isFr = language === Language.FR;
   const [options, setOptions] = useState<ReferentialValue[]>([]);
   const [loading, setLoading] = useState(true);

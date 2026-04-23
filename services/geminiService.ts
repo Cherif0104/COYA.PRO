@@ -315,8 +315,10 @@ Retourne uniquement un JSON valide avec cette structure exacte:
   }
 };
 
+/** `context` : sujet ou consigne libre (texte), ex. objectif de la prise de contact. */
 export const draftSalesEmail = async (contact: Contact, context: string): Promise<string> => {
-  const prompt = `Rédige un email commercial professionnel pour contacter ${contact.name} de ${contact.company || 'leur entreprise'} concernant: ${context}. Email à ${contact.email}. Ton amical mais professionnel, de 2-3 paragraphes maximum.`;
+  const targetEmail = (contact.workEmail || contact.personalEmail || '').trim() || '(email non renseigné)';
+  const prompt = `Rédige un email commercial professionnel pour contacter ${contact.name} de ${contact.company || 'leur entreprise'} concernant: ${context}. Adresse du destinataire: ${targetEmail}. Ton amical mais professionnel, de 2-3 paragraphes maximum.`;
   return await callAI(prompt, "Tu es un expert en communication commerciale B2B.");
 };
 

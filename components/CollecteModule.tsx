@@ -10,7 +10,10 @@ import {
   NAV_SESSION_OPEN_PROGRAMME_ID,
   NAV_SESSION_OPEN_PROGRAMME_DETAIL_TAB,
   NAV_SESSION_COLLECTE_PRESET_PROGRAMME_ID,
+  NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID,
+  NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID,
 } from '../contexts/AppNavigationContext';
+import { dispatchCrmOutboundEvent } from '../services/crmIntegrationHub';
 import {
   COLLECTE_PARTICIPANT_FIELD_DEFS,
   CollecteParticipantFieldDef,
@@ -32,8 +35,11 @@ function makeId(): string {
   return `dc_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-const CollecteModule: React.FC = () => {
-  const { language } = useLocalization();
+const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: () => void }> = ({
+  embeddedInCrm = false,
+  onAfterCrmBulkSync,
+}) => {
+  const { language, t } = useLocalization();
   const isFr = language === Language.FR;
   const [orgId, setOrgId] = useState<string | null>(null);
   const [collections, setCollections] = useState<DataCollection[]>([]);
@@ -91,6 +97,19 @@ const CollecteModule: React.FC = () => {
     }
   }, [orgId]);
 
+  /** Navigation depuis CRM : préremplir la campagne dans la zone soumissions → CRM. */
+  useEffect(() => {
+    if (!orgId) return;
+    try {
+      const raw = sessionStorage.getItem(NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID);
+      if (!raw) return;
+      sessionStorage.removeItem(NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID);
+      setSubCollectionId(raw);
+    } catch {
+      /* ignore */
+    }
+  }, [orgId]);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -142,6 +161,18 @@ const CollecteModule: React.FC = () => {
     });
     return m;
   }, [orgId, submissionsTick]);
+
+  const submissionsCrmStats = useMemo(() => {
+    const m: Record<string, { total: number; synced: number }> = {};
+    collections.forEach((c) => {
+      const subs = dataCollectionService.listSubmissionsForCollection(c.id);
+      m[c.id] = {
+        total: subs.length,
+        synced: subs.filter((s) => s.syncedToCrm).length,
+      };
+    });
+    return m;
+  }, [collections, submissionsTick]);
 
   const filteredList = useMemo(() => {
     if (filterKind === 'all') return collections;
@@ -357,12 +388,17 @@ const CollecteModule: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 text-slate-900">
+    <div className={`${embeddedInCrm ? 'max-w-none' : 'max-w-5xl mx-auto'} px-4 py-8 text-slate-900`}>
       <header className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <i className="fas fa-clipboard-list text-slate-600" />
           {isFr ? 'Collecte de données' : 'Data collection'}
         </h1>
+        {embeddedInCrm && (
+          <p className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mt-2 inline-block">
+            {isFr ? 'Atelier intégré au CRM — campagnes, soumissions et envoi vers les contacts.' : 'Workspace inside CRM — campaigns, submissions, and push to contacts.'}
+          </p>
+        )}
         <p className="text-sm text-slate-600 mt-1 max-w-3xl">
           {isFr
             ? 'Chaque campagne se rattache à un projet, un programme ou une formation globale (module Cours), distinct de la formation RH. Les collectes peuvent être réutilisées ou liées au CRM pour enrichir les contacts.'
@@ -523,7 +559,11 @@ const CollecteModule: React.FC = () => {
             </li>
             <li>{isFr ? 'Une collecte est versionnée localement (navigateur) jusqu’à branchement API / Supabase.' : 'Collections are stored in the browser until API / Supabase is wired.'}</li>
             <li>{isFr ? 'Réutiliser : duplique la campagne pour un autre rattachement ou enrichis le CRM depuis le module CRM.' : 'Reuse: duplicate the campaign or enrich CRM from the CRM module.'}</li>
-            <li>{isFr ? 'Lier au CRM : marque la collecte ou crée un contact depuis « Enrichir depuis une collecte ».' : 'CRM link: flag the collection or create a contact via CRM “Enrich from collection”.'}</li>
+            <li>
+              {isFr
+                ? 'Lier au CRM : marque la collecte ou crée un contact depuis l’onglet « Liste » du CRM (« Enrichir depuis une collecte »).'
+                : 'CRM link: flag the campaign or create a placeholder from the CRM list tab (“Enrich from collection”).'}
+            </li>
           </ul>
         </section>
       </div>
@@ -562,6 +602,12 @@ const CollecteModule: React.FC = () => {
                     {submissionCounts[c.id]}
                   </p>
                 )}
+                {(submissionsCrmStats[c.id]?.total ?? 0) > 0 && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {t('collecte_submissions_synced_ratio')}: {submissionsCrmStats[c.id]?.synced ?? 0} /{' '}
+                    {submissionsCrmStats[c.id]?.total ?? 0}
+                  </p>
+                )}
                 {c.description && <p className="text-sm text-slate-600 mt-2">{c.description}</p>}
                 <div className="flex flex-wrap gap-2 mt-2">
                   {c.linkedToCrm && (
@@ -575,6 +621,22 @@ const CollecteModule: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
+                {nav && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID, c.id);
+                      } catch {
+                        /* ignore */
+                      }
+                      nav.setView('crm_sales');
+                    }}
+                    className="px-3 py-2 rounded-xl border border-sky-200 text-sm font-medium text-sky-900 hover:bg-sky-50"
+                  >
+                    {t('collecte_open_in_crm')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => duplicateForReuse(c)}
@@ -684,6 +746,13 @@ const CollecteModule: React.FC = () => {
                       ? `CRM : ${r.ok} contact(s) traité(s), ${r.fail} ignoré(s) ou en échec.`
                       : `CRM: ${r.ok} processed, ${r.fail} skipped/failed.`,
                   );
+                  dispatchCrmOutboundEvent({
+                    kind: 'collecte.submissions_synced',
+                    ok: r.ok,
+                    fail: r.fail,
+                    organizationId: orgId,
+                  });
+                  void onAfterCrmBulkSync?.();
                   refresh();
                   setSubmissionsTick((t) => t + 1);
                 } catch (e: any) {

@@ -8,6 +8,10 @@ export const NAV_SESSION_OPEN_PROGRAMME_DETAIL_TAB = 'coya_nav_open_programme_de
 export const NAV_SESSION_OPEN_PROJECT_ID = 'coya_nav_open_project_id';
 /** sessionStorage : préremplir une campagne « programme » dans la vue `collecte`. */
 export const NAV_SESSION_COLLECTE_PRESET_PROGRAMME_ID = 'coya_nav_collecte_preset_programme_id';
+/** sessionStorage : préremplir la campagne (id collecte) dans la zone soumissions → CRM. */
+export const NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID = 'coya_nav_collecte_preset_collection_id';
+/** sessionStorage : appliquer au montage du CRM un filtre sur `source_collection_id`. */
+export const NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID = 'coya_nav_crm_filter_source_collection_id';
 /** sessionStorage : filtrer les formations (vue `courses`) par programme lié. */
 export const NAV_SESSION_COURSES_PROGRAMME_ID = 'coya_nav_courses_programme_id';
 

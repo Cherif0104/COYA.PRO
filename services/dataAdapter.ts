@@ -59,6 +59,32 @@ export class DataAdapter {
     return statusMap[status?.toLowerCase() || ''] || 'Lead';
   }
 
+  private static mapContactFromDb(contact: any, index?: number): Contact {
+    const idx = index ?? 0;
+    return {
+      id: contact.id ?? idx + 1,
+      name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Contact sans nom',
+      workEmail: contact.email || '',
+      company: contact.company || 'N/A',
+      status: this.mapContactStatus(contact.status),
+      avatar: `https://picsum.photos/seed/${contact.id || idx}/100/100`,
+      officePhone: contact.phone || undefined,
+      mobilePhone: contact.phone || undefined,
+      whatsappNumber: contact.phone || undefined,
+      personalEmail: undefined,
+      categoryId: contact.category_id || undefined,
+      categoryName: undefined,
+      createdById: contact.created_by || undefined,
+      createdByName: contact.created_by_name || undefined,
+      source: contact.source ?? undefined,
+      sourceCollectionId: contact.source_collection_id ?? undefined,
+      sourceSubmissionId: contact.source_submission_id ?? undefined,
+      organizationId: contact.organization_id != null ? String(contact.organization_id) : undefined,
+      notes: contact.notes ?? undefined,
+      tags: Array.isArray(contact.tags) ? contact.tags : undefined,
+    };
+  }
+
   static async searchInstructors(searchTerm: string, roles?: string[]): Promise<User[]> {
     if (!this.useSupabase) {
       return [];
@@ -1088,22 +1114,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       try {
         const { data, error } = await DataService.getContacts();
         if (error) throw error;
-        return data?.map((contact, index) => ({
-          id: contact.id || index + 1, // Fallback sur index si pas d'id
-          name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Contact sans nom',
-          workEmail: contact.email || '',
-          company: contact.company || 'N/A',
-          status: this.mapContactStatus(contact.status),
-          avatar: `https://picsum.photos/seed/${contact.id || index}/100/100`,
-          officePhone: contact.phone || undefined,
-          mobilePhone: contact.phone || undefined,
-          whatsappNumber: contact.phone || undefined,
-          personalEmail: undefined,
-          categoryId: contact.category_id || undefined,
-          categoryName: undefined,
-          createdById: contact.created_by || undefined,
-          createdByName: contact.created_by_name || undefined
-        })) || [];
+        return data?.map((contact: any, index: number) => this.mapContactFromDb(contact, index)) || [];
       } catch (error) {
         console.warn('Erreur Supabase contacts:', error);
         return [];
@@ -1117,42 +1128,60 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
       try {
         const { data, error } = await DataService.createContact(contact);
         if (error) throw error;
-        return data ? {
-          id: data.id,
-          name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Contact',
-          workEmail: data.email || '',
-          company: data.company || '',
-          status: this.mapContactStatus(data.status),
-          avatar: `https://picsum.photos/seed/${data.id}/100/100`,
-          officePhone: data.phone || undefined,
-          mobilePhone: data.phone || undefined,
-          whatsappNumber: data.phone || undefined,
-          categoryId: data.category_id || undefined,
-          createdById: data.created_by || undefined,
-          createdByName: data.created_by_name || undefined
-        } : null;
+        return data ? this.mapContactFromDb(data) : null;
       } catch (error) {
         console.warn('Erreur Supabase création contact:', error);
         return null;
       }
     }
     // Fallback vers mock data
+    const name =
+      (contact as Partial<Contact>).name ||
+      `${(contact as any).firstName || ''} ${(contact as any).lastName || ''}`.trim() ||
+      'Contact';
     const newContact: Contact = {
       id: Date.now(),
-      firstName: contact.firstName || '',
-      lastName: contact.lastName || '',
-      email: contact.email,
-      phone: contact.phone,
-      company: contact.company,
-      position: contact.position,
-      status: contact.status || 'lead',
-      source: contact.source,
-      notes: contact.notes,
-      tags: contact.tags || [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      name,
+      workEmail: (contact as Partial<Contact>).workEmail || (contact as any).email || '',
+      personalEmail: (contact as Partial<Contact>).personalEmail,
+      company: (contact as Partial<Contact>).company || 'N/A',
+      status: (this.mapContactStatus(String((contact as Partial<Contact>).status || 'lead')) as Contact['status']),
+      avatar: `https://picsum.photos/seed/mock-${Date.now()}/100/100`,
+      officePhone: (contact as Partial<Contact>).officePhone,
+      mobilePhone: (contact as Partial<Contact>).mobilePhone,
+      whatsappNumber: (contact as Partial<Contact>).whatsappNumber,
+      categoryId: (contact as Partial<Contact>).categoryId,
     };
     return newContact;
+  }
+
+  static async updateContact(id: string | number, updates: Contact): Promise<Contact | null> {
+    if (this.useSupabase) {
+      try {
+        const sid = String(id);
+        const { data, error } = await DataService.updateContact(sid, updates);
+        if (error) throw error;
+        return data ? this.mapContactFromDb(data) : null;
+      } catch (error) {
+        console.warn('Erreur Supabase mise à jour contact:', error);
+        return null;
+      }
+    }
+    return { ...updates, id } as Contact;
+  }
+
+  static async deleteContact(id: string | number): Promise<boolean> {
+    if (this.useSupabase) {
+      try {
+        const { error } = await DataService.deleteContact(String(id));
+        if (error) throw error;
+        return true;
+      } catch (error) {
+        console.warn('Erreur Supabase suppression contact:', error);
+        return false;
+      }
+    }
+    return true;
   }
 
   // ===== COURSES =====

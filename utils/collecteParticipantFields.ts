@@ -249,6 +249,17 @@ export function getCollecteColumnLabel(key: string, isFr: boolean): string {
   return key;
 }
 
+/** Libellé pour une clé de payload (clé canonique ou legacy). */
+export function getCollectePayloadFieldLabel(payloadKey: string, isFr: boolean): string {
+  const lower = payloadKey.toLowerCase();
+  const direct = defByKey.get(payloadKey);
+  if (direct) return isFr ? direct.labelFr : direct.labelEn;
+  for (const d of COLLECTE_PARTICIPANT_FIELD_DEFS) {
+    if (d.legacyKeys?.some((k) => k.toLowerCase() === lower)) return isFr ? d.labelFr : d.labelEn;
+  }
+  return payloadKey.replace(/_/g, ' ');
+}
+
 /** Colonnes grille : ordre standard + clés legacy ou custom présentes dans les lignes. */
 export function collecteGridColumnKeysForRows(rows: { rowData: Record<string, string> }[]): string[] {
   const extra = new Set<string>();
