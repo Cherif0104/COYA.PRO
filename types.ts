@@ -1371,6 +1371,73 @@ export interface PresenceProjection {
   totalDayCount: number;
 }
 
+/** Ligne de bulletin de paie (rubrique) — persistance `pay_slip_lines` */
+export type PaySlipLineSide = 'gain' | 'deduction' | 'info';
+
+export type PayrollRubricType = 'gain' | 'cotisation_sal' | 'cotisation_pat' | 'impot' | 'info';
+
+export interface PaySlipLine {
+  id?: string;
+  paySlipId?: string;
+  organizationId?: string;
+  rubriqueCode: string;
+  label: string;
+  side: PaySlipLineSide;
+  amount: number;
+  orderIndex: number;
+  metadata?: Record<string, unknown> | null;
+  ohadaAccountSuggestion?: string | null;
+}
+
+/** Bulletin enrichi (lignes + analytique optionnelle) */
+export interface PaySlipWithLines {
+  id: string;
+  organizationId: string;
+  profileId: string;
+  periodStart: string;
+  periodEnd: string;
+  grossAmount: number;
+  netAmount: number;
+  currencyCode?: string;
+  status: 'draft' | 'validated' | 'paid';
+  notes?: string;
+  projectId?: string | null;
+  programmeId?: string | null;
+  fundingSource?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lines: PaySlipLine[];
+}
+
+/** Définition catalogue rubrique (table `payroll_rubric_definitions`) */
+export interface PayrollRubricDefinition {
+  id: string;
+  organizationId: string;
+  code: string;
+  labelFr: string;
+  labelEn?: string | null;
+  rubricType: PayrollRubricType;
+  ratePercent?: number | null;
+  formula?: string | null;
+  ohadaAccountSuggestion?: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
+/** Une ligne de la matrice période (un salarié + montants par rubrique) */
+export interface PayrollMatrixRow {
+  profileId: string;
+  displayName: string;
+  paySlipId: string | null;
+  slip: PaySlipWithLines | null;
+  slipStatus: 'draft' | 'validated' | 'paid' | 'none';
+  currencyCode: string;
+  amountsByCode: Record<string, number>;
+  paidHours: number;
+  grossAmount: number;
+  netAmount: number;
+}
+
 export interface HrAbsenceEvent {
   id: string;
   organizationId: string;

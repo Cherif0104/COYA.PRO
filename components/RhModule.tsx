@@ -31,6 +31,10 @@ interface RhModuleProps {
   onDeleteLeaveRequest: (id: string) => Promise<void>;
   isLoading?: boolean;
   loadingOperation?: string | null;
+  /** UI compacte (ex. intégration Planning) */
+  embedded?: boolean;
+  /** Onglet synchronisé depuis le parent (Planning) ; masque la barre d’onglets RH si défini */
+  planningEmbedTab?: RhTab | null;
 }
 
 const SLA_DAYS_WARNING = 2;
@@ -67,7 +71,9 @@ const RhModule: React.FC<RhModuleProps> = ({
   onUpdateLeaveDates,
   onDeleteLeaveRequest,
   isLoading,
-  loadingOperation
+  loadingOperation,
+  embedded = false,
+  planningEmbedTab = null,
 }) => {
   const { t, language } = useLocalization();
   const { canAccessModule, hasPermission } = useModulePermissions();
@@ -116,6 +122,10 @@ const RhModule: React.FC<RhModuleProps> = ({
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  useEffect(() => {
+    if (planningEmbedTab) setActiveTab(planningEmbedTab);
+  }, [planningEmbedTab]);
 
   const sessionById = useMemo(() => {
     const m = new Map<string, PresenceSession>();
@@ -546,6 +556,13 @@ const RhModule: React.FC<RhModuleProps> = ({
     [employees, presenceSessions, policy, userIdByProfile, displayNameByProfileId],
   );
 
+  const payrollPeriodBounds = useMemo(
+    () => hrAnalyticsService.getPayrollPeriodBounds(new Date(), policy?.payrollPeriodStartDay ?? 1),
+    [policy?.payrollPeriodStartDay],
+  );
+  const payrollPeriodStartStr = payrollPeriodBounds.start.toISOString().slice(0, 10);
+  const payrollPeriodEndStr = payrollPeriodBounds.end.toISOString().slice(0, 10);
+
   const presenceMetricsEnriched = useMemo(() => {
     const orgDailyMinutes = Math.max(1, policy?.expectedDailyMinutes ?? 540);
     const bounds = hrAnalyticsService.periodBounds(presencePeriod);
@@ -656,35 +673,53 @@ const RhModule: React.FC<RhModuleProps> = ({
   const rejectedCount = leaveRequests.filter(r => r.status === 'rejected').length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {fr ? 'Ressources humaines' : 'Human resources'}
-          </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {fr ? 'Salariés, présence, congés, postes, organigramme, paie et emplois.' : 'Employees, attendance, leave, positions, org chart, payroll and jobs.'}
-          </p>
+    <div
+      className={
+        embedded
+          ? 'max-w-none mx-auto px-0 py-1 text-slate-900'
+          : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-900'
+      }
+    >
+      {!embedded && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {fr ? 'Ressources humaines' : 'Human resources'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {fr ? 'Salariés, présence, congés, postes, organigramme, paie et emplois.' : 'Employees, attendance, leave, positions, org chart, payroll and jobs.'}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex flex-wrap gap-1">
-        {visibleTabs.map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              currentTab === tab.id
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-            aria-label={tab.label}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {!planningEmbedTab && (
+        <div
+          className={
+            embedded
+              ? 'bg-white rounded-xl border border-slate-200 p-1 mb-3 inline-flex flex-wrap gap-0.5'
+              : 'bg-white rounded-2xl border border-slate-200 p-1.5 mb-6 inline-flex flex-wrap gap-1'
+          }
+        >
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-xl font-medium transition-all ${
+                embedded ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2 text-sm'
+              } ${
+                currentTab === tab.id
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              aria-label={tab.label}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {currentTab === 'salaries' && (
         <div className="space-y-6">
@@ -1484,7 +1519,7 @@ const RhModule: React.FC<RhModuleProps> = ({
             <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Référentiel des postes' : 'Postes reference'}</h2>
           </div>
           <div className="p-4">
-            <PostesListReadOnly />
+            <PostesListReadOnly compact={embedded} />
           </div>
         </section>
       )}
@@ -1506,7 +1541,14 @@ const RhModule: React.FC<RhModuleProps> = ({
             <h2 className="text-lg font-semibold text-slate-900">{fr ? 'Paie' : 'Payroll'}</h2>
           </div>
           <div className="p-4">
-            <PayrollTab users={users} employees={employees} />
+            <PayrollTab
+              users={users}
+              employees={employees}
+              periodStart={payrollPeriodStartStr}
+              periodEnd={payrollPeriodEndStr}
+              periodLabel={payrollPeriodBounds.label}
+              canWriteRh={hasPermission('rh', 'write')}
+            />
           </div>
         </section>
       )}
