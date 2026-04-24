@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { User, Role, Department, SENEGEL_RESERVED_ROLES } from '../types';
+import { User, Role, Department, Poste, SENEGEL_RESERVED_ROLES, roleRequiresApprovalWhenCreatedByAdmin, ROLES_ADMIN_CREATE_ACTIVE_DIRECTLY } from '../types';
 import OrganizationService from '../services/organizationService';
 import DataAdapter from '../services/dataAdapter';
 import UserModulePermissions from './UserModulePermissions';
@@ -17,6 +17,7 @@ import AccessDenied from './common/AccessDenied';
 import { DataService } from '../services/dataService';
 import AuthService from '../services/authService';
 import { getPrimaryOrganizationId, isSingleOrganizationTenantMode } from '../constants/platformTenant';
+import { listPostes } from '../services/postesService';
 
 const UserEditModal: React.FC<{
     user: User;
@@ -216,10 +217,20 @@ const CreateUserModal: React.FC<{
     const [orgChoices, setOrgChoices] = useState<{ id: string; name: string }[]>([]);
     const [sendInviteEmail, setSendInviteEmail] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [creationSuccess, setCreationSuccess] = useState<{ password: string; email: string } | null>(null);
+    const [creationSuccess, setCreationSuccess] = useState<{ password: string; email: string; flow: 'approval' | 'direct' } | null>(null);
+    const [posteId, setPosteId] = useState<string>('');
+    const [posteChoices, setPosteChoices] = useState<Poste[]>([]);
 
     const singleOrgMode = isSingleOrganizationTenantMode();
     const primaryOrgId = getPrimaryOrganizationId();
+
+    const orgForPostes = singleOrgMode
+        ? primaryOrgId
+        : currentRole === 'super_administrator'
+          ? String(orgId || currentOrganizationId || primaryOrgId)
+          : currentOrganizationId
+            ? String(currentOrganizationId)
+            : primaryOrgId;
 
     useEffect(() => {
         if (!open) return;
@@ -227,6 +238,7 @@ const CreateUserModal: React.FC<{
         setFullName('');
         setPhone('');
         setRole('student');
+        setPosteId('');
         setSendInviteEmail(true);
         setSubmitting(false);
         setCreationSuccess(null);
@@ -251,12 +263,23 @@ const CreateUserModal: React.FC<{
         return undefined;
     }, [open, currentRole, currentOrganizationId, singleOrgMode, primaryOrgId]);
 
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        void listPostes(orgForPostes).then((list) => {
+            if (!cancelled) setPosteChoices(list);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, orgForPostes]);
+
     if (!open) return null;
 
     const targetOrgId = singleOrgMode
         ? primaryOrgId
-        : currentRole === 'super_administrator' && orgId
-          ? orgId
+        : currentRole === 'super_administrator'
+          ? String(orgId || currentOrganizationId || primaryOrgId)
           : currentOrganizationId
             ? String(currentOrganizationId)
             : AuthService.getDefaultOrganizationId();
@@ -278,6 +301,11 @@ const CreateUserModal: React.FC<{
             showToast('Ce rôle est réservé SENEGEL.', 'error');
             return;
         }
+        if (posteChoices.length > 0 && !posteId.trim()) {
+            showToast('Veuillez sélectionner un poste pour ce collaborateur.', 'error');
+            return;
+        }
+        const needsApproval = roleRequiresApprovalWhenCreatedByAdmin(role);
         setSubmitting(true);
         try {
             const password = generateProvisionPassword();
@@ -288,6 +316,7 @@ const CreateUserModal: React.FC<{
                 phone_number: phone.trim() || undefined,
                 role,
                 organization_id: targetOrgId,
+                poste_id: posteId.trim() || undefined,
             });
             if (error) throw error instanceof Error ? error : new Error(String(error));
             if (!user) throw new Error('Compte non créé');
@@ -317,7 +346,7 @@ const CreateUserModal: React.FC<{
                 const list = await DataAdapter.getUsers();
                 onLocalUsersReplace(list);
             }
-            setCreationSuccess({ password, email: em });
+            setCreationSuccess({ password, email: em, flow: needsApproval ? 'approval' : 'direct' });
         } catch (err: any) {
             console.error('Création utilisateur:', err);
             showToast(err?.message || 'Erreur lors de la création du compte.', 'error');
@@ -341,6 +370,17 @@ const CreateUserModal: React.FC<{
                             Mot de passe provisoire pour <strong className="text-slate-800">{creationSuccess.email}</strong>. Copiez-le
                             maintenant : il ne sera plus affiché après fermeture.
                         </p>
+                        {creationSuccess.flow === 'approval' ? (
+                            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                                Le rôle demandé est soumis à <strong>approbation</strong> : le profil reste en attente jusqu’à validation par un
+                                administrateur (onglet approbations).
+                            </p>
+                        ) : (
+                            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                                Le compte est <strong>actif</strong> avec le rôle et le poste choisis (pas d’étape d’approbation pour ce type de
+                                profil).
+                            </p>
+                        )}
                     </div>
                     <div className="space-y-4 p-6">
                         <div>
@@ -390,9 +430,10 @@ const CreateUserModal: React.FC<{
                     <div className="border-b border-slate-200 p-6">
                         <h2 className="text-xl font-bold text-slate-900">Nouvel utilisateur</h2>
                         <p className="mt-1 text-sm text-slate-600">
-                            Création du compte, rôle demandé et rattachement organisation. Le profil sera{' '}
-                            <strong>en attente de validation</strong> comme pour une inscription publique. Un{' '}
-                            <strong>mot de passe provisoire</strong> est généré automatiquement et affiché une fois après la création.
+                            Choisissez l’organisation (si applicable), le <strong>rôle</strong> et le <strong>poste</strong>. Les rôles
+                            management, encadrement, formation (formateur, coach, etc.) et RH passent en <strong>approbation</strong> ; les
+                            profils standard (apprenant, entrepreneur, créatif, …) sont créés <strong>actifs</strong> tout de suite. Un mot de
+                            passe provisoire est affiché une fois après la création.
                         </p>
                     </div>
                     <div className="space-y-4 p-6">
@@ -445,9 +486,28 @@ const CreateUserModal: React.FC<{
                                 Mode organisation unique : le compte est rattaché à l’organisation principale de la plateforme.
                             </p>
                         )}
+                        <div
+                            className={`rounded-md border p-3 text-xs ${
+                                roleRequiresApprovalWhenCreatedByAdmin(role)
+                                    ? 'border-amber-200 bg-amber-50 text-amber-950'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                            }`}
+                        >
+                            {roleRequiresApprovalWhenCreatedByAdmin(role) ? (
+                                <>
+                                    <strong>Approbation requise</strong> pour ce rôle : le compte sera créé en attente jusqu’à validation dans
+                                    l’onglet approbations.
+                                </>
+                            ) : (
+                                <>
+                                    <strong>Création directe</strong> : ce rôle fait partie des profils standard (
+                                    {ROLES_ADMIN_CREATE_ACTIVE_DIRECTLY.length} types) — compte actif immédiatement après création.
+                                </>
+                            )}
+                        </div>
                         <div>
                             <label htmlFor="new-user-role" className="block text-sm font-medium text-slate-700">
-                                Rôle demandé (après validation)
+                                Rôle
                             </label>
                             <select
                                 id="new-user-role"
@@ -508,6 +568,30 @@ const CreateUserModal: React.FC<{
                                     </option>
                                 </optgroup>
                             </select>
+                        </div>
+                        <div>
+                            <label htmlFor="new-user-poste" className="block text-sm font-medium text-slate-700">
+                                Poste {posteChoices.length > 0 ? <span className="text-red-500">*</span> : <span className="text-slate-400">(optionnel)</span>}
+                            </label>
+                            <select
+                                id="new-user-poste"
+                                value={posteId}
+                                onChange={(e) => setPosteId(e.target.value)}
+                                className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                                disabled={posteChoices.length === 0}
+                            >
+                                <option value="">{posteChoices.length === 0 ? '— Aucun poste pour cette org —' : '— Sélectionner un poste —'}</option>
+                                {posteChoices.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {posteChoices.length === 0 && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Ajoutez des postes dans <strong>Paramètres → Postes</strong> pour les imposer à la création.
+                                </p>
+                            )}
                         </div>
                         <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
                             <input
@@ -925,6 +1009,17 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         }
     };
 
+    const formatApprovalError = (err: unknown): string => {
+        if (err instanceof Error && err.message.trim()) return err.message;
+        if (err && typeof err === 'object') {
+            const o = err as { message?: string; details?: string; hint?: string; code?: string };
+            const parts = [o.message, o.details, o.hint, o.code].filter(Boolean);
+            if (parts.length) return parts.join(' — ');
+        }
+        if (typeof err === 'string' && err.trim()) return err;
+        return 'Erreur inconnue (vérifiez la console et les politiques RLS sur profiles / role_approval_logs).';
+    };
+
     // Métriques
     const totalUsers = managedUsers.length;
     const activeUsers = managedUsers.filter(u => u.isActive !== false).length;
@@ -987,8 +1082,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 }
             }
         } catch (error) {
+            const msg = formatApprovalError(error);
             console.error('❌ Erreur approbation utilisateur:', error);
-            alert('Erreur lors de l’approbation. Veuillez réessayer.');
+            showToast(`Approbation impossible : ${msg}`, 'error');
+            alert(`Erreur lors de l’approbation.\n\n${msg}`);
         } finally {
             setProcessingRequestId(null);
         }
@@ -1022,8 +1119,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 showToast(`Demande rejetée pour ${pendingUser.name || pendingUser.email || 'l’utilisateur'}`, 'success');
             }
         } catch (error) {
+            const msg = formatApprovalError(error);
             console.error('❌ Erreur rejet utilisateur:', error);
-            alert('Erreur lors du rejet de la demande. Veuillez réessayer.');
+            showToast(`Rejet impossible : ${msg}`, 'error');
+            alert(`Erreur lors du rejet.\n\n${msg}`);
         } finally {
             setProcessingRequestId(null);
         }

@@ -154,12 +154,34 @@ export const SENEGEL_RESERVED_ROLES: Role[] = [
   'hr_business_partner', 'hr_officer', 'recruiter', 'payroll_specialist', 'team_lead',
 ];
 
-// Rôles nécessitant une validation manuelle par un Super Administrateur
+/**
+ * Création d’utilisateur depuis l’admin : ces rôles passent **actifs** tout de suite (rôle effectif = choix).
+ * Tout autre rôle (management, formateur, RH, etc.) → compte **pending** + `pending_role` jusqu’à approbation.
+ */
+export const ROLES_ADMIN_CREATE_ACTIVE_DIRECTLY: Role[] = [
+  'student',
+  'alumni',
+  'entrepreneur',
+  'employer',
+  'implementer',
+  'funder',
+  'publisher',
+  'editor',
+  'producer',
+  'artist',
+];
+
+export function roleRequiresApprovalWhenCreatedByAdmin(role: Role): boolean {
+  return !ROLES_ADMIN_CREATE_ACTIVE_DIRECTLY.includes(role);
+}
+
+/** Rôles soumis au workflow d’approbation (aligné sur `roleRequiresApprovalWhenCreatedByAdmin`). */
 export const ROLES_REQUIRING_APPROVAL: Role[] = [
   'super_administrator',
   'administrator',
   'manager',
   'supervisor',
+  'intern',
   'trainer',
   'coach',
   'facilitator',

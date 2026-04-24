@@ -2247,7 +2247,11 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     try {
       const result = await DataService.approveProfileRole({ profileId, approverId, comment, departmentId });
       if (result.error) throw result.error;
-      if (!result.data) return { user: null, departmentAssignmentFailed: false };
+      if (!result.data) {
+        throw new Error(
+          'Aucun profil renvoyé après approbation (vérifiez RLS sur `profiles` ou que l’UUID profil est bien celui de la table `profiles.id`).',
+        );
+      }
       return {
         user: this.mapProfileToUser(result.data),
         departmentAssignmentFailed: Boolean(result.departmentAssignmentFailed)

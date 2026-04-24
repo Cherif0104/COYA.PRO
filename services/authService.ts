@@ -1,5 +1,5 @@
 import { supabase, createEphemeralSupabaseClient } from './supabaseService';
-import { User, Role, ProfileStatus, ROLES_REQUIRING_APPROVAL } from '../types';
+import { User, Role, ProfileStatus, roleRequiresApprovalWhenCreatedByAdmin } from '../types';
 import { getPrimaryOrganizationId } from '../constants/platformTenant';
 const DEFAULT_ROLE: Role = 'student';
 const STORAGE_ROLE_MAP: Record<string, Role> = {
@@ -12,6 +12,11 @@ const UI_TO_STORAGE_ROLE: Record<Role, string> = {
   manager: 'manager',
   supervisor: 'supervisor',
   intern: 'intern',
+  hr_business_partner: 'hr_business_partner',
+  hr_officer: 'hr_officer',
+  recruiter: 'recruiter',
+  payroll_specialist: 'payroll_specialist',
+  team_lead: 'team_lead',
   trainer: 'trainer',
   coach: 'coach',
   facilitator: 'facilitator',
@@ -26,17 +31,18 @@ const UI_TO_STORAGE_ROLE: Record<Role, string> = {
   publisher: 'publisher',
   editor: 'editor',
   producer: 'producer',
-  artist: 'artist'
+  artist: 'artist',
 };
 
 const DB_ALLOWED_ROLES = new Set<string>([
   'super_administrator', 'administrator', 'manager', 'supervisor', 'intern',
+  'hr_business_partner', 'hr_officer', 'recruiter', 'payroll_specialist', 'team_lead',
   'trainer', 'coach', 'facilitator', 'mentor',
   'student', 'learner', 'alumni',
   'entrepreneur', 'employer', 'implementer', 'funder',
   'publisher', 'editor', 'producer', 'artist',
   'partner', 'supplier', 'service_provider',
-  'ai_coach', 'ai_developer', 'ai_analyst'
+  'ai_coach', 'ai_developer', 'ai_analyst',
 ]);
 
 const normalizeRoleForStorageValue = (role?: string | null): string => {
@@ -98,6 +104,8 @@ export interface SignUpData {
   phone_number?: string;
   role?: string;
   organization_id?: string; // optionnel: permet de choisir une organisation partenaire au signup
+  /** Référentiel postes (table `postes`) — optionnel si aucun poste défini pour l’org */
+  poste_id?: string | null;
 }
 
 export interface SignInData {
@@ -214,10 +222,13 @@ export class AuthService {
   static async signUpIsolated(data: SignUpData) {
     try {
       const uiRole = (data.role as Role) || DEFAULT_ROLE;
-      const storageRole = this.normalizeRoleForStorage(uiRole);
-      const targetStatus: ProfileStatus = 'pending';
-      const pendingRole = storageRole;
-      const storedBaseRole = this.normalizeRoleForStorage(DEFAULT_ROLE);
+      const storageRequested = this.normalizeRoleForStorage(uiRole);
+      const needsApproval = roleRequiresApprovalWhenCreatedByAdmin(uiRole);
+      const targetStatus: ProfileStatus = needsApproval ? 'pending' : 'active';
+      const pendingRole = needsApproval ? storageRequested : null;
+      const storedBaseRole = needsApproval
+        ? this.normalizeRoleForStorage(DEFAULT_ROLE)
+        : storageRequested;
       const metadataRole = this.mapStoredRoleToUi(storedBaseRole);
       const roleCheck = await this.checkRoleAvailability(uiRole);
       if (!roleCheck.available) {
@@ -225,6 +236,8 @@ export class AuthService {
         return { user: null, error };
       }
       const organizationId = (data.organization_id && data.organization_id.trim()) || getPrimaryOrganizationId();
+      const posteId =
+        data.poste_id && String(data.poste_id).trim() !== '' ? String(data.poste_id).trim() : null;
       const client = createEphemeralSupabaseClient();
 
       const { data: authData, error: authError } = await client.auth.signUp({
@@ -255,6 +268,7 @@ export class AuthService {
           organization_id: organizationId,
           status: targetStatus,
           pending_role: pendingRole,
+          poste_id: posteId,
         });
 
         if (profileError) {
