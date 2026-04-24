@@ -34,6 +34,7 @@ const PayrollMatrix: React.FC<PayrollMatrixProps> = ({
   const [previewByProfile, setPreviewByProfile] = useState<Map<string, payrollEngine.PayrollComputationForProfile>>(new Map());
   const [drawerSlip, setDrawerSlip] = useState<PaySlipWithLines | null>(null);
   const [drawerName, setDrawerName] = useState('');
+  const [organizationId, setOrganizationId] = useState<string>('');
 
   const displayNameForProfile = useCallback(
     (profileId: string) => {
@@ -47,6 +48,7 @@ const PayrollMatrix: React.FC<PayrollMatrixProps> = ({
     setLoading(true);
     try {
       const oid = await OrganizationService.getCurrentUserOrganizationId();
+      setOrganizationId(oid || '');
       const swl = await payrollService.listPaySlipsWithLinesForPeriod(periodStart, periodEnd, oid || undefined);
       setSlipsWithLines(swl);
       if (oid) {
@@ -134,7 +136,7 @@ const PayrollMatrix: React.FC<PayrollMatrixProps> = ({
     if (preview?.lines?.length) {
       setDrawerSlip({
         id: row.slip?.id || `preview-${row.profileId}`,
-        organizationId: row.slip?.organizationId || '',
+        organizationId: row.slip?.organizationId || organizationId || '',
         profileId: row.profileId,
         periodStart,
         periodEnd,
