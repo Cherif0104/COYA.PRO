@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import NexusFlowIcon from './icons/NexusFlowIcon';
 import { ModuleName } from '../types';
@@ -20,7 +20,9 @@ const NavLink: React.FC<{
   currentView: string;
   setView: (view: string) => void;
   dataTestId?: string;
-}> = ({ icon, label, viewName, currentView, setView, dataTestId }) => {
+  /** Plus de liens = lignes plus serrées */
+  compact?: boolean;
+}> = ({ icon, label, viewName, currentView, setView, dataTestId, compact = false }) => {
   const isActive = currentView === viewName;
   const isSubActive =
     (viewName === 'projects' && currentView.startsWith('project')) ||
@@ -34,13 +36,15 @@ const NavLink: React.FC<{
         e.preventDefault();
         setView(viewName);
       }}
-      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+      className={`flex items-center rounded-md px-2 transition-colors ${
+        compact ? 'gap-1.5 py-1 text-[11px] leading-tight' : 'gap-2 py-1.5 text-xs'
+      } ${
         isActive || isSubActive
           ? 'bg-white/15 text-white'
           : 'text-white/85 hover:bg-white/10 hover:text-white'
       }`}
     >
-      <i className={`${icon} w-5 text-center opacity-90`} />
+      <i className={`${icon} ${compact ? 'w-4 text-[11px]' : 'w-5'} shrink-0 text-center opacity-90`} />
       <span className="truncate">{label}</span>
     </a>
   );
@@ -81,6 +85,22 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
   );
   const allNavItems: { icon: string; labelKey: string; labelFallback: string; view: string }[] = [...mainItems];
 
+  const moduleCount = allNavItems.length;
+  /** Peu de modules : zone nav centrée verticalement, sans grand vide en bas. Beaucoup : liste haute + scroll, interligne resserré. */
+  const { centerBlock, gapClass, linkCompact } = useMemo(() => {
+    const n = moduleCount;
+    if (n === 0) {
+      return { centerBlock: true, gapClass: 'gap-1', linkCompact: false };
+    }
+    if (n <= 6) {
+      return { centerBlock: true, gapClass: 'gap-1', linkCompact: false };
+    }
+    if (n <= 10) {
+      return { centerBlock: true, gapClass: 'gap-0.5', linkCompact: true };
+    }
+    return { centerBlock: false, gapClass: n > 14 ? 'gap-0' : 'gap-0.5', linkCompact: true };
+  }, [moduleCount]);
+
   const settingsItem = { icon: 'fas fa-cog', label: t('settings'), view: 'settings' as ModuleName };
 
   const getLabel = (item: { labelKey: string; labelFallback: string }) => {
@@ -91,7 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-[13.5rem] flex-col bg-slate-800 text-white transition-transform duration-200 lg:relative lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 flex h-full min-h-0 w-[13.5rem] flex-col bg-slate-800 text-white transition-transform duration-200 lg:relative lg:translate-x-0 ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
@@ -101,29 +121,40 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
         <span className="truncate text-xs font-semibold text-white">{t('senegel_workflow_platform')}</span>
       </div>
 
-      {/* Liste unique, épurée */}
-      <nav className="flex-1 space-y-0 overflow-y-auto px-2 py-2">
-        {permissionsLoading ? (
-          <div className="flex justify-center py-10">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          </div>
-        ) : (
-          allNavItems.map((item) => (
-            <NavLink
-              key={item.view}
-              icon={item.icon}
-              label={getLabel(item)}
-              viewName={item.view}
-              currentView={currentView}
-              setView={setView}
-              dataTestId={`nav-${item.view}`}
-            />
-          ))
-        )}
-      </nav>
+      {/* Zone modules : centrée si peu d’entrées (pas de vide en bas), scroll + compact si beaucoup */}
+      <div
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+          centerBlock && !permissionsLoading ? 'justify-center' : ''
+        }`}
+      >
+        <nav
+          className={`flex min-h-0 w-full flex-col overflow-x-hidden overflow-y-auto px-2 ${
+            centerBlock ? 'max-h-full py-2' : 'flex-1 py-1'
+          } ${gapClass}`}
+        >
+          {permissionsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            </div>
+          ) : (
+            allNavItems.map((item) => (
+              <NavLink
+                key={item.view}
+                icon={item.icon}
+                label={getLabel(item)}
+                viewName={item.view}
+                currentView={currentView}
+                setView={setView}
+                dataTestId={`nav-${item.view}`}
+                compact={linkCompact}
+              />
+            ))
+          )}
+        </nav>
+      </div>
 
-      {/* Paramètres en bas */}
-      <div className="shrink-0 border-t border-white/10 px-3 py-3">
+      {/* Paramètres : pied fixe, compact */}
+      <div className="shrink-0 border-t border-white/10 px-2 py-2">
         {!permissionsLoading && canAccessModule(settingsItem.view) && (
           <NavLink
             icon={settingsItem.icon}
@@ -132,6 +163,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
             currentView={currentView}
             setView={setView}
             dataTestId="nav-settings"
+            compact={linkCompact}
           />
         )}
       </div>
