@@ -4,6 +4,8 @@
 export type Role = 
   // Rôles de gestion (accès Management Ecosysteia)
   'super_administrator' | 'administrator' | 'manager' | 'supervisor' | 'intern' |
+  // RH, paie, recrutement & pilotage d’équipe (étendu)
+  'hr_business_partner' | 'hr_officer' | 'recruiter' | 'payroll_specialist' | 'team_lead' |
   // Rôles d'accompagnement et de facilitation
   'trainer' | 'coach' | 'facilitator' | 'partner_facilitator' | 'mentor' |
   // Rôles académiques et jeunesse
@@ -107,12 +109,18 @@ export const RESOURCE_MANAGEMENT_ROLES: Role[] = [
   'administrator',
   'manager',
   'supervisor',
-  'trainer'
+  'trainer',
+  'hr_business_partner',
+  'hr_officer',
+  'recruiter',
+  'payroll_specialist',
+  'team_lead',
 ];
 
 // Tous les autres rôles n'ont pas accès au Management Ecosysteia
 export const NON_MANAGEMENT_ROLES: Role[] = [
   'trainer', 'coach', 'facilitator', 'partner_facilitator', 'mentor',
+  'hr_business_partner', 'hr_officer', 'recruiter', 'payroll_specialist', 'team_lead',
   'student', 'alumni',
   'entrepreneur', 'employer', 'implementer', 'funder',
   'publisher', 'editor', 'producer', 'artist'
@@ -135,7 +143,9 @@ export const SENEGEL_RESERVED_ROLES: Role[] = [
   // Gestion interne SENEGEL
   'super_administrator', 'administrator', 'manager', 'supervisor', 'intern',
   // Formation interne SENEGEL
-  'trainer', 'facilitator', 'coach', 'mentor'
+  'trainer', 'facilitator', 'coach', 'mentor',
+  // RH / paie / recrutement réservés organisation pilote
+  'hr_business_partner', 'hr_officer', 'recruiter', 'payroll_specialist', 'team_lead',
 ];
 
 // Rôles nécessitant une validation manuelle par un Super Administrateur
@@ -148,7 +158,26 @@ export const ROLES_REQUIRING_APPROVAL: Role[] = [
   'coach',
   'facilitator',
   'mentor',
-  'partner_facilitator'
+  'partner_facilitator',
+  'hr_business_partner',
+  'hr_officer',
+  'recruiter',
+  'payroll_specialist',
+  'team_lead',
+];
+
+/** Rôles pouvant voir l’équipe au niveau organisation dans Planning (grille + RH intégré) */
+export const PLANNING_ORG_SCOPE_ROLES: Role[] = [
+  'super_administrator',
+  'administrator',
+  'manager',
+  'supervisor',
+  'intern',
+  'hr_business_partner',
+  'hr_officer',
+  'recruiter',
+  'payroll_specialist',
+  'team_lead',
 ];
 
 export interface ModulePermission {
@@ -1069,6 +1098,17 @@ export interface Objective {
   updatedAt?: string;
 }
 
+/** Rattachement métier extensible (projet, programme, formation, émission, etc.) */
+export interface DataCollectionAssignment {
+  /** Clé stable : `project` | `programme` | `formation` ou clé personnalisée (ex. `emission`). */
+  categoryKey: string;
+  targetId: string;
+  /** Libellé affichage (évite une requête lors des listes). */
+  targetLabel?: string;
+  /** Uniquement si `categoryKey === 'project'` */
+  activityId?: string | null;
+}
+
 /** Campagne / stratégie de collecte de données (projet, programme ou formation globale – hors formation RH) */
 export interface DataCollection {
   id: string;
@@ -1076,6 +1116,11 @@ export interface DataCollection {
   name: string;
   description?: string;
   status?: 'draft' | 'active' | 'archived';
+  /**
+   * Rattachement générique (prioritaire si présent). Les champs `projectId` / `programmeId` / `formationId`
+   * restent synchronisés pour compatibilité (filtres, CRM, backfill).
+   */
+  assignment?: DataCollectionAssignment | null;
   /** Une seule affectation principale parmi les trois (validation métier côté UI) */
   projectId?: string | null;
   /**
@@ -1094,13 +1139,22 @@ export interface DataCollection {
   updatedAt: string;
 }
 
+/** Cycle commercial / relance (codification CRM — automatisations pilotées depuis Paramètres / webhooks). */
+export type CrmContactLifecycleStatus =
+  | 'Lead'
+  | 'Contacted'
+  | 'Unreachable'
+  | 'CallbackExpected'
+  | 'Prospect'
+  | 'Customer';
+
 export interface Contact {
   id: number | string;
   name: string;
   workEmail: string;
   personalEmail?: string;
   company: string;
-  status: 'Lead' | 'Contacted' | 'Prospect' | 'Customer';
+  status: CrmContactLifecycleStatus;
   avatar: string;
   officePhone?: string;
   mobilePhone?: string;

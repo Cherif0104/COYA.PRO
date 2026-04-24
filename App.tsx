@@ -48,6 +48,7 @@ import { supabase } from './services/supabaseService';
 import OrganizationManagement from './components/OrganizationManagement';
 import DepartmentManagement from './components/DepartmentManagement';
 import { useModulePermissions } from './hooks/useModulePermissions';
+import { viewNameToModuleName, getFirstAccessibleView } from './utils/viewModuleMap';
 import NotificationsPage from './components/NotificationsPage';
 import ActivityLogsPage from './components/ActivityLogsPage';
 import RhModule from './components/RhModule';
@@ -92,7 +93,10 @@ const App: React.FC = () => {
   const rawSavedView = typeof window !== 'undefined' ? localStorage.getItem('lastView') : null;
   const savedView = rawSavedView === 'collecte' ? 'crm_sales' : rawSavedView;
   // Valider que la vue sauvegardée est valide (pas login/signup)
-  const validInitialView = savedView && savedView !== 'login' && savedView !== 'signup' && savedView !== 'no_access' && savedView !== 'status_selector' ? savedView : 'dashboard';
+  const validInitialView =
+    savedView && savedView !== 'login' && savedView !== 'signup' && savedView !== 'no_access' && savedView !== 'status_selector'
+      ? savedView
+      : 'dashboard';
   const [currentView, setCurrentView] = useState(validInitialView);
   
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -908,16 +912,33 @@ const App: React.FC = () => {
     loadData();
   }, [isInitialized, user]); // Retirer isDataLoaded des dépendances
 
-  // Redirection automatique après authentification réussie
+  // Redirection après authentification : première vue autorisée (sinon écran d’attente)
   useEffect(() => {
-    if (!isInitialized || !user) return;
+    if (!isInitialized || !user || authLoading) return;
+    if (!(currentView === 'login' || currentView === 'signup')) return;
+    if (permissionsLoading) return;
 
-    if (currentView === 'login' || currentView === 'signup') {
-      logger.logNavigation(currentView, 'dashboard', 'User authenticated');
-      logger.info('auth', 'Redirigé vers dashboard après authentification');
-      handleSetView('dashboard');
+    const landing =
+      user.role === 'super_administrator' ? 'dashboard' : getFirstAccessibleView(canAccessModule);
+    logger.logNavigation(currentView, landing, 'User authenticated');
+    logger.info('auth', `Redirigé vers ${landing} après authentification`);
+    handleSetView(landing);
+  }, [user, isInitialized, currentView, handleSetView, permissionsLoading, canAccessModule, authLoading]);
+
+  // Garde : vue courante non autorisée → première vue accessible
+  useEffect(() => {
+    if (!isInitialized || !user || authLoading) return;
+    if (permissionsLoading) return;
+    if (currentView === 'login' || currentView === 'signup' || currentView === 'pending_access') return;
+    if (user.role === 'super_administrator') return;
+
+    const mod = viewNameToModuleName(currentView);
+    if (mod && !canAccessModule(mod)) {
+      const landing = getFirstAccessibleView(canAccessModule);
+      logger.logNavigation(currentView, landing, 'Module access denied — redirect');
+      handleSetView(landing);
     }
-  }, [user, isInitialized, currentView, handleSetView]);
+  }, [user, isInitialized, authLoading, permissionsLoading, currentView, canAccessModule, handleSetView]);
 
   // Protection de routes - rediriger vers login si non authentifié
   useEffect(() => {
@@ -3082,7 +3103,34 @@ const App: React.FC = () => {
           />
         );
       case 'planning':
-        return <Planning meetings={meetings} setView={handleSetView} />;
+        return (
+          <Planning
+            meetings={meetings}
+            setView={handleSetView}
+            rh={{
+              leaveRequests,
+              users,
+              jobs,
+              setJobs,
+              onAddLeaveRequest: handleAddLeaveRequest,
+              onUpdateLeaveRequest: handleUpdateLeaveRequest,
+              onUpdateLeaveDates: handleUpdateLeaveDates,
+              onDeleteLeaveRequest: handleDeleteLeaveRequest,
+              isLoading,
+              loadingOperation,
+            }}
+          />
+        );
+      case 'pending_access':
+        return (
+          <div className="max-w-lg mx-auto mt-12 rounded-xl border border-amber-200 bg-amber-50/95 px-6 py-8 text-center shadow-sm">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+              <i className="fas fa-user-clock text-lg" aria-hidden />
+            </div>
+            <h1 className="text-base font-bold text-slate-900">{t('pending_access_title')}</h1>
+            <p className="mt-2 text-sm text-slate-700 leading-relaxed">{t('pending_access_body')}</p>
+          </div>
+        );
       case 'settings':
         return (
           <Settings
@@ -3140,7 +3188,7 @@ const App: React.FC = () => {
           onScroll={handleMainScroll}
           className="flex-1 overflow-x-hidden overflow-y-auto bg-coya-bg"
         >
-          <div className="container mx-auto px-6 py-8 relative min-h-full">
+          <div className="container mx-auto px-4 py-4 relative min-h-full text-sm">
             {renderView()}
           </div>
         </main>

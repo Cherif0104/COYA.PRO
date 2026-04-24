@@ -841,15 +841,27 @@ const MessagerieModule: React.FC = () => {
     if (!organizationId || !activeThreadId || !currentProfileId || !directText.trim()) return;
     const content = directText.trim();
     const messageType: messagingService.ChatMessageType = linkRegex.test(content) ? 'link' : 'text';
-    const created = await messagingService.sendDirectMessage({
-      organizationId,
-      directThreadId: activeThreadId,
-      senderId: currentProfileId,
-      content,
-      messageType,
-    });
-    appendMessageUnique(setDirectMessages, created);
-    setDirectText('');
+    setError(null);
+    let created: messagingService.ChatMessage;
+    try {
+      created = await messagingService.sendDirectMessage({
+        organizationId,
+        directThreadId: activeThreadId,
+        senderId: currentProfileId,
+        content,
+        messageType,
+      });
+      appendMessageUnique(setDirectMessages, created);
+      setDirectText('');
+    } catch (e: any) {
+      console.error('sendDirectText', e);
+      setError(
+        isFr
+          ? `Envoi impossible : ${String(e?.message || e || 'erreur')}. Vérifiez les droits Supabase (RLS) sur chat_messages / chat_direct_members.`
+          : `Could not send: ${String(e?.message || e || 'error')}. Check Supabase RLS on chat_messages / chat_direct_members.`,
+      );
+      return;
+    }
     const recipients = activeThread?.memberIds || [];
     const mp: messagingMentions.MentionProfile[] = profiles.map((p) => ({
       id: p.id,
@@ -877,18 +889,26 @@ const MessagerieModule: React.FC = () => {
 
   const sendDirectVoice = async () => {
     if (!organizationId || !activeThreadId || !currentProfileId || !directVoiceFile) return;
-    const path = `messaging/direct/${activeThreadId}/${Date.now()}-${directVoiceFile.name}`;
-    const { data } = await FileService.uploadFile('documents', directVoiceFile, path);
-    const created = await messagingService.sendDirectMessage({
-      organizationId,
-      directThreadId: activeThreadId,
-      senderId: currentProfileId,
-      content: isFr ? 'Message vocal' : 'Voice message',
-      messageType: 'voice',
-      attachmentUrl: data?.url || null,
-    });
-    appendMessageUnique(setDirectMessages, created);
-    setDirectVoiceFile(null);
+    setError(null);
+    let created: messagingService.ChatMessage;
+    try {
+      const path = `messaging/direct/${activeThreadId}/${Date.now()}-${directVoiceFile.name}`;
+      const { data } = await FileService.uploadFile('documents', directVoiceFile, path);
+      created = await messagingService.sendDirectMessage({
+        organizationId,
+        directThreadId: activeThreadId,
+        senderId: currentProfileId,
+        content: isFr ? 'Message vocal' : 'Voice message',
+        messageType: 'voice',
+        attachmentUrl: data?.url || null,
+      });
+      appendMessageUnique(setDirectMessages, created);
+      setDirectVoiceFile(null);
+    } catch (e: any) {
+      console.error('sendDirectVoice', e);
+      setError(isFr ? `Envoi vocal impossible : ${String(e?.message || e)}` : `Voice send failed: ${String(e?.message || e)}`);
+      return;
+    }
     const recipients = activeThread?.memberIds || [];
     await notifyRecipients(
       recipients,
@@ -902,24 +922,33 @@ const MessagerieModule: React.FC = () => {
 
   const sendDirectFile = async () => {
     if (!organizationId || !activeThreadId || !currentProfileId || !directFile) return;
-    const path = `messaging/direct/${activeThreadId}/${Date.now()}-${directFile.name}`;
-    const { data } = await FileService.uploadFile('documents', directFile, path);
-    const created = await messagingService.sendDirectMessage({
-      organizationId,
-      directThreadId: activeThreadId,
-      senderId: currentProfileId,
-      content: `${isFr ? 'Fichier' : 'File'}: ${directFile.name}`,
-      messageType: 'link',
-      attachmentUrl: data?.url || null,
-    });
-    appendMessageUnique(setDirectMessages, created);
-    setDirectFile(null);
+    const fileName = directFile.name;
+    setError(null);
+    let created: messagingService.ChatMessage;
+    try {
+      const path = `messaging/direct/${activeThreadId}/${Date.now()}-${fileName}`;
+      const { data } = await FileService.uploadFile('documents', directFile, path);
+      created = await messagingService.sendDirectMessage({
+        organizationId,
+        directThreadId: activeThreadId,
+        senderId: currentProfileId,
+        content: `${isFr ? 'Fichier' : 'File'}: ${fileName}`,
+        messageType: 'link',
+        attachmentUrl: data?.url || null,
+      });
+      appendMessageUnique(setDirectMessages, created);
+      setDirectFile(null);
+    } catch (e: any) {
+      console.error('sendDirectFile', e);
+      setError(isFr ? `Envoi fichier impossible : ${String(e?.message || e)}` : `File send failed: ${String(e?.message || e)}`);
+      return;
+    }
     const recipients = activeThread?.memberIds || [];
     await notifyRecipients(
       recipients,
       'updated',
       isFr ? 'Nouveau fichier direct' : 'New direct file',
-      `${getDisplayName(currentProfileId)} — ${directFile.name}`,
+      `${getDisplayName(currentProfileId)} — ${fileName}`,
       { threadId: activeThreadId, messageId: created.id, kind: 'direct_file' },
       'info',
     );

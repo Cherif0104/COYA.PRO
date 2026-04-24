@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useModulePermissions } from '../hooks/useModulePermissions';
 import { Department, ModuleName } from '../types';
 import OrganizationService from '../services/organizationService';
 import DepartmentService from '../services/departmentService';
+import { DataService } from '../services/dataService';
 import AccessDenied from './common/AccessDenied';
 import { moduleDisplayNames } from './UserModulePermissions';
 
@@ -30,6 +31,12 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [membersModalDept, setMembersModalDept] = useState<Department | null>(null);
+  const [orgProfileOptions, setOrgProfileOptions] = useState<Array<{ userId: string; profileId: string; label: string }>>([]);
+  const [memberIdsInDept, setMemberIdsInDept] = useState<string[]>([]);
+  const [memberSelection, setMemberSelection] = useState<string[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersSaving, setMembersSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -47,6 +54,8 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
       loadOrganizationAndDepartments();
     }
   }, [canReadModule]);
+
+  const REQUIRED_DEPT_MODULE_COUNT = 2;
 
   const loadOrganizationAndDepartments = async () => {
     try {
@@ -67,6 +76,76 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
     }
   };
 
+  const validateModuleSlugs = (): boolean => {
+    if (formData.moduleSlugs.length !== REQUIRED_DEPT_MODULE_COUNT) {
+      alert(
+        `Chaque département doit avoir exactement ${REQUIRED_DEPT_MODULE_COUNT} modules actifs (politique plateforme). Sélectionnez ${REQUIRED_DEPT_MODULE_COUNT} cases.`
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const openMembersModal = useCallback(
+    async (dept: Department) => {
+      if (!canWriteModule || !organizationId) return;
+      setMembersModalDept(dept);
+      setMembersLoading(true);
+      try {
+        const [{ data: profiles }, ids] = await Promise.all([
+          DataService.getProfiles(),
+          DepartmentService.getUserIdsInDepartment(dept.id),
+        ]);
+        const inOrg = (profiles || []).filter((p: any) => String(p.organization_id || '') === String(organizationId));
+        setOrgProfileOptions(
+          inOrg.map((p: any) => ({
+            userId: String(p.user_id || ''),
+            profileId: String(p.id || ''),
+            label: String(p.full_name || p.email || p.user_id || ''),
+          })).filter((o) => o.userId),
+        );
+        setMemberIdsInDept(ids);
+        setMemberSelection([...ids]);
+      } catch (e) {
+        console.error(e);
+        alert('Erreur chargement des membres');
+      } finally {
+        setMembersLoading(false);
+      }
+    },
+    [canWriteModule, organizationId],
+  );
+
+  const saveMembersModal = async () => {
+    if (!membersModalDept || !canWriteModule) return;
+    setMembersSaving(true);
+    try {
+      const before = new Set(memberIdsInDept);
+      const after = new Set(memberSelection);
+      const toAdd = memberSelection.filter((uid) => !before.has(uid));
+      const toRemove = memberIdsInDept.filter((uid) => !after.has(uid));
+      for (const uid of toAdd) {
+        await DepartmentService.assignUserToDepartment(uid, membersModalDept.id);
+      }
+      for (const uid of toRemove) {
+        await DepartmentService.removeUserFromDepartment(uid, membersModalDept.id);
+      }
+      const next = await DepartmentService.getUserIdsInDepartment(membersModalDept.id);
+      setMemberIdsInDept(next);
+      setMembersModalDept(null);
+      try {
+        window.dispatchEvent(new Event('permissions-reload'));
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erreur enregistrement des membres');
+    } finally {
+      setMembersSaving(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!canWriteModule || !organizationId) return;
     try {
@@ -74,6 +153,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
         alert('Le nom et le slug sont obligatoires');
         return;
       }
+      if (!validateModuleSlugs()) return;
       await DepartmentService.createDepartment(organizationId, {
         name: formData.name,
         slug: formData.slug,
@@ -93,6 +173,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
   const handleUpdate = async () => {
     if (!canWriteModule || !editingDept) return;
     try {
+      if (!validateModuleSlugs()) return;
       await DepartmentService.updateDepartment(editingDept.id, {
         name: formData.name,
         slug: formData.slug,
@@ -160,36 +241,28 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Départements</h1>
-              <p className="text-emerald-50 text-sm">
-                Gérez les départements de votre organisation et les modules autorisés
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (!canWriteModule) return;
-                setEditingDept(null);
-                resetForm();
-                setShowCreateModal(true);
-              }}
-              disabled={!canWriteModule || !organizationId}
-              className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
-                canWriteModule && organizationId ? 'hover:bg-emerald-50' : 'opacity-60 cursor-not-allowed'
-              }`}
-            >
-              <i className="fas fa-plus mr-2"></i>
-              Nouveau Département
-            </button>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-sm text-slate-600">
+          Chaque département active exactement <strong>{REQUIRED_DEPT_MODULE_COUNT} modules</strong>. Un utilisateur doit être affecté à un département pour bénéficier des modules de ce département (en plus des droits individuels configurés par le super administrateur).
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            if (!canWriteModule) return;
+            setEditingDept(null);
+            resetForm();
+            setShowCreateModal(true);
+          }}
+          disabled={!canWriteModule || !organizationId}
+          className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <i className="fas fa-plus mr-2" aria-hidden />
+          Nouveau département
+        </button>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {!organizationId ? (
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
             <p className="text-gray-600">Aucune organisation associée à votre compte.</p>
@@ -215,7 +288,9 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordre</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Modules</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                  {canWriteModule && <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                  {canWriteModule && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -235,9 +310,20 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
                       </span>
                     </td>
                     {canWriteModule && (
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <button onClick={() => openEditModal(dept)} className="text-emerald-600 hover:text-emerald-800 mr-4">Modifier</button>
-                        <button onClick={() => setDeleteConfirm(dept.id)} className="text-red-600 hover:text-red-800">Supprimer</button>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => void openMembersModal(dept)}
+                          className="text-slate-700 hover:text-slate-900 font-medium"
+                        >
+                          Membres
+                        </button>
+                        <button onClick={() => openEditModal(dept)} className="text-emerald-600 hover:text-emerald-800">
+                          Modifier
+                        </button>
+                        <button onClick={() => setDeleteConfirm(dept.id)} className="text-red-600 hover:text-red-800">
+                          Supprimer
+                        </button>
                       </td>
                     )}
                   </tr>
@@ -305,7 +391,12 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Modules autorisés pour ce département</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Modules autorisés pour ce département (exactement {REQUIRED_DEPT_MODULE_COUNT})
+                </label>
+                <p className="text-xs text-amber-800 mb-2">
+                  Sélection obligatoire : {REQUIRED_DEPT_MODULE_COUNT} modules — sinon la sauvegarde est refusée.
+                </p>
                 <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {ALL_MODULE_NAMES.map(slug => (
                     <label key={slug} className="flex items-center gap-2 cursor-pointer">
@@ -347,6 +438,66 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ embeddedInU
             <div className="flex justify-end gap-3">
               <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 border border-gray-300 rounded-lg">Annuler</button>
               <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {membersModalDept && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Membres — {membersModalDept.name}</h2>
+              <p className="text-xs text-gray-600 mt-1">
+                Cochez les comptes (auth) rattachés à l’organisation. Sans affectation ici, l’utilisateur ne reçoit pas les modules de ce département.
+              </p>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {membersLoading ? (
+                <p className="text-sm text-gray-500">Chargement…</p>
+              ) : (
+                <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {orgProfileOptions.map((o) => {
+                    const checked = memberSelection.includes(o.userId);
+                    return (
+                      <li key={o.userId}>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-emerald-600"
+                            checked={checked}
+                            onChange={() => {
+                              setMemberSelection((prev) =>
+                                checked ? prev.filter((id) => id !== o.userId) : [...prev, o.userId]
+                              );
+                            }}
+                          />
+                          <span className="truncate">{o.label}</span>
+                          <span className="text-xs text-gray-400 shrink-0">{o.userId.slice(0, 8)}…</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                onClick={() => setMembersModalDept(null)}
+                disabled={membersSaving}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                onClick={() => void saveMembersModal()}
+                disabled={membersSaving || membersLoading}
+              >
+                {membersSaving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
             </div>
           </div>
         </div>

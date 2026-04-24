@@ -6,7 +6,7 @@ import OrganizationService from './organizationService';
 import { supabase } from './supabaseService';
 import { handleOptionalTableError } from './optionalTableGuard';
 import { mockCourses, mockProjects, mockGoals } from '../constants/data';
-import { Course, CourseAudienceSegment, Job, Project, Task, Objective, KeyResult, Contact, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot, PresenceStatusEvent, HrAttendancePolicy } from '../types';
+import { Course, CourseAudienceSegment, Job, Project, Task, Objective, KeyResult, Contact, CrmContactLifecycleStatus, Document, User, TimeLog, LeaveRequest, Invoice, Expense, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, Role, CurrencyCode, PresenceSession, Employee, ProjectAttachment, ProjectModuleSettings, PlanningSlot, PresenceStatusEvent, HrAttendancePolicy } from '../types';
 
 // Service adaptateur pour migration progressive
 export class DataAdapter {
@@ -47,14 +47,17 @@ export class DataAdapter {
   }
 
   // Helper pour mapper les statuts de contact
-  private static mapContactStatus(status: string | undefined): 'Lead' | 'Contacted' | 'Prospect' | 'Customer' {
-    const statusMap: Record<string, 'Lead' | 'Contacted' | 'Prospect' | 'Customer'> = {
-      'lead': 'Lead',
-      'active': 'Contacted',
-      'inactive': 'Contacted',
-      'customer': 'Customer',
-      'prospect': 'Prospect',
-      'contacted': 'Contacted'
+  private static mapContactStatus(status: string | undefined): CrmContactLifecycleStatus {
+    const statusMap: Record<string, CrmContactLifecycleStatus> = {
+      lead: 'Lead',
+      active: 'Contacted',
+      inactive: 'Contacted',
+      customer: 'Customer',
+      prospect: 'Prospect',
+      contacted: 'Contacted',
+      unreachable: 'Unreachable',
+      callback_expected: 'CallbackExpected',
+      callbackexpected: 'CallbackExpected',
     };
     return statusMap[status?.toLowerCase() || ''] || 'Lead';
   }
@@ -2552,6 +2555,7 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
 
   static async updatePlanningSlot(id: string, updates: Partial<PlanningSlot>): Promise<PlanningSlot | null> {
     const payload: Record<string, unknown> = {};
+    if (updates.userId !== undefined) payload.userId = updates.userId;
     if (updates.slotDate !== undefined) payload.slotDate = updates.slotDate;
     if (updates.slotType !== undefined) payload.slotType = updates.slotType;
     if (updates.startTime !== undefined) payload.startTime = updates.startTime;
@@ -2567,6 +2571,37 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
   static async deletePlanningSlot(id: string): Promise<void> {
     const result = await DataService.deletePlanningSlot(id);
     if (result.error) throw result.error;
+  }
+
+  // ===== WFM: OPEN SHIFTS / SWAPS =====
+  static async getOpenShifts(params: { dateFrom?: string; dateTo?: string; status?: string }): Promise<any[]> {
+    const { data, error } = await DataService.getOpenShifts(params);
+    if (error) return [];
+    return data || [];
+  }
+
+  static async takeOpenShift(openShiftId: string, assigneeUserId: string): Promise<any | null> {
+    const { data, error } = await DataService.takeOpenShift(openShiftId, assigneeUserId);
+    if (error || !data) return null;
+    return data;
+  }
+
+  static async getSwapRequests(params: { status?: string; dateFrom?: string; dateTo?: string }): Promise<any[]> {
+    const { data, error } = await DataService.getSwapRequests(params);
+    if (error) return [];
+    return data || [];
+  }
+
+  static async createSwapRequest(payload: any): Promise<any | null> {
+    const { data, error } = await DataService.createSwapRequest(payload);
+    if (error || !data) return null;
+    return data;
+  }
+
+  static async updateSwapRequest(id: string, updates: any): Promise<any | null> {
+    const { data, error } = await DataService.updateSwapRequest(id, updates);
+    if (error || !data) return null;
+    return data;
   }
 
   static async deleteProjectReport(reportId: string) {

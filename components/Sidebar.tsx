@@ -34,7 +34,7 @@ const NavLink: React.FC<{
         e.preventDefault();
         setView(viewName);
       }}
-      className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors ${
+      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
         isActive || isSubActive
           ? 'bg-white/15 text-white'
           : 'text-white/85 hover:bg-white/10 hover:text-white'
@@ -91,18 +91,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, isOpen, canAcce
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-56 flex-col bg-slate-800 text-white transition-transform duration-200 lg:relative lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 flex w-[13.5rem] flex-col bg-slate-800 text-white transition-transform duration-200 lg:relative lg:translate-x-0 ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
       {/* En-tête minimaliste */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 px-4">
-        <NexusFlowIcon className="h-8 w-auto opacity-95" />
-        <span className="truncate text-sm font-semibold text-white">{t('senegel_workflow_platform')}</span>
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 px-3">
+        <NexusFlowIcon className="h-7 w-auto opacity-95" />
+        <span className="truncate text-xs font-semibold text-white">{t('senegel_workflow_platform')}</span>
       </div>
 
       {/* Liste unique, épurée */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-0 overflow-y-auto px-2 py-2">
         {permissionsLoading ? (
           <div className="flex justify-center py-10">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />

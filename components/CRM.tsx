@@ -16,12 +16,19 @@ import CollecteModule from './CollecteModule';
 import CrmWebhookSettingsCard from './CrmWebhookSettingsCard';
 import CRMContactDetailPage from './CRMContactDetailPage';
 
-const statusStyles = {
-    'Lead': 'bg-blue-100 text-blue-800',
-    'Contacted': 'bg-yellow-100 text-yellow-800',
-    'Prospect': 'bg-purple-100 text-purple-800',
-    'Customer': 'bg-green-100 text-green-800',
+const statusStyles: Record<Contact['status'], string> = {
+    Lead: 'bg-blue-100 text-blue-800',
+    Contacted: 'bg-yellow-100 text-yellow-800',
+    Unreachable: 'bg-orange-100 text-orange-900',
+    CallbackExpected: 'bg-indigo-100 text-indigo-900',
+    Prospect: 'bg-purple-100 text-purple-800',
+    Customer: 'bg-green-100 text-green-800',
 };
+
+function statusTranslationKey(status: Contact['status']): keyof Translation {
+    if (status === 'CallbackExpected') return 'callback_expected';
+    return status.toLowerCase() as keyof Translation;
+}
 
 const ContactFormModal: React.FC<{
     contact: Contact | null;
@@ -136,6 +143,8 @@ const ContactFormModal: React.FC<{
                             <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
                                 <option value="Lead">{t('lead')}</option>
                                 <option value="Contacted">{t('contacted')}</option>
+                                <option value="Unreachable">{t('unreachable')}</option>
+                                <option value="CallbackExpected">{t('callback_expected')}</option>
                                 <option value="Prospect">{t('prospect')}</option>
                                 <option value="Customer">{t('customer')}</option>
                             </select>
@@ -278,6 +287,8 @@ const CRM: React.FC<CRMProps> = ({
     const [showCollecteEnrichModal, setShowCollecteEnrichModal] = useState(false);
     const [collecteEnrichCandidates, setCollecteEnrichCandidates] = useState<DataCollection[]>([]);
     const [collecteOrgId, setCollecteOrgId] = useState<string | null>(null);
+    const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string }>>([]);
+    const [orgFilter, setOrgFilter] = useState<string>('__current__');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -320,7 +331,22 @@ const CRM: React.FC<CRMProps> = ({
         [user]
     );
     
-    const pipelineStatuses: Contact['status'][] = ['Lead', 'Contacted', 'Prospect', 'Customer'];
+    const pipelineStatuses: Contact['status'][] = [
+        'Lead',
+        'Contacted',
+        'Unreachable',
+        'CallbackExpected',
+        'Prospect',
+        'Customer',
+    ];
+
+    const setContactStatusQuick = useCallback(
+        (contact: Contact, status: Contact['status']) => {
+            if (!canManageContact(contact)) return;
+            void onUpdateContact({ ...contact, status });
+        },
+        [canManageContact, onUpdateContact],
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -336,6 +362,30 @@ const CRM: React.FC<CRMProps> = ({
     useEffect(() => {
         OrganizationService.getCurrentUserOrganizationId().then(setCollecteOrgId).catch(() => setCollecteOrgId(null));
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const currentOrgId = await OrganizationService.getCurrentUserOrganizationId();
+                if (cancelled) return;
+                if (user?.role === 'super_administrator') {
+                    const all = await OrganizationService.getAllOrganizations();
+                    if (cancelled) return;
+                    setOrgOptions(all.map((o) => ({ id: String(o.id), name: o.name })));
+                    if (currentOrgId) setOrgFilter(currentOrgId);
+                } else if (currentOrgId) {
+                    setOrgOptions([{ id: String(currentOrgId), name: 'Organisation courante' }]);
+                    setOrgFilter(String(currentOrgId));
+                }
+            } catch {
+                /* ignore */
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.role]);
 
     useEffect(() => {
         try {
@@ -437,6 +487,10 @@ const CRM: React.FC<CRMProps> = ({
 
     const filteredContacts = useMemo(() => {
         let filtered = contacts;
+
+        if (orgFilter && orgFilter !== '__all__' && orgFilter !== '__current__') {
+            filtered = filtered.filter((c) => String(c.organizationId || '') === String(orgFilter));
+        }
         
         if (searchTerm) {
             filtered = filtered.filter(contact =>
@@ -463,6 +517,7 @@ const CRM: React.FC<CRMProps> = ({
         return filtered;
     }, [
         contacts,
+        orgFilter,
         searchTerm,
         statusFilter,
         categoryFilter,
@@ -613,6 +668,23 @@ const CRM: React.FC<CRMProps> = ({
                             </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            {user?.role === 'super_administrator' && (
+                                <div className="inline-flex items-center gap-2 px-2 py-1.5 rounded-lg border border-slate-200 bg-white">
+                                    <i className="fas fa-building text-slate-500 text-[11px]" aria-hidden />
+                                    <select
+                                        value={orgFilter}
+                                        onChange={(e) => setOrgFilter(e.target.value)}
+                                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none"
+                                    >
+                                        <option value="__all__">{language === Language.FR ? 'Toutes' : 'All'}</option>
+                                        {orgOptions.map((o) => (
+                                            <option key={o.id} value={o.id}>
+                                                {o.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             {canManage && (
                                 <button
                                     type="button"
@@ -621,6 +693,25 @@ const CRM: React.FC<CRMProps> = ({
                                 >
                                     <i className="fas fa-database text-[11px]" />
                                     {t('crm_enrich_from_collecte')}
+                                </button>
+                            )}
+                            {canManage && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        try {
+                                            // Si un filtre collecte est actif, on le réutilise comme présélection.
+                                            const preset = sessionStorage.getItem(NAV_SESSION_CRM_FILTER_SOURCE_COLLECTION_ID);
+                                            if (preset) sessionStorage.setItem(NAV_SESSION_COLLECTE_PRESET_COLLECTION_ID, preset);
+                                        } catch {
+                                            /* ignore */
+                                        }
+                                        setContactSubView('collecte');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-semibold hover:bg-emerald-100"
+                                >
+                                    <i className="fas fa-clipboard-check text-[11px]" />
+                                    {t('crm_tab_collecte')}
                                 </button>
                             )}
                             {canManage && (
@@ -727,6 +818,13 @@ const CRM: React.FC<CRMProps> = ({
                 </div>
             </div>
 
+            {canManage && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950 leading-snug">
+                    <i className="fas fa-route mr-1.5 opacity-80" aria-hidden />
+                    {t('crm_codification_hint')}
+                </div>
+            )}
+
                 <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4">
                     <div className="flex flex-col lg:flex-row lg:items-center gap-3">
                         <div className="flex-1 min-w-0">
@@ -750,6 +848,8 @@ const CRM: React.FC<CRMProps> = ({
                                 <option value="all">Tous les statuts</option>
                                 <option value="Lead">Lead</option>
                                 <option value="Contacted">Contacté</option>
+                                <option value="Unreachable">Non joignable</option>
+                                <option value="CallbackExpected">Recontact attendu</option>
                                 <option value="Prospect">Prospect</option>
                                 <option value="Customer">Client</option>
                             </select>
@@ -833,8 +933,42 @@ const CRM: React.FC<CRMProps> = ({
                                             </td>
                                             <td className="px-3 py-2 align-middle">
                                                 <span className={`inline-flex px-2 py-0.5 font-medium rounded-md text-[11px] ${statusStyles[contact.status]}`}>
-                                                    {t(contact.status.toLowerCase())}
+                                                    {t(statusTranslationKey(contact.status))}
                                                 </span>
+                                                {canManageContact(contact) ? (
+                                                    <div className="mt-1.5 flex flex-wrap gap-0.5">
+                                                        <button
+                                                            type="button"
+                                                            className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setContactStatusQuick(contact, 'Contacted');
+                                                            }}
+                                                        >
+                                                            {t('crm_btn_contacted')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setContactStatusQuick(contact, 'Unreachable');
+                                                            }}
+                                                        >
+                                                            {t('crm_btn_unreachable')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setContactStatusQuick(contact, 'CallbackExpected');
+                                                            }}
+                                                        >
+                                                            {t('crm_btn_callback')}
+                                                        </button>
+                                                    </div>
+                                                ) : null}
                                             </td>
                                             <td className="px-3 py-2 align-middle">
                                                 {contact.sourceCollectionId ? (
@@ -908,7 +1042,7 @@ const CRM: React.FC<CRMProps> = ({
             )}
 
             {contactSubView === 'pipeline' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-2">
                     {pipelineStatuses.map(status => (
                         <div 
                             key={status} 
@@ -919,7 +1053,7 @@ const CRM: React.FC<CRMProps> = ({
                         >
                                 <div className="flex items-center justify-between mb-2 gap-2">
                                     <h3 className={`font-semibold text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-md ${statusStyles[status]}`}>
-                                        {t(status.toLowerCase())}
+                                        {t(statusTranslationKey(status))}
                                     </h3>
                                     <span className="bg-white text-slate-600 text-[11px] font-bold px-1.5 py-0.5 rounded-md border border-slate-200 tabular-nums">
                                         {filteredContacts.filter(c => c.status === status).length}

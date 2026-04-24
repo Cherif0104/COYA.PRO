@@ -32,6 +32,8 @@ function isDuplicateNotificationInsert(error: unknown): boolean {
 const CONTACT_UI_STATUS_TO_DB: Record<string, string> = {
   Lead: 'lead',
   Contacted: 'contacted',
+  Unreachable: 'unreachable',
+  CallbackExpected: 'callback_expected',
   Prospect: 'prospect',
   Customer: 'customer',
 };
@@ -3208,6 +3210,7 @@ export class DataService {
   }
 
   static async updatePlanningSlot(id: string, updates: Partial<{
+    userId: string;
     slotDate: string;
     slotType: string;
     startTime: string | null;
@@ -3219,6 +3222,7 @@ export class DataService {
     if (isTableUnavailable('planning_slots')) return { data: null, error: null };
     try {
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.userId !== undefined) row.user_id = updates.userId;
       if (updates.slotDate !== undefined) row.slot_date = updates.slotDate;
       if (updates.slotType !== undefined) row.slot_type = updates.slotType;
       if (updates.startTime !== undefined) row.start_time = updates.startTime;
@@ -3263,6 +3267,120 @@ export class DataService {
         return { error: null };
       }
       return { error };
+    }
+  }
+
+  // ===== WFM: OPEN SHIFTS / SWAPS / CONFLICTS (Phase Planning++) =====
+  static async getOpenShifts(params: { dateFrom?: string; dateTo?: string; status?: string }) {
+    if (isTableUnavailable('wfm_open_shifts')) return { data: [], error: null };
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) return { data: [], error: null };
+      let query = supabase
+        .from('wfm_open_shifts')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('slot_date', { ascending: true })
+        .order('start_time', { ascending: true, nullsFirst: false });
+      if (params.status) query = query.eq('status', params.status);
+      if (params.dateFrom) query = query.gte('slot_date', params.dateFrom);
+      if (params.dateTo) query = query.lte('slot_date', params.dateTo);
+      const { data, error } = await query;
+      if (error) {
+        if (handleOptionalTableError(error, 'wfm_open_shifts', 'DataService.getOpenShifts')) return { data: [], error: null };
+        throw error;
+      }
+      return { data: data || [], error: null };
+    } catch (error) {
+      if (handleOptionalTableError(error, 'wfm_open_shifts', 'DataService.getOpenShifts.catch')) return { data: [], error: null };
+      return { data: [], error };
+    }
+  }
+
+  static async takeOpenShift(openShiftId: string, assigneeUserId: string) {
+    if (isTableUnavailable('wfm_open_shifts')) return { data: null, error: null };
+    try {
+      const { data, error } = await supabase
+        .from('wfm_open_shifts')
+        .update({
+          status: 'taken',
+          assigned_user_id: assigneeUserId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', openShiftId)
+        .select()
+        .single();
+      if (error) {
+        if (handleOptionalTableError(error, 'wfm_open_shifts', 'DataService.takeOpenShift')) return { data: null, error: null };
+        throw error;
+      }
+      return { data, error: null };
+    } catch (error) {
+      if (handleOptionalTableError(error, 'wfm_open_shifts', 'DataService.takeOpenShift.catch')) return { data: null, error: null };
+      return { data: null, error };
+    }
+  }
+
+  static async getSwapRequests(params: { status?: string; dateFrom?: string; dateTo?: string }) {
+    if (isTableUnavailable('wfm_swap_requests')) return { data: [], error: null };
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) return { data: [], error: null };
+      let query = supabase
+        .from('wfm_swap_requests')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false });
+      if (params.status) query = query.eq('status', params.status);
+      if (params.dateFrom) query = query.gte('slot_date', params.dateFrom);
+      if (params.dateTo) query = query.lte('slot_date', params.dateTo);
+      const { data, error } = await query;
+      if (error) {
+        if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.getSwapRequests')) return { data: [], error: null };
+        throw error;
+      }
+      return { data: data || [], error: null };
+    } catch (error) {
+      if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.getSwapRequests.catch')) return { data: [], error: null };
+      return { data: [], error };
+    }
+  }
+
+  static async createSwapRequest(payload: any) {
+    if (isTableUnavailable('wfm_swap_requests')) return { data: null, error: null };
+    try {
+      const orgId = await this.getCurrentUserOrganizationId();
+      if (!orgId) throw new Error('Organization not found');
+      const row = { ...payload, organization_id: orgId, created_at: new Date().toISOString() };
+      const { data, error } = await supabase.from('wfm_swap_requests').insert(row).select().single();
+      if (error) {
+        if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.createSwapRequest')) return { data: null, error: null };
+        throw error;
+      }
+      return { data, error: null };
+    } catch (error) {
+      if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.createSwapRequest.catch')) return { data: null, error: null };
+      return { data: null, error };
+    }
+  }
+
+  static async updateSwapRequest(id: string, updates: any) {
+    if (isTableUnavailable('wfm_swap_requests')) return { data: null, error: null };
+    try {
+      const { data, error } = await supabase
+        .from('wfm_swap_requests')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) {
+        if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.updateSwapRequest')) return { data: null, error: null };
+        throw error;
+      }
+      return { data, error: null };
+    } catch (error) {
+      if (handleOptionalTableError(error, 'wfm_swap_requests', 'DataService.updateSwapRequest.catch')) return { data: null, error: null };
+      return { data: null, error };
     }
   }
 

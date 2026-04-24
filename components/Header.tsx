@@ -30,8 +30,8 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar, setView, onNotificationN
 
   return (
     <header className="bg-coya-card shadow-coya sticky top-0 z-40">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
             <button onClick={toggleSidebar} className="text-coya-text-muted lg:hidden mr-4 focus:outline-none hover:text-coya-primary">
                 <i className="fas fa-bars fa-lg"></i>

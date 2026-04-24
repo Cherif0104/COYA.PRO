@@ -42,6 +42,7 @@ const STANDARD_MODULES: ModuleName[] = [
   'analytics',
   'talent_analytics',
   'rh',
+  'postes_management',
   'trinite',
   'programme',
   'tech',
@@ -50,6 +51,8 @@ const STANDARD_MODULES: ModuleName[] = [
   'parc_auto',
   'ticket_it',
   'messagerie',
+  'qualite',
+  'conseil',
 ];
 
 /** Administration : paramétrage / droits (Paramètres) ; désactivé par défaut */
@@ -74,19 +77,22 @@ const applyState = (
 
 const createBasePermissions = (): Record<ModuleName, PermissionState> => {
   const base: Partial<Record<ModuleName, PermissionState>> = {};
-
-  applyState(base as Record<ModuleName, PermissionState>, STANDARD_MODULES, STANDARD_ALLOW);
-  applyState(base as Record<ModuleName, PermissionState>, MANAGEMENT_MODULES, DISABLED);
-
+  const all = [...STANDARD_MODULES, ...MANAGEMENT_MODULES] as ModuleName[];
+  applyState(base as Record<ModuleName, PermissionState>, all, DISABLED);
   return base as Record<ModuleName, PermissionState>;
 };
 
+/**
+ * Droits « théoriques » avant surcharges Supabase (`user_module_permissions`) et filtre départements.
+ * Hors super-admin : tout refusé par défaut — l’accès ne vient que des droits configurés + départements.
+ */
 export const getDefaultPermissionsForRole = (
   role: Role
 ): Record<ModuleName, PermissionState> => {
   const permissions = createBasePermissions();
 
   if (role === 'super_administrator') {
+    applyState(permissions, STANDARD_MODULES, STANDARD_ALLOW);
     applyState(permissions, MANAGEMENT_MODULES, STANDARD_ALLOW);
   }
 
