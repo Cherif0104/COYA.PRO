@@ -11,7 +11,9 @@ export default defineConfig({
   server: {
     port: 5174,
     host: true,
-    strictPort: false
+    strictPort: false,
+    /** Client HMR sur le même port que le serveur (évite décalage si proxy). */
+    hmr: { clientPort: 5174 },
   },
   // SUPPRIMÉ : Configuration dangereuse qui exposait toutes les variables d'environnement
   // Les variables VITE_* sont automatiquement disponibles via import.meta.env

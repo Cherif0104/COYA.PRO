@@ -20,6 +20,7 @@ export type ContactInteractionRow = {
   status_snapshot: string | null;
   status_updated_to: string | null;
   detail: string | null;
+  follow_up_at: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -83,6 +84,7 @@ export async function insertContactInteraction(params: {
   detail: string | null;
   statusUpdatedTo: CrmContactLifecycleStatus | null;
   createdByUserId: string | null;
+  followUpAt?: string | null;
 }): Promise<{ error: Error | null }> {
   if (!isUuidContactId(params.contactId)) {
     return { error: new Error('CONTACT_NOT_SYNCED') };
@@ -90,6 +92,10 @@ export async function insertContactInteraction(params: {
   const statusSnapshot = contactStatusUiToDbSnapshot(params.contact.status);
   const statusUpdatedToDb = params.statusUpdatedTo ? contactStatusUiToDbSnapshot(params.statusUpdatedTo) : null;
   try {
+    const followIso =
+      params.followUpAt && String(params.followUpAt).trim()
+        ? new Date(params.followUpAt as string).toISOString()
+        : null;
     const { error } = await supabase.from('contact_interactions').insert({
       organization_id: params.organizationId,
       contact_id: params.contactId,
@@ -98,6 +104,7 @@ export async function insertContactInteraction(params: {
       status_snapshot: statusSnapshot,
       status_updated_to: statusUpdatedToDb,
       detail: params.detail?.trim() || null,
+      follow_up_at: followIso,
       created_by: params.createdByUserId ?? null,
     });
     if (error) return { error: new Error(error.message) };

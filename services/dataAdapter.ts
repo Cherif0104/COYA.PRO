@@ -42,7 +42,8 @@ export class DataAdapter {
       pendingRole: profile.pending_role ? AuthService.mapStoredRoleToUi(profile.pending_role) : null,
       reviewComment: profile.review_comment || null,
       reviewedAt: profile.reviewed_at || null,
-      reviewedBy: profile.reviewed_by || null
+      reviewedBy: profile.reviewed_by || null,
+      organizationId: profile.organization_id ?? null,
     };
   }
 
@@ -2236,10 +2237,15 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     }
   }
 
-  static async approvePendingProfile(profileId: string, approverId: string, comment?: string): Promise<User | null> {
+  static async approvePendingProfile(
+    profileId: string,
+    approverId: string,
+    comment?: string,
+    departmentId?: string | null
+  ): Promise<User | null> {
     if (!this.useSupabase) return null;
     try {
-      const { data, error } = await DataService.approveProfileRole({ profileId, approverId, comment });
+      const { data, error } = await DataService.approveProfileRole({ profileId, approverId, comment, departmentId });
       if (error) throw error;
       if (!data) return null;
       return this.mapProfileToUser(data);

@@ -321,6 +321,9 @@ export const translations: Translations = {
     crm_exchange_requires_uuid: "This contact is not synced to the server (no UUID). Save it from the CRM list before logging exchanges.",
     crm_exchange_author_me: "Logged by you",
     crm_exchange_author: "User",
+    crm_exchange_filter_ph: "Filter history…",
+    crm_exchange_filter_empty: "No matches for this filter.",
+    crm_exchange_follow_up_at: "Next follow-up",
     crm_integrations_title: "Integrations & partner apps",
     crm_integrations_body:
       "Outbound events are broadcast to registered handlers and to window.__COYA_CRM_EVENT__ for external web apps (iframe, browser extension, or reverse proxy). Use this to mirror contacts, syncs and automations in another stack.",
@@ -1227,6 +1230,9 @@ export const translations: Translations = {
       "Ce contact n’est pas synchronisé avec le serveur (pas d’UUID). Enregistrez-le depuis la liste CRM avant de journaliser des échanges.",
     crm_exchange_author_me: "Par vous",
     crm_exchange_author: "Utilisateur",
+    crm_exchange_filter_ph: "Filtrer l’historique…",
+    crm_exchange_filter_empty: "Aucun résultat pour ce filtre.",
+    crm_exchange_follow_up_at: "Prochaine relance / rappel",
     crm_integrations_title: "Intégrations & applications partenaires",
     crm_integrations_body:
       "Les événements sortants sont diffusés vers les écouteurs enregistrés et vers window.__COYA_CRM_EVENT__ pour d'autres applis web (iframe, extension navigateur, ou proxy). Sert à refléter contacts, synchronisations et automatisations dans un autre SI.",

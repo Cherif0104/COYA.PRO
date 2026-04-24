@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useLocalization } from '../../contexts/LocalizationContext';
 
 interface ConfirmationModalProps {
@@ -35,39 +36,52 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const effectiveConfirmText = confirmLabel ?? confirmText ?? t('confirm_delete');
   const effectiveCancelText = cancelLabel ?? cancelText ?? t('cancel');
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-[70] p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+  const modal = (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" role="presentation">
+      <div
+        className="w-full max-w-md rounded-lg bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6">
           <div className="flex items-start">
-            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+            <div className="mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
               {isLoading ? (
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                <div key="spinner" className="h-8 w-8 animate-spin rounded-full border-b-2 border-red-600" />
               ) : (
-                <i className="fas fa-exclamation-triangle text-red-600"></i>
+                <i key="icon" className="fas fa-exclamation-triangle text-red-600" aria-hidden />
               )}
             </div>
-            <div className="ml-4 text-left flex-1">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">{title}</h3>
-              <p className="text-sm text-gray-500 mt-2">{isLoading ? 'Suppression en cours...' : message}</p>
+            <div className="ml-4 min-w-0 flex-1 text-left">
+              <h3 id="confirm-modal-title" className="text-lg font-medium leading-6 text-gray-900">
+                {title}
+              </h3>
+              <p className="mt-2 text-sm text-gray-500">{isLoading ? 'Suppression en cours...' : message}</p>
               {children}
             </div>
           </div>
         </div>
-        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+        <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
           <button
+            type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${effectiveConfirmClass} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`inline-flex w-full items-center justify-center rounded-md border border-transparent px-4 py-2 text-base font-medium text-white shadow-sm sm:ml-3 sm:w-auto sm:text-sm ${effectiveConfirmClass} ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
-            {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>}
-            {effectiveConfirmText}
+            <span className="inline-flex items-center">
+              {isLoading ? (
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+              ) : null}
+              {effectiveConfirmText}
+            </span>
           </button>
           <button
+            type="button"
             onClick={onCancel}
             disabled={isLoading}
-            type="button"
-            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {effectiveCancelText}
           </button>
@@ -75,6 +89,9 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modal;
+  return createPortal(modal, document.body);
 };
 
 export default ConfirmationModal;

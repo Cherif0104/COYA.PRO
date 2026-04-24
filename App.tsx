@@ -1313,7 +1313,7 @@ const App: React.FC = () => {
   const userStatus = user?.status || 'active';
   const requestedRole = (user?.pendingRole || user?.role || null) as Role | null;
   const isSuperAdminRequested = requestedRole === 'super_administrator';
-  const needsApproval = userStatus === 'pending' && !isSuperAdminRequested;
+  const needsApproval = userStatus === 'pending';
   const requestedRoleLabel = formatRoleLabel(requestedRole);
 
   if (needsApproval) {
@@ -1327,14 +1327,18 @@ const App: React.FC = () => {
           <p className="text-sm text-gray-600 leading-relaxed">
             Merci d’avoir rejoint COYA. Votre demande d’accès
             {requestedRoleLabel ? <> au rôle <strong>{requestedRoleLabel}</strong></> : null} est en cours
-            d’examen par un Super Administrateur. Vous serez notifié(e) dès que votre compte sera activé.
+            d’examen par un administrateur de votre organisation
+            {isSuperAdminRequested ? ' (validation réservée à un Super Administrateur)' : ''}. Vous serez notifié(e) dès activation.
           </p>
           <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-left text-sm text-emerald-800 space-y-2">
             <div className="flex items-start gap-3">
               <i className="fas fa-user-shield mt-1"></i>
               <div>
                 <p className="font-semibold">Étapes suivantes</p>
-                <p>Vous pouvez fermer cette page et revenir plus tard. Si votre demande est urgente, contactez un Super Administrateur.</p>
+                <p>
+                  Vous pouvez fermer cette page et revenir plus tard. En cas d’urgence, contactez un administrateur
+                  {isSuperAdminRequested ? ' ou un Super Administrateur' : ''}.
+                </p>
               </div>
             </div>
           </div>
@@ -1349,7 +1353,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (userStatus === 'rejected' && !isSuperAdminRequested) {
+  if (userStatus === 'rejected') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
         <div className="max-w-xl w-full bg-white shadow-2xl rounded-2xl p-10 text-center space-y-6 border border-red-100">
@@ -1361,7 +1365,7 @@ const App: React.FC = () => {
             Votre demande d’accès
             {requestedRoleLabel ? <> au rôle <strong>{requestedRoleLabel}</strong></> : null} n’a pas pu être approuvée.
             {user.reviewComment ? <> Motif communiqué : <strong>{user.reviewComment}</strong>.</> : null}
-            Veuillez contacter un Super Administrateur pour plus d’informations.
+            Veuillez contacter un administrateur pour plus d’informations.
           </p>
           <button
             onClick={handlePendingLogout}

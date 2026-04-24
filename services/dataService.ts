@@ -2,6 +2,7 @@ import { supabase } from './supabaseService';
 import { ApiHelper } from './apiHelper';
 import { Project, Invoice, Expense, Contact, TimeLog, LeaveRequest, Course, Objective, Document, CurrencyCode, PresenceSession, PresenceStatus, Employee, EmployeeHrAttachment, PresenceStatusEvent, HrAttendancePolicy, WorkMode } from '../types';
 import OrganizationService from './organizationService';
+import DepartmentService from './departmentService';
 import { CurrencyService } from './currencyService';
 import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
@@ -38,9 +39,21 @@ const CONTACT_UI_STATUS_TO_DB: Record<string, string> = {
   Customer: 'customer',
 };
 
+/** Valeurs autorisées par `contacts_status_check` (aligné migration `20260424170000_contacts_status_check_crm.sql`). */
+const CONTACT_STATUS_DB_ALLOWED = new Set([
+  'lead',
+  'contacted',
+  'unreachable',
+  'callback_expected',
+  'prospect',
+  'customer',
+]);
+
 function contactStatusUiToDb(status: string | undefined): string {
   if (!status) return 'lead';
-  return CONTACT_UI_STATUS_TO_DB[status] ?? String(status).toLowerCase();
+  const mapped = CONTACT_UI_STATUS_TO_DB[status] ?? String(status).trim().toLowerCase().replace(/\s+/g, '_');
+  if (CONTACT_STATUS_DB_ALLOWED.has(mapped)) return mapped;
+  return 'lead';
 }
 
 /** Prénom / nom à partir du modèle CRM (`name`) ou champs legacy firstName/lastName */
@@ -346,8 +359,14 @@ export class DataService {
     }
   }
 
-  static async approveProfileRole(params: { profileId: string; approverId: string; comment?: string }) {
-    const { profileId, approverId, comment } = params;
+  static async approveProfileRole(params: {
+    profileId: string;
+    approverId: string;
+    comment?: string;
+    /** Obligatoire côté UI : rattachement `user_departments` après activation */
+    departmentId?: string | null;
+  }) {
+    const { profileId, approverId, comment, departmentId } = params;
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -378,6 +397,14 @@ export class DataService {
         .single();
 
       if (updateError) throw updateError;
+
+      const authUserId = String((updatedProfile as { user_id?: string }).user_id || (profile as { user_id?: string }).user_id || '');
+      if (departmentId && authUserId) {
+        const ok = await DepartmentService.assignUserToDepartment(authUserId, departmentId, 'member');
+        if (!ok) {
+          console.warn('⚠️ Approbation OK mais échec assignation département (RLS ou table user_departments)');
+        }
+      }
 
       const { error: logError } = await supabase
         .from('role_approval_logs')

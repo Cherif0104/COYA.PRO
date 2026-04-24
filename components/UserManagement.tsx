@@ -2,17 +2,20 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { useModulePermissions } from '../hooks/useModulePermissions';
-import { User, Role, SENEGEL_RESERVED_ROLES } from '../types';
+import { User, Role, Department, SENEGEL_RESERVED_ROLES } from '../types';
 import OrganizationService from '../services/organizationService';
 import DataAdapter from '../services/dataAdapter';
 import UserModulePermissions from './UserModulePermissions';
 import UserProfileEdit from './UserProfileEdit';
 import DepartmentManagement from './DepartmentManagement';
+import DepartmentService from '../services/departmentService';
 import PostesManagement from './PostesManagement';
 import ConfirmationModal from './common/ConfirmationModal';
 import { RealtimeService } from '../services/realtimeService';
 import { supabase } from '../services/supabaseService';
 import AccessDenied from './common/AccessDenied';
+import { DataService } from '../services/dataService';
+import AuthService from '../services/authService';
 
 const UserEditModal: React.FC<{
     user: User;
@@ -106,6 +109,13 @@ const UserEditModal: React.FC<{
                                 <option value="producer">{t('producer')}</option>
                                 <option value="artist">{t('artist')}</option>
                             </optgroup>
+                            <optgroup label={t('hr_staff_category')}>
+                                <option value="hr_business_partner">{t('hr_business_partner')}</option>
+                                <option value="hr_officer">{t('hr_officer')}</option>
+                                <option value="recruiter">{t('recruiter')}</option>
+                                <option value="payroll_specialist">{t('payroll_specialist')}</option>
+                                <option value="team_lead">{t('team_lead')}</option>
+                            </optgroup>
                             <optgroup label={t('staff_category')}>
                                 <option value="intern" disabled={!canAssignReservedRoles}>{t('intern')}{!canAssignReservedRoles ? ' (SENEGEL)' : ''}</option>
                                 <option value="supervisor" disabled={!canAssignReservedRoles}>{t('supervisor')}{!canAssignReservedRoles ? ' (SENEGEL)' : ''}</option>
@@ -171,33 +181,75 @@ const UserEditModal: React.FC<{
 
 interface UserManagementProps {
     users: User[];
-    onUpdateUser: (user: User) => void;
+    onUpdateUser?: (user: User) => void;
     onToggleActive?: (userId: string | number, isActive: boolean) => void;
     onDeleteUser?: (userId: string | number) => Promise<void>;
+    /** Mode Paramètres : layout dense, sans page pleine écran */
+    embedded?: boolean;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, onToggleActive, onDeleteUser }) => {
+const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, onToggleActive, onDeleteUser, embedded = false }) => {
     const { t } = useLocalization();
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, profile: authProfile } = useAuth();
     const { canAccessModule, hasPermission } = useModulePermissions();
+    const [managedUsers, setManagedUsers] = useState<User[]>(users);
     const [isModalOpen, setModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [isProfileModalOpen, setProfileModalOpen] = useState(false);
     const [profileUser, setProfileUser] = useState<User | null>(null);
-    const [deletingUserId, setDeletingUserId] = useState<string | number | null>(null);
+    /** Cible figée à l’ouverture du modal (évite find() sur liste mutée pendant la suppression async). */
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string | number; name: string; email: string } | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isUpdatingRole, setIsUpdatingRole] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, inactive
-    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions' | 'departments' | 'postes'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'approvals' | 'permissions' | 'departments' | 'postes' | 'super_admin'>('users');
     const [canAssignReservedRoles, setCanAssignReservedRoles] = useState(false);
     const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
     const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+    const [resettingUserId, setResettingUserId] = useState<string | number | null>(null);
+    /** Départements par organisation (demandes multi-org côté super admin). */
+    const [departmentsByOrgId, setDepartmentsByOrgId] = useState<Record<string, Department[]>>({});
+    /** profileId (UUID profil) → departmentId choisi pour la validation */
+    const [approvalDepartmentByProfileId, setApprovalDepartmentByProfileId] = useState<Record<string, string>>({});
 
     const canReadModule = canAccessModule('user_management');
     const canWriteModule = hasPermission('user_management', 'write');
     const canDeleteModule = hasPermission('user_management', 'delete');
+
+    useEffect(() => {
+        setManagedUsers(users);
+    }, [users]);
+
+    useEffect(() => {
+        if (activeTab !== 'approvals') return;
+        let cancelled = false;
+        (async () => {
+            const orgIds = new Set<string>();
+            managedUsers
+                .filter((u) => u.status === 'pending')
+                .forEach((u) => {
+                    const oid = u.organizationId || authProfile?.organization_id || currentUser?.organizationId;
+                    if (oid) orgIds.add(String(oid));
+                });
+            if (orgIds.size === 0) {
+                const fallback = await OrganizationService.getCurrentUserOrganizationId();
+                if (fallback) orgIds.add(String(fallback));
+            }
+            const entries = await Promise.all(
+                Array.from(orgIds).map(async (orgId) => {
+                    const list = await DepartmentService.getDepartmentsByOrganizationId(orgId);
+                    return [orgId, list] as const;
+                })
+            );
+            if (cancelled) return;
+            setDepartmentsByOrgId(Object.fromEntries(entries));
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, managedUsers, authProfile?.organization_id, currentUser?.organizationId]);
 
     // Déterminer si l'assignation des rôles réservés SENEGEL est autorisée
     useEffect(() => {
@@ -231,7 +283,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 // Mettre à jour la liste des utilisateurs
                 if (payload.eventType === 'UPDATE' && payload.new) {
                     const updatedProfile = payload.new as any;
-                    const userToUpdate = users.find(u => {
+                    const userToUpdate = managedUsers.find(u => {
                         // Vérifier si c'est le même utilisateur (user_id ou id)
                         return String(u.id) === String(updatedProfile.user_id) || String(u.id) === String(updatedProfile.id);
                     });
@@ -254,7 +306,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                             createdAt: updatedProfile.created_at || userToUpdate.createdAt,
                             updatedAt: updatedProfile.updated_at || userToUpdate.updatedAt
                         };
-                        onUpdateUser(updatedUser);
+                        if (onUpdateUser) onUpdateUser(updatedUser);
+                        else setManagedUsers((prev) => prev.map((u) => (String(u.id) === String(updatedUser.id) ? updatedUser : u)));
                     }
                 }
             })
@@ -263,22 +316,28 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [users, onUpdateUser]);
+    }, [managedUsers, onUpdateUser]);
 
     // Toggle Component réutilisable
-    const Toggle: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; label?: string }> = ({ checked, onChange, disabled = false, label }) => (
+    const Toggle: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; label?: string; compact?: boolean }> = ({
+        checked,
+        onChange,
+        disabled = false,
+        label,
+        compact = false,
+    }) => (
         <button
             type="button"
             onClick={() => !disabled && onChange(!checked)}
             disabled={disabled}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
-                checked ? 'bg-emerald-600' : 'bg-gray-300'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`relative inline-flex items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
+                compact ? 'h-5 w-9' : 'h-6 w-11'
+            } ${checked ? 'bg-emerald-600' : 'bg-slate-300'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             title={label}
         >
             <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    checked ? 'translate-x-6' : 'translate-x-1'
+                className={`inline-block transform rounded-full bg-white transition-transform ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} ${
+                    checked ? (compact ? 'translate-x-4' : 'translate-x-6') : 'translate-x-1'
                 }`}
             />
         </button>
@@ -298,7 +357,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     
     const handleSaveRole = async (userId: number, newRole: Role) => {
         if (!canWriteModule) return;
-        const userToUpdate = users.find(u => u.id === userId);
+        const userToUpdate = managedUsers.find(u => u.id === userId);
         if(!userToUpdate) {
             console.error('❌ Utilisateur non trouvé pour modification rôle');
             return;
@@ -307,7 +366,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         console.log('🔄 Modification rôle:', { userId, oldRole: userToUpdate.role, newRole });
         setIsUpdatingRole(true);
         try {
-            await onUpdateUser({...userToUpdate, role: newRole});
+            if (onUpdateUser) {
+                await onUpdateUser({...userToUpdate, role: newRole});
+            } else {
+                const res = await DataService.updateUserRole(String(userId), newRole);
+                if (res.error) throw res.error;
+                setManagedUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
+            }
             console.log('✅ Rôle modifié avec succès');
             
             // Message de succès
@@ -337,7 +402,22 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         if (!profileUser) return;
         const userToUpdate = { ...profileUser, ...updatedUser };
         try {
-            await onUpdateUser(userToUpdate);
+            if (onUpdateUser) {
+                await onUpdateUser(userToUpdate);
+            } else if (profileUser.id) {
+                const { error } = await DataService.updateProfile(String(profileUser.id), {
+                    full_name: userToUpdate.name,
+                    phone_number: userToUpdate.phoneNumber ?? null,
+                    location: userToUpdate.location ?? null,
+                    bio: userToUpdate.bio ?? null,
+                    skills: userToUpdate.skills ?? [],
+                    website: userToUpdate.website ?? null,
+                    linkedin_url: userToUpdate.linkedinUrl ?? null,
+                    github_url: userToUpdate.githubUrl ?? null,
+                });
+                if (error) throw error;
+                setManagedUsers((prev) => prev.map((u) => (String(u.id) === String(profileUser.id) ? userToUpdate : u)));
+            }
             console.log('✅ Profil modifié avec succès');
             
             // Message de succès (utiliser Toast si disponible)
@@ -359,8 +439,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         if (onToggleActive) {
             await onToggleActive(user.id, newActiveState);
         } else {
-            // Fallback: mise à jour locale
-            onUpdateUser({...user, isActive: newActiveState});
+            const res = await DataService.toggleUserActive(user.id, newActiveState);
+            if (res.error) throw res.error;
+            setManagedUsers((prev) => prev.map((u) => (String(u.id) === String(user.id) ? { ...u, isActive: newActiveState } : u)));
         }
     };
 
@@ -372,44 +453,59 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
             return;
         }
         
-        setDeletingUserId(user.id);
+        setDeleteTarget({
+            id: user.id,
+            name: user.name || user.email || 'Utilisateur',
+            email: user.email || '',
+        });
     };
 
     const confirmDeleteUser = async () => {
-        if (!deletingUserId || !onDeleteUser) return;
-        
-        const userToDelete = users.find(u => u.id === deletingUserId);
-        const userName = userToDelete?.name || userToDelete?.email || 'utilisateur';
-        
+        if (!deleteTarget) return;
+        const { id: deleteId, name: userName } = deleteTarget;
         setIsDeleting(true);
         try {
-            console.log('🔄 Suppression utilisateur en cours:', { userId: deletingUserId, userName });
-            await onDeleteUser(deletingUserId);
+            console.log('🔄 Suppression utilisateur en cours:', { userId: deleteId, userName });
+            if (onDeleteUser) {
+                await onDeleteUser(deleteId);
+            } else {
+                const res = await DataService.deleteUser(deleteId);
+                if (res?.error) throw res.error;
+                setManagedUsers((prev) => prev.filter((u) => String(u.id) !== String(deleteId)));
+            }
             console.log('✅ Utilisateur supprimé avec succès');
-            
-            // Message de succès
             if (typeof window !== 'undefined' && (window as any).Toast) {
                 (window as any).Toast.success(`${userName} supprimé avec succès`);
             }
-            
-            setDeletingUserId(null);
-            
-            // Attendre un peu pour que la mise à jour soit visible
-            setTimeout(() => {
-                setIsDeleting(false);
-            }, 500);
         } catch (error: any) {
             console.error('❌ Erreur suppression utilisateur:', error);
             const errorMessage = error?.message || 'Erreur inconnue lors de la suppression';
             alert(`Erreur lors de la suppression de l'utilisateur : ${errorMessage}`);
+        } finally {
             setIsDeleting(false);
-            setDeletingUserId(null);
+            setDeleteTarget(null);
+        }
+    };
+
+    const handleResetPassword = async (u: User) => {
+        if (!canWriteModule) return;
+        if (!u.email) return;
+        setResettingUserId(u.id);
+        try {
+            const { error } = await AuthService.resetPassword(u.email);
+            if (error) throw error;
+            showToast(`Email de réinitialisation envoyé à ${u.email}`, 'success');
+        } catch (e: any) {
+            console.error('Erreur reset password:', e);
+            showToast(e?.message || 'Erreur lors de l’envoi du reset', 'error');
+        } finally {
+            setResettingUserId(null);
         }
     };
 
     // Filtres des utilisateurs
     const filteredUsers = useMemo(() => {
-        return users.filter(user => {
+        return managedUsers.filter(user => {
             const matchesSearch = searchQuery === '' ||
                 user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 user.email?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -422,9 +518,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
             
             return matchesSearch && matchesRole && matchesStatus;
         });
-    }, [users, searchQuery, roleFilter, statusFilter]);
+    }, [managedUsers, searchQuery, roleFilter, statusFilter]);
 
-    const pendingUsers = useMemo(() => users.filter(user => user.status === 'pending'), [users]);
+    const pendingUsers = useMemo(() => managedUsers.filter(user => user.status === 'pending'), [managedUsers]);
     const pendingApprovalsCount = pendingUsers.length;
 
     const formatRoleLabel = (roleValue?: Role | null) => {
@@ -450,10 +546,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     };
 
     // Métriques
-    const totalUsers = users.length;
-    const activeUsers = users.filter(u => u.isActive !== false).length;
-    const adminUsers = users.filter(u => u.role === 'administrator' || u.role === 'super_administrator').length;
-    const staffUsers = users.filter(u => ['manager', 'supervisor', 'intern'].includes(u.role)).length;
+    const totalUsers = managedUsers.length;
+    const activeUsers = managedUsers.filter(u => u.isActive !== false).length;
+    const adminUsers = managedUsers.filter(u => u.role === 'administrator' || u.role === 'super_administrator').length;
+    const staffUsers = managedUsers.filter(u => ['manager', 'supervisor', 'intern'].includes(u.role)).length;
 
     if (!currentUser) return null;
 
@@ -463,9 +559,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
 
     const hasAccess = currentUser.role === 'administrator' || currentUser.role === 'super_administrator' || currentUser.role === 'manager';
     const approverProfileId = currentUser.profileId ? String(currentUser.profileId) : (currentUser.id ? String(currentUser.id) : '');
+    const canModerateApprovals =
+        currentUser.role === 'super_administrator' || currentUser.role === 'administrator';
 
     const handleApproveRequest = async (pendingUser: User) => {
-        if (currentUser.role !== 'super_administrator') return;
+        if (!canModerateApprovals) return;
         const profileId = pendingUser.profileId ? String(pendingUser.profileId) : (pendingUser.id ? String(pendingUser.id) : '');
         if (!profileId) {
             alert('Profil utilisateur introuvable. Impossible de traiter la demande.');
@@ -475,11 +573,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
             alert('Impossible de déterminer le validateur. Veuillez réessayer.');
             return;
         }
+        const requested = (pendingUser.pendingRole || pendingUser.role) as Role;
+        if (requested === 'super_administrator' && currentUser.role !== 'super_administrator') {
+            alert('Seul un Super Administrateur peut approuver une demande de rôle Super Administrateur.');
+            return;
+        }
+        const deptId = approvalDepartmentByProfileId[profileId] || '';
+        if (!deptId) {
+            alert('Veuillez sélectionner un département pour ce collaborateur avant d’approuver.');
+            return;
+        }
         const key = String(pendingUser.id);
         const note = (decisionNotes[key] || '').trim();
         setProcessingRequestId(`approve-${key}`);
         try {
-            const updatedUser = await DataAdapter.approvePendingProfile(profileId, approverProfileId, note);
+            const updatedUser = await DataAdapter.approvePendingProfile(profileId, approverProfileId, note, deptId);
             if (updatedUser) {
                 onUpdateUser(updatedUser);
                 setDecisionNotes(prev => ({ ...prev, [key]: '' }));
@@ -494,7 +602,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     };
 
     const handleRejectRequest = async (pendingUser: User) => {
-        if (currentUser.role !== 'super_administrator') return;
+        if (!canModerateApprovals) return;
         const profileId = pendingUser.profileId ? String(pendingUser.profileId) : (pendingUser.id ? String(pendingUser.id) : '');
         if (!profileId) {
             alert('Profil utilisateur introuvable. Impossible de traiter la demande.');
@@ -541,14 +649,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className={embedded ? 'min-h-0 text-slate-900' : 'min-h-screen bg-slate-50 text-slate-900'}>
+            {/* Header */}
+            <div className={`bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-sm ${embedded ? 'rounded-lg' : ''}`}>
+                <div className={`${embedded ? 'max-w-none mx-auto px-3 py-2' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6'}`}>
                     <div className="flex items-center justify-between">
-        <div>
-                            <h1 className="text-4xl font-bold mb-2">Gestion des Utilisateurs</h1>
-                            <p className="text-emerald-50 text-sm">
+                        <div>
+                            <h1 className={embedded ? 'text-base md:text-lg font-bold' : 'text-3xl md:text-4xl font-bold mb-1'}>
+                                Gestion des Utilisateurs
+                            </h1>
+                            <p className={embedded ? 'text-emerald-50/90 text-xs leading-snug' : 'text-emerald-50 text-sm'}>
                                 Gérez les utilisateurs, leurs rôles et leurs accès à la plateforme
                             </p>
                         </div>
@@ -556,143 +666,141 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 </div>
             </div>
 
-            {/* Métriques Power BI style */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-                {/* Onglets */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-6">
-                    <div className="flex space-x-2">
+            {/* Métriques + onglets */}
+            <div className={`${embedded ? 'max-w-none mx-auto px-0 -mt-2 mb-3' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 mb-6'}`}>
+                <div className={`bg-white rounded-lg shadow-sm border border-slate-200 ${embedded ? 'p-1 mb-3' : 'p-2 mb-4'}`}>
+                    <div className={`flex ${embedded ? 'flex-wrap gap-1' : 'flex-wrap gap-2'} ${embedded ? '' : 'md:flex-nowrap'}`}>
                         <button
                             onClick={() => setActiveTab('users')}
-                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                            className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                 activeTab === 'users'
-                                    ? 'bg-emerald-600 text-white shadow-md'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <i className="fas fa-users mr-2"></i>
+                            <i className={`fas fa-users ${embedded ? 'mr-1' : 'mr-2'}`}></i>
                             Utilisateurs
                         </button>
-                        {currentUser?.role === 'super_administrator' && (
+                        {canModerateApprovals && (
                             <button
                                 onClick={() => setActiveTab('approvals')}
-                                className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                     activeTab === 'approvals'
-                                        ? 'bg-emerald-600 text-white shadow-md'
-                                        : 'text-gray-600 hover:bg-gray-100'
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'text-slate-600 hover:bg-slate-100'
                                 }`}
                             >
-                                <i className="fas fa-user-clock mr-2"></i>
+                                <i className={`fas fa-user-clock ${embedded ? 'mr-1' : 'mr-2'}`}></i>
                                 Demandes d'accès
                             </button>
                         )}
                         <button
                             onClick={() => setActiveTab('permissions')}
-                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                            className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                 activeTab === 'permissions'
-                                    ? 'bg-emerald-600 text-white shadow-md'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <i className="fas fa-shield-alt mr-2"></i>
-                            Permissions Module
+                            <i className={`fas fa-shield-alt ${embedded ? 'mr-1' : 'mr-2'}`}></i>
+                            Permissions
                         </button>
                         <button
                             onClick={() => setActiveTab('departments')}
-                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                            className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                 activeTab === 'departments'
-                                    ? 'bg-emerald-600 text-white shadow-md'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <i className="fas fa-sitemap mr-2"></i>
+                            <i className={`fas fa-sitemap ${embedded ? 'mr-1' : 'mr-2'}`}></i>
                             Départements
                         </button>
                         <button
                             onClick={() => setActiveTab('postes')}
-                            className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                            className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                 activeTab === 'postes'
-                                    ? 'bg-emerald-600 text-white shadow-md'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <i className="fas fa-user-tag mr-2"></i>
+                            <i className={`fas fa-user-tag ${embedded ? 'mr-1' : 'mr-2'}`}></i>
                             Postes
                         </button>
                         {currentUser?.role === 'super_administrator' && (
                             <button
                                 onClick={() => setActiveTab('super_admin')}
-                                className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                className={`${embedded ? 'px-2 py-1.5 text-xs' : 'flex-1 px-3 py-2.5 text-sm'} font-medium rounded-md transition-colors ${
                                     activeTab === 'super_admin'
-                                        ? 'bg-emerald-600 text-white shadow-md'
-                                        : 'text-gray-600 hover:bg-gray-100'
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'text-slate-600 hover:bg-slate-100'
                                 }`}
                             >
-                                <i className="fas fa-user-shield mr-2"></i>
-                                Créer Super Admin
+                                <i className={`fas fa-user-shield ${embedded ? 'mr-1' : 'mr-2'}`}></i>
+                                Super Admin
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* Métriques */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-lg p-6 border border-blue-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-700">Total Utilisateurs</span>
-                            <i className="fas fa-users text-2xl text-blue-600"></i>
+                <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${embedded ? 'gap-2 mb-3' : 'gap-4 mb-5'}`}>
+                    <div className={`bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200 ${embedded ? 'p-2.5 shadow-sm' : 'rounded-xl shadow-md p-4'}`}>
+                        <div className={`flex items-center justify-between ${embedded ? 'mb-0.5' : 'mb-1'}`}>
+                            <span className={`font-medium text-slate-700 ${embedded ? 'text-[11px]' : 'text-sm'}`}>Total</span>
+                            <i className={`fas fa-users text-blue-600 ${embedded ? 'text-sm' : 'text-xl'}`}></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">{totalUsers}</p>
+                        <p className={`font-bold text-slate-900 ${embedded ? 'text-lg' : 'text-2xl'}`}>{totalUsers}</p>
                     </div>
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-lg p-6 border border-green-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-700">Utilisateurs Actifs</span>
-                            <i className="fas fa-user-check text-2xl text-green-600"></i>
+                    <div className={`bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200 ${embedded ? 'p-2.5 shadow-sm' : 'rounded-xl shadow-md p-4'}`}>
+                        <div className={`flex items-center justify-between ${embedded ? 'mb-0.5' : 'mb-1'}`}>
+                            <span className={`font-medium text-slate-700 ${embedded ? 'text-[11px]' : 'text-sm'}`}>Actifs</span>
+                            <i className={`fas fa-user-check text-green-600 ${embedded ? 'text-sm' : 'text-xl'}`}></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">{activeUsers}</p>
+                        <p className={`font-bold text-slate-900 ${embedded ? 'text-lg' : 'text-2xl'}`}>{activeUsers}</p>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-lg p-6 border border-purple-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-700">Administrateurs</span>
-                            <i className="fas fa-user-shield text-2xl text-purple-600"></i>
+                    <div className={`bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200 ${embedded ? 'p-2.5 shadow-sm' : 'rounded-xl shadow-md p-4'}`}>
+                        <div className={`flex items-center justify-between ${embedded ? 'mb-0.5' : 'mb-1'}`}>
+                            <span className={`font-medium text-slate-700 ${embedded ? 'text-[11px]' : 'text-sm'}`}>Admins</span>
+                            <i className={`fas fa-user-shield text-purple-600 ${embedded ? 'text-sm' : 'text-xl'}`}></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">{adminUsers}</p>
+                        <p className={`font-bold text-slate-900 ${embedded ? 'text-lg' : 'text-2xl'}`}>{adminUsers}</p>
                     </div>
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-lg p-6 border border-orange-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-700">Équipe</span>
-                            <i className="fas fa-user-tie text-2xl text-orange-600"></i>
+                    <div className={`bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200 ${embedded ? 'p-2.5 shadow-sm' : 'rounded-xl shadow-md p-4'}`}>
+                        <div className={`flex items-center justify-between ${embedded ? 'mb-0.5' : 'mb-1'}`}>
+                            <span className={`font-medium text-slate-700 ${embedded ? 'text-[11px]' : 'text-sm'}`}>Équipe</span>
+                            <i className={`fas fa-user-tie text-orange-600 ${embedded ? 'text-sm' : 'text-xl'}`}></i>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">{staffUsers}</p>
+                        <p className={`font-bold text-slate-900 ${embedded ? 'text-lg' : 'text-2xl'}`}>{staffUsers}</p>
                     </div>
-                    {currentUser.role === 'super_administrator' && (
-                        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl shadow-lg p-6 border border-yellow-200 hover:shadow-xl transition-shadow md:col-span-2 lg:col-span-1">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-700">Demandes en attente</span>
-                                <i className="fas fa-inbox text-2xl text-yellow-600"></i>
+                    {canModerateApprovals && (
+                        <div className={`bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg border border-yellow-200 col-span-2 sm:col-span-1 ${embedded ? 'p-2.5 shadow-sm' : 'rounded-xl shadow-md p-4'}`}>
+                            <div className={`flex items-center justify-between ${embedded ? 'mb-0.5' : 'mb-1'}`}>
+                                <span className={`font-medium text-slate-700 ${embedded ? 'text-[11px]' : 'text-sm'}`}>En attente</span>
+                                <i className={`fas fa-inbox text-yellow-600 ${embedded ? 'text-sm' : 'text-xl'}`}></i>
                             </div>
-                            <p className="text-3xl font-bold text-gray-900">{pendingApprovalsCount}</p>
-                            <p className="text-xs text-yellow-700 mt-2">Rôles nécessitant une validation Super Admin.</p>
+                            <p className={`font-bold text-slate-900 ${embedded ? 'text-lg' : 'text-2xl'}`}>{pendingApprovalsCount}</p>
+                            <p className={`text-yellow-800 ${embedded ? 'text-[10px] mt-0.5 leading-tight' : 'text-xs mt-1'}`}>Validation admin.</p>
                         </div>
                     )}
                 </div>
             </div>
 
             {/* Contenu des onglets */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <div className={embedded ? 'max-w-none mx-auto px-0 pb-2' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8'}>
                 {activeTab === 'users' && (
                     <>
                         {/* Barre de recherche et filtres */}
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-                            <div className="flex flex-wrap items-center gap-4">
-                                <div className="flex-1 min-w-[200px]">
+                        <div className={`bg-white rounded-lg shadow-sm border border-slate-200 ${embedded ? 'p-2 mb-3' : 'p-4 mb-6'}`}>
+                            <div className={`flex flex-wrap items-center ${embedded ? 'gap-2' : 'gap-4'}`}>
+                                <div className="flex-1 min-w-[160px]">
                                     <div className="relative">
-                                        <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                        <i className={`fas fa-search absolute left-2.5 top-1/2 transform -translate-y-1/2 text-slate-400 ${embedded ? 'text-xs' : ''}`}></i>
                                         <input
                                             type="text"
                                             placeholder="Rechercher un utilisateur..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                            className={`w-full pl-8 pr-2 border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${embedded ? 'py-1.5 text-xs' : 'py-2 text-sm'}`}
                                         />
                                     </div>
                                 </div>
@@ -700,7 +808,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                 <select
                                     value={roleFilter}
                                     onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                    className={`border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${embedded ? 'px-2 py-1.5 text-xs' : 'px-4 py-2 text-sm'}`}
                                 >
                                     <option value="all">Tous les rôles</option>
                                     <option value="super_administrator">Super Admin</option>
@@ -708,6 +816,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                     <option value="manager">Manager</option>
                                     <option value="supervisor">Supervisor</option>
                                     <option value="intern">Stagiaire</option>
+                                    <option value="hr_business_partner">RH partenaire métier</option>
+                                    <option value="hr_officer">Assistant·e RH</option>
+                                    <option value="recruiter">Recruteur·se</option>
+                                    <option value="payroll_specialist">Paie</option>
+                                    <option value="team_lead">Chef·fe d’équipe</option>
                                     <option value="student">Étudiant</option>
                                     <option value="employer">Employeur</option>
                                 </select>
@@ -715,7 +828,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                    className={`border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${embedded ? 'px-2 py-1.5 text-xs' : 'px-4 py-2 text-sm'}`}
                                 >
                                     <option value="all">Tous les statuts</option>
                                     <option value="active">Actifs</option>
@@ -724,7 +837,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                             </div>
 
                             {/* Compteur de résultats */}
-                            <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600">
+                            <div className={`mt-2 pt-2 border-t border-slate-100 text-slate-600 ${embedded ? 'text-[11px]' : 'text-sm'}`}>
                                 {filteredUsers.length} {filteredUsers.length > 1 ? 'utilisateurs trouvés' : 'utilisateur trouvé'}
                             </div>
                         </div>
@@ -741,44 +854,44 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                 </p>
                             </div>
                         ) : (
-                            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <table className="w-full text-sm text-left text-gray-500">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                            <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                    <table className={`w-full text-left text-slate-600 ${embedded ? 'text-xs' : 'text-sm'}`}>
+                        <thead className={`uppercase bg-slate-50 text-slate-600 ${embedded ? 'text-[10px]' : 'text-xs'}`}>
                             <tr>
-                                            <th scope="col" className="px-6 py-3">Nom</th>
-                                            <th scope="col" className="px-6 py-3">Email</th>
-                                            <th scope="col" className="px-6 py-3">Rôle</th>
-                                            <th scope="col" className="px-6 py-3">Statut</th>
-                                            <th scope="col" className="px-6 py-3 text-right">Actions</th>
+                                            <th scope="col" className={embedded ? 'px-2 py-1.5' : 'px-4 py-2.5'}>Nom</th>
+                                            <th scope="col" className={embedded ? 'px-2 py-1.5' : 'px-4 py-2.5'}>Email</th>
+                                            <th scope="col" className={embedded ? 'px-2 py-1.5' : 'px-4 py-2.5'}>Rôle</th>
+                                            <th scope="col" className={embedded ? 'px-2 py-1.5' : 'px-4 py-2.5'}>Statut</th>
+                                            <th scope="col" className={`text-right ${embedded ? 'px-2 py-1.5' : 'px-4 py-2.5'}`}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                                         {filteredUsers.map(user => (
-                                <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
-                                    <th scope="row" className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap flex items-center">
+                                <tr key={user.id} className="bg-white border-b border-slate-100 hover:bg-slate-50/80">
+                                    <th scope="row" className={`${embedded ? 'px-2 py-1.5' : 'px-4 py-2'} font-medium text-slate-900 whitespace-nowrap flex items-center min-w-0`}>
                                                     {user.avatar && !user.avatar.startsWith('data:image') ? (
-                                                        <img src={user.avatar} alt={user.name || 'Utilisateur'} className="w-8 h-8 rounded-full mr-3 object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+                                                        <img src={user.avatar} alt={user.name || 'Utilisateur'} className={`rounded-full object-cover shrink-0 ${embedded ? 'w-6 h-6 mr-2' : 'w-8 h-8 mr-3'}`} onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
                                                     ) : (
-                                                        <div className="w-8 h-8 rounded-full mr-3 bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                                                        <div className={`rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold shrink-0 ${embedded ? 'w-6 h-6 mr-2 text-[10px]' : 'w-8 h-8 mr-3 text-xs'}`}>
                                                             {(user.name || 'U').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                                                         </div>
                                                     )}
-                                        {user.name}
+                                        <span className="truncate max-w-[140px] sm:max-w-none">{user.name}</span>
                                     </th>
-                                    <td className="px-6 py-4">{user.email}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    <td className={`${embedded ? 'px-2 py-1.5' : 'px-4 py-2'} max-w-[200px] truncate`}>{user.email}</td>
+                                                <td className={embedded ? 'px-2 py-1.5' : 'px-4 py-2'}>
+                                                    <span className={`font-semibold rounded-full bg-blue-100 text-blue-800 ${embedded ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
                                                         {t(user.role)}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
+                                                <td className={embedded ? 'px-2 py-1.5' : 'px-4 py-2'}>
+                                        <div className={`flex items-center ${embedded ? 'gap-1.5' : 'gap-3'}`}>
                                                         {user.isActive !== false ? (
-                                                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                                            <span className={`font-semibold rounded-full bg-green-100 text-green-800 ${embedded ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
                                                                 Actif
                                                             </span>
                                                         ) : (
-                                                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                                                            <span className={`font-semibold rounded-full bg-slate-100 text-slate-800 ${embedded ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
                                                                 Inactif
                                                             </span>
                                                         )}
@@ -787,30 +900,43 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                                             onChange={(newState) => handleToggleActive(user, newState)}
                                                             disabled={!canWriteModule}
                                                             label={user.isActive !== false ? 'Activer' : 'Désactiver'}
+                                                            compact={embedded}
                                                         />
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-right space-x-2">
+                                                <td className={`text-right ${embedded ? 'px-2 py-1.5' : 'px-4 py-2'}`}>
+                                                    <div className={`flex flex-wrap justify-end ${embedded ? 'gap-0.5' : 'gap-1'}`}>
                                                     <button 
                                                         onClick={() => handleEditProfile(user)} 
                                                         disabled={!canWriteModule}
-                                                        className={`font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded transition-colors ${canWriteModule ? 'hover:bg-emerald-50' : 'opacity-50 cursor-not-allowed'}`}
+                                                        className={`font-medium text-emerald-600 hover:text-emerald-800 rounded transition-colors ${embedded ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'} ${canWriteModule ? 'hover:bg-emerald-50' : 'opacity-50 cursor-not-allowed'}`}
                                                     >
-                                                        <i className="fas fa-user-edit mr-2"></i>
+                                                        <i className={`fas fa-user-edit ${embedded ? 'mr-1' : 'mr-1.5'}`}></i>
                                                         Profil
                                                     </button>
                                                     <button 
                                                         onClick={() => handleEdit(user)} 
                                                         disabled={!canWriteModule}
-                                                        className={`font-medium text-blue-600 hover:text-blue-800 px-3 py-1 rounded transition-colors ${canWriteModule ? 'hover:bg-blue-50' : 'opacity-50 cursor-not-allowed'}`}
+                                                        className={`font-medium text-blue-600 hover:text-blue-800 rounded transition-colors ${embedded ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'} ${canWriteModule ? 'hover:bg-blue-50' : 'opacity-50 cursor-not-allowed'}`}
                                                     >
-                                                        <i className="fas fa-edit mr-2"></i>
+                                                        <i className={`fas fa-edit ${embedded ? 'mr-1' : 'mr-1.5'}`}></i>
                                                         Rôle
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleResetPassword(user)}
+                                                        disabled={!canWriteModule || !user.email || resettingUserId === user.id}
+                                                        className={`font-medium text-slate-700 hover:text-slate-900 rounded transition-colors ${embedded ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'} ${
+                                                            !canWriteModule || !user.email ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100'
+                                                        }`}
+                                                        title={!user.email ? "Aucun email sur le compte" : "Envoie un email Supabase de réinitialisation"}
+                                                    >
+                                                        <i className={`fas fa-key ${embedded ? 'mr-1' : 'mr-1.5'} ${resettingUserId === user.id ? 'animate-pulse' : ''}`}></i>
+                                                        {embedded ? 'Reset' : 'Reset MDP'}
                                                     </button>
                                                     <button 
                                                         onClick={() => handleDelete(user)} 
                                                         disabled={PROTECTED_ROLES.includes(user.role as Role) || !canDeleteModule}
-                                                        className={`font-medium text-red-600 hover:text-red-800 px-3 py-1 rounded transition-colors ${PROTECTED_ROLES.includes(user.role as Role) || !canDeleteModule ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-50'}`}
+                                                        className={`font-medium text-red-600 hover:text-red-800 rounded transition-colors ${embedded ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'} ${PROTECTED_ROLES.includes(user.role as Role) || !canDeleteModule ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-50'}`}
                                                         title={
                                                             PROTECTED_ROLES.includes(user.role as Role)
                                                                 ? 'Impossible de supprimer le Super Administrateur'
@@ -819,9 +945,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                                                     : ''
                                                         }
                                                     >
-                                                        <i className="fas fa-trash mr-2"></i>
-                                                        Supprimer
+                                                        <i className={`fas fa-trash ${embedded ? 'mr-1' : 'mr-2'}`}></i>
+                                                        {embedded ? 'Suppr.' : 'Supprimer'}
                                                     </button>
+                                                    </div>
                                     </td>
                                 </tr>
                             ))}
@@ -831,7 +958,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                         )}
                     </>
                 )}
-                {activeTab === 'approvals' && currentUser.role === 'super_administrator' && (
+                {activeTab === 'approvals' && canModerateApprovals && (
                     <div className="space-y-6">
                         <div className="bg-white border border-emerald-200 rounded-lg shadow-sm p-6">
                             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -839,7 +966,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                 Workflow d'approbation
                             </h3>
                             <p className="text-sm text-gray-600 mt-2">
-                                Les comptes ci-dessous ont demandé un rôle avancé. Validez ou rejetez chaque demande pour activer l’accès correspondant.
+                                Chaque nouvelle inscription est en attente. À l’approbation, choisissez le <strong>département</strong> du collaborateur (obligatoire) puis validez.
                             </p>
                         </div>
 
@@ -855,6 +982,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                             <div className="space-y-6">
                                 {pendingUsers.map((pendingUser) => {
                                     const key = String(pendingUser.id);
+                                    const profileIdForDept = pendingUser.profileId ? String(pendingUser.profileId) : '';
                                     const noteValue = decisionNotes[key] || '';
                                     const approveLoading = processingRequestId === `approve-${key}`;
                                     const rejectLoading = processingRequestId === `reject-${key}`;
@@ -925,6 +1053,51 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                                 />
                                             </div>
 
+                                            <div className="mt-4">
+                                                <label className="block text-sm font-medium text-gray-900 mb-2">
+                                                    Département à l’activation <span className="text-red-600">*</span>
+                                                </label>
+                                                {!profileIdForDept ? (
+                                                    <p className="text-xs text-amber-700">Profil sans identifiant — impossible d’assigner un département.</p>
+                                                ) : (() => {
+                                                    const orgKey = String(
+                                                        pendingUser.organizationId ||
+                                                            authProfile?.organization_id ||
+                                                            currentUser?.organizationId ||
+                                                            ''
+                                                    );
+                                                    const deptList = orgKey ? departmentsByOrgId[orgKey] || [] : [];
+                                                    if (!deptList.length) {
+                                                        return (
+                                                            <p className="text-xs text-amber-700">
+                                                                Aucun département pour l’organisation de ce compte. Créez-en un dans l’onglet
+                                                                Départements.
+                                                            </p>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <select
+                                                            value={approvalDepartmentByProfileId[profileIdForDept] || ''}
+                                                            onChange={(e) =>
+                                                                setApprovalDepartmentByProfileId((prev) => ({
+                                                                    ...prev,
+                                                                    [profileIdForDept]: e.target.value,
+                                                                }))
+                                                            }
+                                                            disabled={approveLoading || rejectLoading}
+                                                            className="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                                        >
+                                                            <option value="">— Choisir un département —</option>
+                                                            {deptList.map((d) => (
+                                                                <option key={d.id} value={d.id}>
+                                                                    {d.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    );
+                                                })()}
+                                            </div>
+
                                             <div className="mt-4 flex flex-wrap justify-end gap-3">
                                                 <button
                                                     onClick={() => handleRejectRequest(pendingUser)}
@@ -959,7 +1132,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                     <UserModulePermissions users={users} canEdit={canWriteModule} />
                 )}
                 {activeTab === 'departments' && (
-                    <DepartmentManagement embeddedInUserManagement canRead={canReadModule} canWrite={canWriteModule} />
+                    <DepartmentManagement embedded embeddedInUserManagement canRead={canReadModule} canWrite={canWriteModule} />
                 )}
                 {activeTab === 'postes' && (
                     <PostesManagement embeddedInUserManagement />
@@ -986,12 +1159,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 />
             )}
 
-            {deletingUserId && (
+            {deleteTarget && (
                 <ConfirmationModal
                     title="Supprimer l'utilisateur"
-                    message={`Êtes-vous sûr de vouloir supprimer l'utilisateur "${users.find(u => u.id === deletingUserId)?.name || users.find(u => u.id === deletingUserId)?.email}" ? Cette action est irréversible.`}
+                    message={`Êtes-vous sûr de vouloir supprimer l'utilisateur "${deleteTarget.name}" ? Cette action est irréversible.`}
                     onConfirm={confirmDeleteUser}
-                    onCancel={() => setDeletingUserId(null)}
+                    onCancel={() => {
+                        if (!isDeleting) setDeleteTarget(null);
+                    }}
                     confirmText="Supprimer"
                     cancelText="Annuler"
                     confirmButtonClass="bg-red-600 hover:bg-red-700"

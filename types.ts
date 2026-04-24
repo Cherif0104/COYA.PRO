@@ -49,7 +49,8 @@ export type ModuleName =
   | 'logistique'
   | 'parc_auto'
   | 'ticket_it'
-  | 'messagerie';
+  | 'messagerie'
+  | 'collecte';
 
 export type ProfileStatus = 'pending' | 'active' | 'rejected';
 
@@ -92,12 +93,15 @@ export interface Department {
   updatedAt?: string;
 }
 
+/** Rôle fonctionnel au sein d’un département (distinct du rôle plateforme `Role`) */
+export type DepartmentMemberRole = 'member' | 'supervisor' | 'manager';
+
 /** Liaison utilisateur (auth user id) ↔ département */
 export interface UserDepartment {
   id: string;
   userId: string;
   departmentId: string;
-  roleInDepartment?: string;
+  roleInDepartment?: DepartmentMemberRole | string | null;
   createdAt?: string;
 }
 
@@ -220,6 +224,8 @@ export interface User {
   reviewComment?: string | null;
   reviewedAt?: string | null;
   reviewedBy?: string | null;
+  /** Organisation Supabase (`profiles.organization_id`) — utile affectation département à l’approbation */
+  organizationId?: string | null;
 }
 
 export type RoleApprovalDecision = 'approved' | 'rejected';

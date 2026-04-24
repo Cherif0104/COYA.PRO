@@ -72,9 +72,30 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
   const [motifCustom, setMotifCustom] = useState('');
   const [detail, setDetail] = useState('');
   const [nextStatus, setNextStatus] = useState<CrmContactLifecycleStatus | ''>('');
+  const [followUpAt, setFollowUpAt] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('');
   const [saving, setSaving] = useState(false);
 
   const contactUuid = useMemo(() => isUuid(contact.id), [contact.id]);
+
+  const filteredRows = useMemo(() => {
+    const q = historyFilter.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const hay = [
+        row.motif,
+        row.detail,
+        row.action_type,
+        row.status_snapshot,
+        row.status_updated_to,
+        row.follow_up_at,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, historyFilter]);
 
   useEffect(() => {
     if (!contact.organizationId) {
@@ -113,6 +134,7 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
     setMotifCustom('');
     setDetail('');
     setNextStatus('');
+    setFollowUpAt('');
   };
 
   const closeModal = () => {
@@ -131,6 +153,8 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
     setSaving(true);
     setMsg(null);
     try {
+      const followPayload =
+        followUpAt.trim() && (modalAction === 'reminder' || modalAction === 'follow_up') ? followUpAt.trim() : null;
       const { error } = await insertContactInteraction({
         organizationId: resolvedOrgId,
         contactId: String(contact.id),
@@ -140,6 +164,7 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
         detail: detail.trim() || null,
         statusUpdatedTo: statusChange,
         createdByUserId: user?.id ?? null,
+        followUpAt: followPayload,
       });
       if (error) {
         setMsg(error.message === 'CONTACT_NOT_SYNCED' ? String(t('crm_exchange_requires_uuid')) : error.message);
@@ -193,14 +218,28 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
       </div>
 
       <div>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">{t('crm_exchange_history_title')}</h3>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">{t('crm_exchange_history_title')}</h3>
+          <div className="relative w-full sm:max-w-[220px]">
+            <i className="fas fa-search pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" aria-hidden />
+            <input
+              type="search"
+              value={historyFilter}
+              onChange={(e) => setHistoryFilter(e.target.value)}
+              placeholder={String(t('crm_exchange_filter_ph'))}
+              className="w-full rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs text-slate-800"
+            />
+          </div>
+        </div>
         {loading ? (
           <p className="mt-2 text-xs text-slate-500">{t('loading')}</p>
         ) : rows.length === 0 ? (
           <p className="mt-2 text-xs text-slate-500">{t('crm_exchange_history_empty')}</p>
+        ) : filteredRows.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-500">{t('crm_exchange_filter_empty')}</p>
         ) : (
           <ul className="mt-2 space-y-2 max-h-[280px] overflow-y-auto pr-1">
-            {rows.map((row) => {
+            {filteredRows.map((row) => {
               const snapUi = contactStatusDbToUi(row.status_snapshot);
               const nextUi = contactStatusDbToUi(row.status_updated_to);
               return (
@@ -234,6 +273,12 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
                       </dd>
                     </div>
                   </dl>
+                  {row.follow_up_at ? (
+                    <p className="mt-2 text-[11px] text-sky-800">
+                      <i className="fas fa-calendar-alt mr-1 text-sky-600" aria-hidden />
+                      {t('crm_exchange_follow_up_at')}: {new Date(row.follow_up_at).toLocaleString()}
+                    </p>
+                  ) : null}
                   {row.detail ? (
                     <p className="mt-2 whitespace-pre-wrap border-t border-slate-100 pt-2 text-xs text-slate-700">{row.detail}</p>
                   ) : null}
@@ -310,6 +355,20 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
                 </option>
               ))}
             </select>
+
+            {(modalAction === 'reminder' || modalAction === 'follow_up') && (
+              <>
+                <label className="mt-3 block text-[10px] font-bold uppercase text-slate-500">
+                  {t('crm_exchange_follow_up_at')}
+                </label>
+                <input
+                  type="datetime-local"
+                  value={followUpAt}
+                  onChange={(e) => setFollowUpAt(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </>
+            )}
 
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700">

@@ -55,6 +55,7 @@ const buildUserFromProfile = (profile: any): User => {
     reviewedBy: profile?.reviewed_by || null,
     posteId: profile?.poste_id ?? undefined,
     posteName: profile?.poste_name ?? undefined,
+    organizationId: profile?.organization_id ?? null,
   };
 };
 
@@ -97,12 +98,13 @@ const ensureProfile = async (authUser: any) => {
 
   return insertedProfile;
 };
-import { User, ProfileStatus, Role, ROLES_REQUIRING_APPROVAL } from '../types';
+import { User, ProfileStatus, Role } from '../types';
 import { authGuard } from '../middleware/authGuard';
 import { supabase } from '../services/supabaseService';
 
 interface AuthContextType {
   user: User | null;
+  /** Profil applicatif (dont organization_id pour chargements métier) */
   profile: AuthUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: any }>;
@@ -289,12 +291,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (authUser) {
         const requestedRole = (role as Role) || 'student';
-        const approvalRequired = ROLES_REQUIRING_APPROVAL.includes(requestedRole);
-        const status: ProfileStatus = approvalRequired ? 'pending' : 'active';
-        const pendingRole = approvalRequired ? requestedRole : null;
-        const effectiveRole: Role = approvalRequired
-          ? 'student'
-          : ((authUser.role as Role) || requestedRole);
+        const status: ProfileStatus = 'pending';
+        const pendingRole = requestedRole;
+        const effectiveRole: Role = 'student';
 
         // Convertir AuthUser en User pour la compatibilité
         const userData: User = {

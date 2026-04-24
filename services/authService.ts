@@ -137,10 +137,11 @@ export class AuthService {
       // Vérifier la disponibilité du rôle avant l'inscription
       const uiRole = (data.role as Role) || DEFAULT_ROLE;
       const storageRole = this.normalizeRoleForStorage(uiRole);
-      const approvalRequired = ROLES_REQUIRING_APPROVAL.includes(uiRole);
-      const targetStatus: ProfileStatus = approvalRequired ? 'pending' : 'active';
-      const pendingRole = approvalRequired ? storageRole : null;
-      const storedBaseRole = approvalRequired ? this.normalizeRoleForStorage(DEFAULT_ROLE) : storageRole;
+      /** Toute inscription reste en attente jusqu’à validation par un administrateur (rôle effectif minimal jusqu’à approbation). */
+      const approvalRequired = true;
+      const targetStatus: ProfileStatus = 'pending';
+      const pendingRole = storageRole;
+      const storedBaseRole = this.normalizeRoleForStorage(DEFAULT_ROLE);
       const metadataRole = this.mapStoredRoleToUi(storedBaseRole);
       const roleCheck = await this.checkRoleAvailability(uiRole);
       
@@ -161,7 +162,7 @@ export class AuthService {
             full_name: data.full_name,
             phone_number: data.phone_number,
             role: metadataRole,
-            requested_role: approvalRequired ? uiRole : undefined,
+            requested_role: uiRole,
             status: targetStatus,
             organization_id: organizationId
           }
