@@ -23,6 +23,8 @@ export type ContactInteractionRow = {
   follow_up_at: string | null;
   created_by: string | null;
   created_at: string;
+  /** Rempli côté client après jointure sur `profiles` (auth user_id). */
+  created_by_name?: string | null;
 };
 
 const UI_STATUS_TO_DB: Record<CrmContactLifecycleStatus, string> = {
@@ -69,7 +71,28 @@ export async function listContactInteractions(contactId: string): Promise<{
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false });
     if (error) return { data: null, error: new Error(error.message) };
-    return { data: (data || []) as ContactInteractionRow[], error: null };
+    const rows = (data || []) as ContactInteractionRow[];
+    const userIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))] as string[];
+    if (userIds.length === 0) {
+      return { data: rows, error: null };
+    }
+    const { data: profs, error: pErr } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email')
+      .in('user_id', userIds);
+    if (pErr) {
+      return { data: rows, error: null };
+    }
+    const nameBy = new Map<string, string>();
+    (profs || []).forEach((p: { user_id: string; full_name: string | null; email: string | null }) => {
+      const label = (p.full_name && p.full_name.trim()) || p.email || '';
+      if (p.user_id && label) nameBy.set(p.user_id, label);
+    });
+    const enriched = rows.map((r) => ({
+      ...r,
+      created_by_name: r.created_by ? nameBy.get(r.created_by) ?? null : null,
+    }));
+    return { data: enriched, error: null };
   } catch (e) {
     return { data: null, error: e instanceof Error ? e : new Error(String(e)) };
   }

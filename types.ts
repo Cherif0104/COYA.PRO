@@ -75,6 +75,8 @@ export interface Organization {
   website?: string;
   contactEmail?: string;
   isActive: boolean;
+  /** true = organisation mère plateforme (données COYA) ; les autres sont des tenants hébergés */
+  isPlatformRoot?: boolean;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;

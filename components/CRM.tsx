@@ -481,6 +481,18 @@ const CRM: React.FC<CRMProps> = ({
         [contacts, detailContactId],
     );
 
+    /** Libellé catégorie depuis le référentiel si l’API n’a pas renvoyé `categoryName` (évite l’affichage brut d’un UUID). */
+    const detailContactEnriched = useMemo(() => {
+        if (!detailContact) return null;
+        const cid = detailContact.categoryId;
+        let categoryName = detailContact.categoryName ?? null;
+        if (!categoryName && cid) {
+            const opt = categoryOptions.find((o) => String(o.id) === String(cid));
+            if (opt?.name) categoryName = opt.name;
+        }
+        return { ...detailContact, categoryName: categoryName ?? undefined };
+    }, [detailContact, categoryOptions]);
+
     useEffect(() => {
         if (contactSubView === 'collecte') setDetailContactId(null);
     }, [contactSubView]);
@@ -618,9 +630,9 @@ const CRM: React.FC<CRMProps> = ({
 
     return (
         <>
-        {detailContact ? (
+        {detailContactEnriched ? (
             <CRMContactDetailPage
-                contact={detailContact}
+                contact={detailContactEnriched}
                 onBack={() => setDetailContactId(null)}
                 onRequestEdit={(c) => {
                     setDetailContactId(null);
@@ -640,7 +652,7 @@ const CRM: React.FC<CRMProps> = ({
                     setDetailContactId(null);
                     setContactSubView('collecte');
                 }}
-                canEdit={canManageContact(detailContact)}
+                canEdit={canManageContact(detailContactEnriched)}
                 onUpdateContact={(c) => void onUpdateContact(c)}
             />
         ) : detailContactId != null ? (

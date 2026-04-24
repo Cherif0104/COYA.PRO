@@ -365,7 +365,10 @@ export class DataService {
     comment?: string;
     /** Obligatoire côté UI : rattachement `user_departments` après activation */
     departmentId?: string | null;
-  }) {
+  }): Promise<
+    | { data: Record<string, unknown>; error: null; departmentAssignmentFailed?: boolean }
+    | { data: null; error: unknown }
+  > {
     const { profileId, approverId, comment, departmentId } = params;
     try {
       const { data: profile, error: profileError } = await supabase
@@ -399,9 +402,11 @@ export class DataService {
       if (updateError) throw updateError;
 
       const authUserId = String((updatedProfile as { user_id?: string }).user_id || (profile as { user_id?: string }).user_id || '');
+      let departmentAssignmentFailed = false;
       if (departmentId && authUserId) {
         const ok = await DepartmentService.assignUserToDepartment(authUserId, departmentId, 'member');
         if (!ok) {
+          departmentAssignmentFailed = true;
           console.warn('⚠️ Approbation OK mais échec assignation département (RLS ou table user_departments)');
         }
       }
@@ -420,7 +425,11 @@ export class DataService {
         console.warn('⚠️ Erreur enregistrement log approbation (non bloquant):', logError);
       }
 
-      return { data: updatedProfile, error: null };
+      return {
+        data: updatedProfile,
+        error: null,
+        ...(departmentAssignmentFailed ? { departmentAssignmentFailed: true as const } : {})
+      };
     } catch (error) {
       console.error('❌ Erreur approbation rôle profil:', error);
       return { data: null, error };

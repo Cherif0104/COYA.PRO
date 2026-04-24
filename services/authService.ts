@@ -1,7 +1,6 @@
-import { supabase } from './supabaseService';
+import { supabase, createEphemeralSupabaseClient } from './supabaseService';
 import { User, Role, ProfileStatus, ROLES_REQUIRING_APPROVAL } from '../types';
-
-const DEFAULT_ORGANIZATION_ID = '550e8400-e29b-41d4-a716-446655440000';
+import { getPrimaryOrganizationId } from '../constants/platformTenant';
 const DEFAULT_ROLE: Role = 'student';
 const STORAGE_ROLE_MAP: Record<string, Role> = {
   partner: 'partner_facilitator'
@@ -117,7 +116,7 @@ export class AuthService {
   }
 
   static getDefaultOrganizationId() {
-    return DEFAULT_ORGANIZATION_ID;
+    return getPrimaryOrganizationId();
   }
 
   // Vérifier si un rôle management existe déjà
@@ -151,7 +150,7 @@ export class AuthService {
       }
 
       // Déterminer l'organization_id AVANT l'appel signUp
-      const organizationId = (data.organization_id && data.organization_id.trim()) || DEFAULT_ORGANIZATION_ID;
+      const organizationId = (data.organization_id && data.organization_id.trim()) || getPrimaryOrganizationId();
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
@@ -208,6 +207,68 @@ export class AuthService {
     }
   }
 
+  /**
+   * Inscription depuis l’interface admin : même logique que `signUp`, mais via un client
+   * Supabase sans persistance pour ne pas remplacer la session du navigateur de l’administrateur.
+   */
+  static async signUpIsolated(data: SignUpData) {
+    try {
+      const uiRole = (data.role as Role) || DEFAULT_ROLE;
+      const storageRole = this.normalizeRoleForStorage(uiRole);
+      const targetStatus: ProfileStatus = 'pending';
+      const pendingRole = storageRole;
+      const storedBaseRole = this.normalizeRoleForStorage(DEFAULT_ROLE);
+      const metadataRole = this.mapStoredRoleToUi(storedBaseRole);
+      const roleCheck = await this.checkRoleAvailability(uiRole);
+      if (!roleCheck.available) {
+        const error = new Error(roleCheck.error || 'Rôle non disponible');
+        return { user: null, error };
+      }
+      const organizationId = (data.organization_id && data.organization_id.trim()) || getPrimaryOrganizationId();
+      const client = createEphemeralSupabaseClient();
+
+      const { data: authData, error: authError } = await client.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          email_redirect_to: undefined,
+          data: {
+            full_name: data.full_name,
+            phone_number: data.phone_number,
+            role: metadataRole,
+            requested_role: uiRole,
+            status: targetStatus,
+            organization_id: organizationId,
+          },
+        },
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        const { error: profileError } = await client.from('profiles').insert({
+          user_id: authData.user.id,
+          email: data.email,
+          full_name: data.full_name,
+          phone_number: data.phone_number,
+          role: storedBaseRole,
+          organization_id: organizationId,
+          status: targetStatus,
+          pending_role: pendingRole,
+        });
+
+        if (profileError) {
+          console.error('Erreur création profil (isolated):', profileError);
+        }
+      }
+
+      return { user: authData.user, error: null };
+    } catch (error) {
+      console.error('Erreur inscription isolée:', error);
+      return { user: null, error };
+    }
+  }
+
   // Connexion - Utilise uniquement Supabase Auth
   static async signIn(data: SignInData) {
     try {
@@ -252,7 +313,7 @@ export class AuthService {
               full_name: sanitizeFullName(authData.user.user_metadata?.full_name, authData.user.email),
               role: storageRole,
               phone_number: authData.user.user_metadata?.phone_number || null,
-              organization_id: authData.user.user_metadata?.organization_id || DEFAULT_ORGANIZATION_ID,
+              organization_id: authData.user.user_metadata?.organization_id || getPrimaryOrganizationId(),
               is_active: true,
               status: 'active'
             })
@@ -278,7 +339,7 @@ export class AuthService {
               full_name: newProfile.full_name,
               role: this.mapStoredRoleToUi(newProfile.role),
               avatar_url: newProfile.avatar_url || '',
-              organization_id: newProfile.organization_id || DEFAULT_ORGANIZATION_ID,
+              organization_id: newProfile.organization_id || getPrimaryOrganizationId(),
               status: (newProfile.status as ProfileStatus) || 'active',
               pending_role: newProfile.pending_role || null,
               poste_id: newProfile.poste_id ?? null,
@@ -303,7 +364,7 @@ export class AuthService {
             full_name: sanitizeFullName(authData.user.user_metadata?.full_name, authData.user.email),
             role: storageRole,
             phone_number: authData.user.user_metadata?.phone_number || null,
-            organization_id: authData.user.user_metadata?.organization_id || DEFAULT_ORGANIZATION_ID,
+            organization_id: authData.user.user_metadata?.organization_id || getPrimaryOrganizationId(),
             is_active: true
           })
           .select()
@@ -315,7 +376,7 @@ export class AuthService {
 
       await supabase
         .from('profiles')
-        .update({ last_login: new Date().toISOString(), organization_id: effectiveProfile.organization_id || DEFAULT_ORGANIZATION_ID })
+        .update({ last_login: new Date().toISOString(), organization_id: effectiveProfile.organization_id || getPrimaryOrganizationId() })
         .eq('user_id', authData.user.id);
 
       console.log('✅ Authentification Supabase réussie !');
@@ -326,7 +387,7 @@ export class AuthService {
           full_name: effectiveProfile.full_name,
           role: this.mapStoredRoleToUi(effectiveProfile.role),
           avatar_url: effectiveProfile.avatar_url || '',
-          organization_id: effectiveProfile.organization_id || DEFAULT_ORGANIZATION_ID,
+          organization_id: effectiveProfile.organization_id || getPrimaryOrganizationId(),
           status: (effectiveProfile.status as ProfileStatus) || 'active',
           pending_role: effectiveProfile.pending_role || null,
           poste_id: effectiveProfile.poste_id ?? null,
@@ -385,7 +446,7 @@ export class AuthService {
           full_name: profile.full_name,
           role: this.mapStoredRoleToUi(profile.role),
           avatar_url: profile.avatar_url,
-          organization_id: profile.organization_id || DEFAULT_ORGANIZATION_ID,
+          organization_id: profile.organization_id || getPrimaryOrganizationId(),
           status: (profile.status as ProfileStatus) || 'active',
           pending_role: profile.pending_role || null,
           poste_id: profile.poste_id ?? null,
@@ -420,7 +481,7 @@ export class AuthService {
             full_name: profile.full_name,
             role: AuthService.mapStoredRoleToUi(profile.role),
             avatar_url: profile.avatar_url,
-            organization_id: profile.organization_id || DEFAULT_ORGANIZATION_ID,
+            organization_id: profile.organization_id || getPrimaryOrganizationId(),
             status: (profile.status as ProfileStatus) || 'active',
             pending_role: profile.pending_role || null,
             poste_id: profile.poste_id ?? null,

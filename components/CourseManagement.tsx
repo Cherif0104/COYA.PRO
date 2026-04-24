@@ -13,9 +13,11 @@ interface CourseManagementProps {
     onAddCourse: (courseData: Omit<Course, 'id' | 'progress'>) => void;
     onUpdateCourse: (course: Course) => void;
     onDeleteCourse: (courseId: string) => void;
+    /** Dans Paramètres : pas de plein écran ni header gradient (aligné design admin). */
+    embedded?: boolean;
 }
 
-const CourseManagement: React.FC<CourseManagementProps> = ({ courses, users, onAddCourse, onUpdateCourse, onDeleteCourse }) => {
+const CourseManagement: React.FC<CourseManagementProps> = ({ courses, users, onAddCourse, onUpdateCourse, onDeleteCourse, embedded = false }) => {
     const { t } = useLocalization();
     const { user } = useAuth();
     const { canAccessModule, hasPermission } = useModulePermissions();
@@ -107,68 +109,107 @@ const CourseManagement: React.FC<CourseManagementProps> = ({ courses, users, onA
         );
     }
 
-    return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header moderne avec gradient */}
-            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                            <h1 className="text-4xl font-bold mb-2">{t('course_management') || 'Course Management'}</h1>
-                            <p className="text-emerald-50 text-sm">
-                                Créez, modifiez et gérez vos formations
-                            </p>
-                </div>
-                        <button 
-                            onClick={() => handleOpenForm(null)} 
-                            disabled={!canWriteModule}
-                            className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
-                                canWriteModule ? 'hover:bg-emerald-50' : 'opacity-50 cursor-not-allowed'
-                            }`}
-                        >
-                    <i className="fas fa-plus mr-2"></i>
-                            Nouveau Cours
-                </button>
+    const metricsGrid = embedded ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs uppercase text-slate-500">Total</p>
+                <p className="text-2xl font-bold text-slate-900">{totalCourses}</p>
             </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs uppercase text-slate-500">Publiés</p>
+                <p className="text-2xl font-bold text-slate-900">{publishedCourses}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs uppercase text-slate-500">Brouillons</p>
+                <p className="text-2xl font-bold text-slate-900">{draftCourses}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs uppercase text-slate-500">Étudiants</p>
+                <p className="text-2xl font-bold text-slate-900">{totalStudents}</p>
+            </div>
+        </div>
+    ) : (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Total Cours</span>
+                        <i className="fas fa-book text-2xl text-blue-500"></i>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900">{totalCourses}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Publiés</span>
+                        <i className="fas fa-check-circle text-2xl text-green-500"></i>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900">{publishedCourses}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Brouillons</span>
+                        <i className="fas fa-edit text-2xl text-yellow-500"></i>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900">{draftCourses}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Total Étudiants</span>
+                        <i className="fas fa-users text-2xl text-purple-500"></i>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
                 </div>
             </div>
+        </div>
+    );
 
-            {/* Métriques Power BI style */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Total Cours</span>
-                            <i className="fas fa-book text-2xl text-blue-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{totalCourses}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Publiés</span>
-                            <i className="fas fa-check-circle text-2xl text-green-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{publishedCourses}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Brouillons</span>
-                            <i className="fas fa-edit text-2xl text-yellow-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{draftCourses}</p>
-                    </div>
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600">Total Étudiants</span>
-                            <i className="fas fa-users text-2xl text-purple-500"></i>
-                        </div>
-                        <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
-                    </div>
+    return (
+        <div className={embedded ? 'space-y-4' : 'min-h-screen bg-gray-50'}>
+            {embedded ? (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-sm text-slate-600">
+                        Créez, modifiez et gérez le catalogue de formations pour votre organisation.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => handleOpenForm(null)}
+                        disabled={!canWriteModule}
+                        className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                        <i className="fas fa-plus mr-2" />
+                        Nouveau cours
+                    </button>
                 </div>
-            </div>
+            ) : (
+                <>
+                    <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <h1 className="text-4xl font-bold mb-2">{t('course_management') || 'Course Management'}</h1>
+                                    <p className="text-emerald-50 text-sm">Créez, modifiez et gérez vos formations</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenForm(null)}
+                                    disabled={!canWriteModule}
+                                    className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
+                                        canWriteModule ? 'hover:bg-emerald-50' : 'opacity-50 cursor-not-allowed'
+                                    }`}
+                                >
+                                    <i className="fas fa-plus mr-2"></i>
+                                    Nouveau Cours
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {metricsGrid}
 
             {/* Barre de recherche et filtres */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <div className={embedded ? 'pb-0' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8'}>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="flex-1 min-w-[200px]">

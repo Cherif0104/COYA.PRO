@@ -191,11 +191,18 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
     );
   }
 
-  return (
-    <div className="space-y-4">
-      {msg && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</p>}
+  const formatActor = (row: ContactInteractionRow) => {
+    if (!row.created_by) return String(t('crm_exchange_actor_unknown'));
+    if (user?.id && row.created_by === user.id) return String(t('crm_exchange_author_me'));
+    if (row.created_by_name?.trim()) return row.created_by_name.trim();
+    return String(t('crm_exchange_actor_profile_missing'));
+  };
 
-      <div>
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-0">
+      {msg && <p className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</p>}
+
+      <div className="shrink-0 border-b border-slate-100 pb-4">
         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">{t('crm_exchange_section_title')}</h3>
         <p className="mt-0.5 text-[11px] text-slate-500">{t('crm_exchange_section_subtitle')}</p>
         {canEdit ? (
@@ -217,8 +224,8 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
         )}
       </div>
 
-      <div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-100 pb-2 sm:flex-row sm:items-end sm:justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">{t('crm_exchange_history_title')}</h3>
           <div className="relative w-full sm:max-w-[220px]">
             <i className="fas fa-search pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" aria-hidden />
@@ -238,17 +245,23 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
         ) : filteredRows.length === 0 ? (
           <p className="mt-2 text-xs text-slate-500">{t('crm_exchange_filter_empty')}</p>
         ) : (
-          <ul className="mt-2 space-y-2 max-h-[280px] overflow-y-auto pr-1">
+          <ul className="mt-2 min-h-[120px] flex-1 space-y-2 overflow-y-auto pr-1 sm:max-h-[min(58vh,560px)]">
             {filteredRows.map((row) => {
               const snapUi = contactStatusDbToUi(row.status_snapshot);
               const nextUi = contactStatusDbToUi(row.status_updated_to);
               return (
                 <li key={row.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100">
-                      {actionLabel(row.action_type)}
-                    </span>
-                    <time className="text-[10px] text-slate-400">{new Date(row.created_at).toLocaleString()}</time>
+                  <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100/80 pb-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{t('crm_exchange_recorded_by')}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900">{formatActor(row)}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100">
+                        {actionLabel(row.action_type)}
+                      </span>
+                      <time className="text-[10px] text-slate-400">{new Date(row.created_at).toLocaleString()}</time>
+                    </div>
                   </div>
                   <dl className="mt-2 grid gap-1.5 text-[11px] sm:grid-cols-3">
                     <div>
@@ -282,13 +295,6 @@ const ContactExchangePanel: React.FC<Props> = ({ contact, canEdit, onUpdateConta
                   {row.detail ? (
                     <p className="mt-2 whitespace-pre-wrap border-t border-slate-100 pt-2 text-xs text-slate-700">{row.detail}</p>
                   ) : null}
-                  <p className="mt-1.5 text-[10px] text-slate-400">
-                    {row.created_by && user?.id && row.created_by === user.id
-                      ? t('crm_exchange_author_me')
-                      : row.created_by
-                        ? `${t('crm_exchange_author')}: ${String(row.created_by).slice(0, 8)}…`
-                        : ''}
-                  </p>
                 </li>
               );
             })}

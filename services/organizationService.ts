@@ -1,4 +1,5 @@
 import { supabase } from './supabaseService';
+import { getPrimaryOrganizationId, isSingleOrganizationTenantMode } from '../constants/platformTenant';
 
 export interface Organization {
   id: string;
@@ -9,6 +10,7 @@ export interface Organization {
   website?: string;
   contactEmail?: string;
   isActive: boolean;
+  isPlatformRoot?: boolean;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
@@ -79,6 +81,16 @@ export class OrganizationService {
    */
   static async getAllOrganizations(): Promise<Organization[]> {
     try {
+      if (isSingleOrganizationTenantMode()) {
+        const pid = getPrimaryOrganizationId();
+        const { data, error } = await supabase.from('organizations').select('*').eq('id', pid).maybeSingle();
+        if (error || !data) {
+          const { data: fallback } = await supabase.from('organizations').select('*').order('created_at', { ascending: true }).limit(1).maybeSingle();
+          return fallback ? [this.mapToOrganization(fallback)] : [];
+        }
+        return [this.mapToOrganization(data)];
+      }
+
       const { data, error } = await supabase
         .from('organizations')
         .select('*')
@@ -123,6 +135,9 @@ export class OrganizationService {
    */
   static async getActiveOrganizations(): Promise<Organization[]> {
     try {
+      if (isSingleOrganizationTenantMode()) {
+        return this.getAllOrganizations();
+      }
       const { data, error } = await supabase
         .from('organizations')
         .select('*')
@@ -159,6 +174,11 @@ export class OrganizationService {
     description?: string
   ): Promise<Organization | null> {
     try {
+      if (isSingleOrganizationTenantMode()) {
+        throw new Error(
+          'Mode organisation unique (VITE_SINGLE_ORGANIZATION_MODE) : création de tenants désactivée. Désactivez ce flag pour ajouter des organisations hébergées.',
+        );
+      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('Utilisateur non authentifié');
@@ -181,7 +201,8 @@ export class OrganizationService {
           name,
           slug: slug.toLowerCase().trim(),
           description,
-          is_active: true
+          is_active: true,
+          is_platform_root: false,
         })
         .select()
         .single();
@@ -255,12 +276,15 @@ export class OrganizationService {
    * Désactive une organisation (Super Admin uniquement)
    */
   static async deactivateOrganization(id: string): Promise<boolean> {
-    try {
-      return await this.updateOrganization(id, { isActive: false }) !== null;
-    } catch (error) {
-      console.error('❌ Erreur deactivateOrganization:', error);
-      return false;
+    if (await this.isProtectedPlatformOrganization(id)) {
+      throw new Error("Impossible de désactiver l'organisation plateforme (mère).");
     }
+    if (isSingleOrganizationTenantMode() && id === getPrimaryOrganizationId()) {
+      throw new Error("Impossible de désactiver l'unique organisation du tenant.");
+    }
+    const ok = (await this.updateOrganization(id, { isActive: false })) !== null;
+    if (!ok) throw new Error('La désactivation a échoué.');
+    return true;
   }
 
   /**
@@ -297,9 +321,11 @@ export class OrganizationService {
         throw new Error('Seuls les Super Administrateurs peuvent supprimer des organisations');
       }
 
-      // Protection : Ne pas supprimer SENEGEL
-      if (id === '550e8400-e29b-41d4-a716-446655440000') {
-        throw new Error('L\'organisation SENEGEL ne peut pas être supprimée');
+      if (isSingleOrganizationTenantMode()) {
+        throw new Error('Mode organisation unique : suppression d’organisation désactivée.');
+      }
+      if (await this.isProtectedPlatformOrganization(id)) {
+        throw new Error("L'organisation plateforme (mère) ne peut pas être supprimée.");
       }
 
       const { error } = await supabase
@@ -317,6 +343,25 @@ export class OrganizationService {
       console.error('❌ Erreur deleteOrganization:', error);
       throw error;
     }
+  }
+
+  /**
+   * Organisation mère plateforme (non supprimable / non désactivable).
+   * Priorité à la ligne avec is_platform_root = true ; sinon repli sur VITE_PRIMARY_ORGANIZATION_ID.
+   */
+  static async isProtectedPlatformOrganization(organizationId: string): Promise<boolean> {
+    try {
+      const { data: rows, error: rootErr } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('is_platform_root', true)
+        .limit(1);
+      const rootId = !rootErr && rows?.length ? rows[0].id : null;
+      if (rootId) return organizationId === rootId;
+    } catch {
+      /* colonne absente ou erreur réseau */
+    }
+    return organizationId === getPrimaryOrganizationId();
   }
 
   /**
@@ -366,6 +411,7 @@ export class OrganizationService {
       website: data.website,
       contactEmail: data.contact_email,
       isActive: data.is_active ?? true,
+      isPlatformRoot: data.is_platform_root === true,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       createdBy: data.created_by

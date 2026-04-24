@@ -16,6 +16,7 @@ import { supabase } from '../services/supabaseService';
 import AccessDenied from './common/AccessDenied';
 import { DataService } from '../services/dataService';
 import AuthService from '../services/authService';
+import { getPrimaryOrganizationId, isSingleOrganizationTenantMode } from '../constants/platformTenant';
 
 const UserEditModal: React.FC<{
     user: User;
@@ -178,6 +179,369 @@ const UserEditModal: React.FC<{
     );
 };
 
+function generateProvisionPassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%&*';
+    const arr = new Uint8Array(20);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => chars[b % chars.length]).join('');
+}
+
+const CreateUserModal: React.FC<{
+    open: boolean;
+    onClose: () => void;
+    showToast: (message: string, type?: 'success' | 'error') => void;
+    canWriteModule: boolean;
+    currentRole: Role | undefined;
+    currentOrganizationId: string | null | undefined;
+    canAssignReservedRoles: boolean;
+    onRefreshUsers?: () => Promise<void>;
+    onLocalUsersReplace: (users: User[]) => void;
+}> = ({
+    open,
+    onClose,
+    showToast,
+    canWriteModule,
+    currentRole,
+    currentOrganizationId,
+    canAssignReservedRoles,
+    onRefreshUsers,
+    onLocalUsersReplace,
+}) => {
+    const { t } = useLocalization();
+    const [email, setEmail] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [role, setRole] = useState<Role>('student');
+    const [orgId, setOrgId] = useState<string>('');
+    const [orgChoices, setOrgChoices] = useState<{ id: string; name: string }[]>([]);
+    const [sendInviteEmail, setSendInviteEmail] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [creationSuccess, setCreationSuccess] = useState<{ password: string; email: string } | null>(null);
+
+    const singleOrgMode = isSingleOrganizationTenantMode();
+    const primaryOrgId = getPrimaryOrganizationId();
+
+    useEffect(() => {
+        if (!open) return;
+        setEmail('');
+        setFullName('');
+        setPhone('');
+        setRole('student');
+        setSendInviteEmail(true);
+        setSubmitting(false);
+        setCreationSuccess(null);
+        if (singleOrgMode) {
+            setOrgId(primaryOrgId);
+            setOrgChoices([]);
+            return undefined;
+        }
+        if (currentRole === 'super_administrator') {
+            let cancelled = false;
+            OrganizationService.getAllOrganizations().then((orgs) => {
+                if (cancelled) return;
+                setOrgChoices(orgs.map((o) => ({ id: String(o.id), name: o.name })));
+                const fallback = currentOrganizationId || orgs[0]?.id;
+                if (fallback) setOrgId(String(fallback));
+            });
+            return () => {
+                cancelled = true;
+            };
+        }
+        if (currentOrganizationId) setOrgId(String(currentOrganizationId));
+        return undefined;
+    }, [open, currentRole, currentOrganizationId, singleOrgMode, primaryOrgId]);
+
+    if (!open) return null;
+
+    const targetOrgId = singleOrgMode
+        ? primaryOrgId
+        : currentRole === 'super_administrator' && orgId
+          ? orgId
+          : currentOrganizationId
+            ? String(currentOrganizationId)
+            : AuthService.getDefaultOrganizationId();
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!canWriteModule) return;
+        const em = email.trim().toLowerCase();
+        const name = fullName.trim();
+        if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+            showToast('Adresse e-mail invalide.', 'error');
+            return;
+        }
+        if (!name) {
+            showToast('Le nom complet est obligatoire.', 'error');
+            return;
+        }
+        if (role === 'super_administrator' && !canAssignReservedRoles) {
+            showToast('Ce rôle est réservé SENEGEL.', 'error');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const password = generateProvisionPassword();
+            const { user, error } = await AuthService.signUpIsolated({
+                email: em,
+                password,
+                full_name: name,
+                phone_number: phone.trim() || undefined,
+                role,
+                organization_id: targetOrgId,
+            });
+            if (error) throw error instanceof Error ? error : new Error(String(error));
+            if (!user) throw new Error('Compte non créé');
+
+            if (sendInviteEmail) {
+                const { error: reErr } = await AuthService.resetPassword(em);
+                if (reErr) {
+                    showToast(
+                        'Compte créé (en attente de validation). L’envoi du lien mot de passe a échoué — transmettez le mot de passe provisoire affiché ci-dessous ou utilisez « Reset MDP » depuis la liste.',
+                        'error',
+                    );
+                } else {
+                    showToast(
+                        'Compte créé. Un e-mail a été envoyé ; le mot de passe provisoire reste affiché ci-dessous en secours.',
+                        'success',
+                    );
+                }
+            } else {
+                showToast(
+                    'Compte créé. Transmettez le mot de passe provisoire (affiché ci-dessous) ; la personne pourra le changer dans Paramètres → Profil après connexion.',
+                    'success',
+                );
+            }
+
+            if (onRefreshUsers) await onRefreshUsers();
+            else {
+                const list = await DataAdapter.getUsers();
+                onLocalUsersReplace(list);
+            }
+            setCreationSuccess({ password, email: em });
+        } catch (err: any) {
+            console.error('Création utilisateur:', err);
+            showToast(err?.message || 'Erreur lors de la création du compte.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const finishSuccessAndClose = () => {
+        setCreationSuccess(null);
+        onClose();
+    };
+
+    if (creationSuccess) {
+        return (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+                <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl">
+                    <div className="border-b border-slate-200 p-6">
+                        <h2 className="text-xl font-bold text-slate-900">Compte créé</h2>
+                        <p className="mt-2 text-sm text-slate-600">
+                            Mot de passe provisoire pour <strong className="text-slate-800">{creationSuccess.email}</strong>. Copiez-le
+                            maintenant : il ne sera plus affiché après fermeture.
+                        </p>
+                    </div>
+                    <div className="space-y-4 p-6">
+                        <div>
+                            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Mot de passe provisoire</label>
+                            <div className="mt-1 flex gap-2">
+                                <input
+                                    readOnly
+                                    value={creationSuccess.password}
+                                    className="min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 p-2 font-mono text-sm text-slate-900"
+                                    onFocus={(e) => e.target.select()}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        void navigator.clipboard.writeText(creationSuccess.password);
+                                        showToast('Mot de passe copié dans le presse-papiers.', 'success');
+                                    }}
+                                    className="shrink-0 rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-900"
+                                >
+                                    Copier
+                                </button>
+                            </div>
+                        </div>
+                        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                            Après la première connexion, la personne doit ouvrir <strong>Paramètres</strong> → <strong>Profil</strong> et
+                            utiliser la section <strong>Mot de passe du compte</strong> pour définir un mot de passe définitif.
+                        </p>
+                    </div>
+                    <div className="flex justify-end border-t border-slate-200 bg-slate-50 p-4">
+                        <button
+                            type="button"
+                            onClick={finishSuccessAndClose}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                        >
+                            Fermer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl">
+                <form onSubmit={handleSubmit}>
+                    <div className="border-b border-slate-200 p-6">
+                        <h2 className="text-xl font-bold text-slate-900">Nouvel utilisateur</h2>
+                        <p className="mt-1 text-sm text-slate-600">
+                            Création du compte, rôle demandé et rattachement organisation. Le profil sera{' '}
+                            <strong>en attente de validation</strong> comme pour une inscription publique. Un{' '}
+                            <strong>mot de passe provisoire</strong> est généré automatiquement et affiché une fois après la création.
+                        </p>
+                    </div>
+                    <div className="space-y-4 p-6">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">E-mail (connexion)</label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Nom complet</label>
+                            <input
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                required
+                                className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Téléphone (optionnel)</label>
+                            <input
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                            />
+                        </div>
+                        {currentRole === 'super_administrator' && !singleOrgMode && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">Organisation</label>
+                                <select
+                                    value={orgId}
+                                    onChange={(e) => setOrgId(e.target.value)}
+                                    className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                                >
+                                    {orgChoices.map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                            {o.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {singleOrgMode && (
+                            <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                                Mode organisation unique : le compte est rattaché à l’organisation principale de la plateforme.
+                            </p>
+                        )}
+                        <div>
+                            <label htmlFor="new-user-role" className="block text-sm font-medium text-slate-700">
+                                Rôle demandé (après validation)
+                            </label>
+                            <select
+                                id="new-user-role"
+                                value={role}
+                                onChange={(e) => setRole(e.target.value as Role)}
+                                className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
+                            >
+                                <optgroup label={t('youth')}>
+                                    <option value="student">{t('student')}</option>
+                                    <option value="alumni">{t('alumni')}</option>
+                                </optgroup>
+                                <optgroup label={t('entrepreneur_category')}>
+                                    <option value="entrepreneur">{t('entrepreneur')}</option>
+                                    <option value="employer">{t('employer')}</option>
+                                    <option value="implementer">{t('implementer')}</option>
+                                    <option value="funder">{t('funder')}</option>
+                                </optgroup>
+                                <optgroup label={t('contributor_category')}>
+                                    <option value="trainer">{t('trainer')}</option>
+                                    <option value="coach">{t('coach')}</option>
+                                    <option value="facilitator">{t('facilitator')}</option>
+                                    <option value="mentor">{t('mentor')}</option>
+                                    <option value="partner_facilitator">{t('partner_facilitator')}</option>
+                                    <option value="publisher">{t('publisher')}</option>
+                                    <option value="editor">{t('editor')}</option>
+                                    <option value="producer">{t('producer')}</option>
+                                    <option value="artist">{t('artist')}</option>
+                                </optgroup>
+                                <optgroup label={t('hr_staff_category')}>
+                                    <option value="hr_business_partner">{t('hr_business_partner')}</option>
+                                    <option value="hr_officer">{t('hr_officer')}</option>
+                                    <option value="recruiter">{t('recruiter')}</option>
+                                    <option value="payroll_specialist">{t('payroll_specialist')}</option>
+                                    <option value="team_lead">{t('team_lead')}</option>
+                                </optgroup>
+                                <optgroup label={t('staff_category')}>
+                                    <option value="intern" disabled={!canAssignReservedRoles}>
+                                        {t('intern')}
+                                        {!canAssignReservedRoles ? ' (SENEGEL)' : ''}
+                                    </option>
+                                    <option value="supervisor" disabled={!canAssignReservedRoles}>
+                                        {t('supervisor')}
+                                        {!canAssignReservedRoles ? ' (SENEGEL)' : ''}
+                                    </option>
+                                    <option value="manager" disabled={!canAssignReservedRoles}>
+                                        {t('manager')}
+                                        {!canAssignReservedRoles ? ' (SENEGEL)' : ''}
+                                    </option>
+                                    <option value="administrator" disabled={!canAssignReservedRoles}>
+                                        {t('administrator')}
+                                        {!canAssignReservedRoles ? ' (SENEGEL)' : ''}
+                                    </option>
+                                </optgroup>
+                                <optgroup label={t('super_admin_category')}>
+                                    <option value="super_administrator" disabled={!canAssignReservedRoles}>
+                                        {t('super_administrator')}
+                                        {!canAssignReservedRoles ? ' (SENEGEL)' : ''}
+                                    </option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={sendInviteEmail}
+                                onChange={(e) => setSendInviteEmail(e.target.checked)}
+                                className="mt-1"
+                            />
+                            <span>Envoyer l’e-mail pour définir le mot de passe (lien Supabase, même flux que « mot de passe oublié »).</span>
+                        </label>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={submitting}
+                            className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-300 disabled:opacity-50"
+                        >
+                            {t('cancel')}
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={submitting || !canWriteModule}
+                            className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                            {submitting && <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                            Créer le compte
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
 
 interface UserManagementProps {
     users: User[];
@@ -186,9 +550,11 @@ interface UserManagementProps {
     onDeleteUser?: (userId: string | number) => Promise<void>;
     /** Mode Paramètres : layout dense, sans page pleine écran */
     embedded?: boolean;
+    /** Après création utilisateur : recharger la liste côté parent (recommandé en mode Paramètres). */
+    onRefreshUsers?: () => Promise<void>;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, onToggleActive, onDeleteUser, embedded = false }) => {
+const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, onToggleActive, onDeleteUser, embedded = false, onRefreshUsers }) => {
     const { t } = useLocalization();
     const { user: currentUser, profile: authProfile } = useAuth();
     const { canAccessModule, hasPermission } = useModulePermissions();
@@ -213,6 +579,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     const [departmentsByOrgId, setDepartmentsByOrgId] = useState<Record<string, Department[]>>({});
     /** profileId (UUID profil) → departmentId choisi pour la validation */
     const [approvalDepartmentByProfileId, setApprovalDepartmentByProfileId] = useState<Record<string, string>>({});
+    /** Toast de secours si `window.Toast` (global) n’est pas défini */
+    const [inlineToast, setInlineToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+    const [createUserOpen, setCreateUserOpen] = useState(false);
 
     const canReadModule = canAccessModule('user_management');
     const canWriteModule = hasPermission('user_management', 'write');
@@ -318,6 +687,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         };
     }, [managedUsers, onUpdateUser]);
 
+    useEffect(() => {
+        if (!inlineToast) return;
+        const id = window.setTimeout(() => setInlineToast(null), 9500);
+        return () => window.clearTimeout(id);
+    }, [inlineToast]);
+
     // Toggle Component réutilisable
     const Toggle: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; label?: string; compact?: boolean }> = ({
         checked,
@@ -374,22 +749,20 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                 setManagedUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
             }
             console.log('✅ Rôle modifié avec succès');
-            
-            // Message de succès
+
+            setIsUpdatingRole(false);
+            setModalOpen(false);
+            setSelectedUser(null);
+
             if (typeof window !== 'undefined' && (window as any).Toast) {
                 (window as any).Toast.success(`Rôle modifié avec succès en ${newRole}`);
             }
-            
-            // Déclencher le rechargement des permissions dans toute l'app
-            window.dispatchEvent(new Event('permissions-reload'));
-            console.log('📢 Event permissions-reload déclenché');
-            
-            // Attendre un peu pour que la mise à jour soit visible
-            setTimeout(() => {
-                setIsUpdatingRole(false);
-        setModalOpen(false);
-        setSelectedUser(null);
-            }, 500);
+
+            // Après démontage du modal : évite les courses DOM (insertBefore) avec le rechargement des permissions
+            queueMicrotask(() => {
+                window.dispatchEvent(new Event('permissions-reload'));
+                console.log('📢 Event permissions-reload déclenché');
+            });
         } catch (error) {
             console.error('❌ Erreur modification rôle:', error);
             alert('Erreur lors de la modification du rôle');
@@ -483,8 +856,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
             alert(`Erreur lors de la suppression de l'utilisateur : ${errorMessage}`);
         } finally {
             setIsDeleting(false);
-            setDeleteTarget(null);
         }
+        // Fermer le portail après la fin du cycle « chargement » pour éviter NotFoundError insertBefore
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setDeleteTarget(null);
+            });
+        });
     };
 
     const handleResetPassword = async (u: User) => {
@@ -542,6 +920,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
         if (typeof window !== 'undefined' && (window as any).Toast && typeof (window as any).Toast[type] === 'function') {
             (window as any).Toast[type](message);
+        } else {
+            setInlineToast({ message, variant: type });
         }
     };
 
@@ -587,11 +967,24 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
         const note = (decisionNotes[key] || '').trim();
         setProcessingRequestId(`approve-${key}`);
         try {
-            const updatedUser = await DataAdapter.approvePendingProfile(profileId, approverProfileId, note, deptId);
+            const { user: updatedUser, departmentAssignmentFailed } = await DataAdapter.approvePendingProfile(
+                profileId,
+                approverProfileId,
+                note,
+                deptId
+            );
             if (updatedUser) {
                 onUpdateUser(updatedUser);
                 setDecisionNotes(prev => ({ ...prev, [key]: '' }));
-                showToast(`Demande approuvée pour ${pendingUser.name || pendingUser.email || 'l’utilisateur'}`, 'success');
+                const who = pendingUser.name || pendingUser.email || 'l’utilisateur';
+                if (departmentAssignmentFailed) {
+                    showToast(
+                        `Demande approuvée pour ${who}, mais le rattachement au département a échoué (RLS). Ajustez les politiques Supabase sur user_departments pour les administrateurs, ou réassignez depuis l’onglet Départements.`,
+                        'error'
+                    );
+                } else {
+                    showToast(`Demande approuvée pour ${who}`, 'success');
+                }
             }
         } catch (error) {
             console.error('❌ Erreur approbation utilisateur:', error);
@@ -834,6 +1227,17 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                                     <option value="active">Actifs</option>
                                     <option value="inactive">Inactifs</option>
                                 </select>
+
+                                {canWriteModule && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setCreateUserOpen(true)}
+                                        className={`inline-flex items-center gap-2 rounded-md bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 ${embedded ? 'px-2 py-1.5 text-xs' : 'px-4 py-2 text-sm'}`}
+                                    >
+                                        <i className="fas fa-user-plus" aria-hidden />
+                                        Nouvel utilisateur
+                                    </button>
+                                )}
                             </div>
 
                             {/* Compteur de résultats */}
@@ -1172,6 +1576,43 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, onUpdateUser, on
                     confirmButtonClass="bg-red-600 hover:bg-red-700"
                     isLoading={isDeleting}
                 />
+            )}
+
+            <CreateUserModal
+                open={createUserOpen}
+                onClose={() => setCreateUserOpen(false)}
+                showToast={showToast}
+                canWriteModule={canWriteModule}
+                currentRole={currentUser?.role}
+                currentOrganizationId={currentUser?.organizationId}
+                canAssignReservedRoles={canAssignReservedRoles}
+                onRefreshUsers={onRefreshUsers}
+                onLocalUsersReplace={(list) => setManagedUsers(list)}
+            />
+
+            {inlineToast && (
+                <div
+                    role="status"
+                    className={`fixed bottom-4 right-4 z-[200] flex max-w-md items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-xl ${
+                        inlineToast.variant === 'error'
+                            ? 'border-amber-200 bg-amber-50 text-amber-950'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                    }`}
+                >
+                    <i
+                        className={`fas mt-0.5 ${inlineToast.variant === 'error' ? 'fa-exclamation-triangle text-amber-600' : 'fa-check-circle text-emerald-600'}`}
+                        aria-hidden
+                    />
+                    <p className="flex-1 leading-snug">{inlineToast.message}</p>
+                    <button
+                        type="button"
+                        onClick={() => setInlineToast(null)}
+                        className="shrink-0 rounded p-1 text-slate-500 hover:bg-black/5 hover:text-slate-800"
+                        aria-label="Fermer la notification"
+                    >
+                        <i className="fas fa-times" aria-hidden />
+                    </button>
+                </div>
             )}
         </div>
     );

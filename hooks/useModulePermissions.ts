@@ -4,25 +4,12 @@ import { DataService } from '../services/dataService';
 import { DepartmentService } from '../services/departmentService';
 import { ModuleName, Role } from '../types';
 import { getDefaultPermissionsForRole, PermissionState } from '../utils/modulePermissionDefaults';
+import {
+  applyDepartmentScopeToPermissions,
+  buildExplicitReadDenyFromRows,
+} from '../utils/departmentPermissionPolicy';
 
 type ModulePermissions = Record<ModuleName, PermissionState>;
-
-const NO_ACCESS: PermissionState = { canRead: false, canWrite: false, canDelete: false, canApprove: false };
-
-/** Accès minimal si aucun département : structure / affectations (admin & manager). */
-const BOOTSTRAP_MODULES_NO_DEPT: ModuleName[] = [
-  'organization_management',
-  'department_management',
-  'user_management',
-  'settings',
-];
-
-const BOOTSTRAP_STATE: PermissionState = {
-  canRead: true,
-  canWrite: true,
-  canDelete: false,
-  canApprove: false,
-};
 
 export const useModulePermissions = () => {
   const { user } = useAuth();
@@ -40,10 +27,12 @@ export const useModulePermissions = () => {
       let effective = getDefaultPermissionsForRole(role);
 
       const userIdToUse = (user as any).profileId || user.id;
+      let permissionRows: unknown[] = [];
       if (!isSuperAdmin) {
         const { data, error } = await DataService.getUserModulePermissions(String(userIdToUse));
-        if (!error && Array.isArray(data) && data.length > 0) {
-          data.forEach((row: any) => {
+        permissionRows = !error && Array.isArray(data) ? data : [];
+        if (permissionRows.length > 0) {
+          permissionRows.forEach((row: any) => {
             const moduleName = row.module_name as ModuleName;
             effective[moduleName] = {
               canRead: !!row.can_read,
@@ -58,27 +47,9 @@ export const useModulePermissions = () => {
       const authUserId = String(user.id);
       const allowedSlugs = await DepartmentService.getAllowedModuleSlugsForUser(authUserId);
 
-      if (isSuperAdmin) {
-        // pas de filtre département
-      } else if (allowedSlugs.length > 0) {
-        const allowedSet = new Set<ModuleName>(allowedSlugs);
-        (Object.keys(effective) as ModuleName[]).forEach((moduleName) => {
-          if (!allowedSet.has(moduleName)) {
-            effective[moduleName] = NO_ACCESS;
-          }
-        });
-      } else {
-        // Aucun département (ou départements sans modules) : accès métier refusé.
-        // Administrateur / manager : garde-fou pour créer départements et affecter les membres.
-        const canBootstrap = role === 'administrator' || role === 'manager';
-        (Object.keys(effective) as ModuleName[]).forEach((moduleName) => {
-          effective[moduleName] = NO_ACCESS;
-        });
-        if (canBootstrap) {
-          BOOTSTRAP_MODULES_NO_DEPT.forEach((m) => {
-            effective[m] = { ...BOOTSTRAP_STATE };
-          });
-        }
+      if (!isSuperAdmin) {
+        const explicitReadDeny = buildExplicitReadDenyFromRows(permissionRows);
+        applyDepartmentScopeToPermissions(effective, allowedSlugs, role, explicitReadDeny);
       }
 
       const normalizedPermissions = Object.entries(effective).reduce((acc, [moduleName, perms]) => {

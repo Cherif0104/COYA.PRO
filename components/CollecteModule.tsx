@@ -1,10 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
-import { DataCollection, DataCollectionSubmission, Language, Course, Project, Programme, ProjectActivity } from '../types';
+import {
+  DataCollection,
+  DataCollectionAssignment,
+  DataCollectionSubmission,
+  Language,
+  Course,
+  Project,
+  Programme,
+  ProjectActivity,
+} from '../types';
 import OrganizationService from '../services/organizationService';
 import DataAdapter from '../services/dataAdapter';
 import * as programmeService from '../services/programmeService';
 import * as dataCollectionService from '../services/dataCollectionService';
+import {
+  addCustomEntity,
+  defaultCollecteCategoryKey,
+  deleteCustomEntity,
+  isCustomAssignmentCategory,
+  listCollecteCategories,
+  listCustomEntities,
+  registerCollecteCategory,
+  unregisterCollecteCategory,
+} from '../modules/collecte-rattachement';
 import {
   useAppNavigation,
   NAV_SESSION_OPEN_PROGRAMME_ID,
@@ -21,8 +40,6 @@ import {
   collecteGroupLabel,
   emptyParticipantPayload,
 } from '../utils/collecteParticipantFields';
-
-type AssignmentKind = 'project' | 'programme' | 'formation';
 
 function makeId(): string {
   try {
@@ -49,13 +66,16 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [assignKind, setAssignKind] = useState<AssignmentKind>('project');
-  const [projectId, setProjectId] = useState('');
-  const [programmeId, setProgrammeId] = useState('');
-  const [formationId, setFormationId] = useState('');
+  const [categoryKey, setCategoryKey] = useState<string>(() => defaultCollecteCategoryKey());
+  const [assignTargetId, setAssignTargetId] = useState('');
   const [collectActivityId, setCollectActivityId] = useState('');
   const [projectActivitiesForCollect, setProjectActivitiesForCollect] = useState<ProjectActivity[]>([]);
-  const [filterKind, setFilterKind] = useState<'all' | AssignmentKind>('all');
+  const [filterKind, setFilterKind] = useState<'all' | string>('all');
+  const [categoriesTick, setCategoriesTick] = useState(0);
+  const [newCategoryKey, setNewCategoryKey] = useState('');
+  const [newCategoryLabelFr, setNewCategoryLabelFr] = useState('');
+  const [newCategoryLabelEn, setNewCategoryLabelEn] = useState('');
+  const [quickCreateName, setQuickCreateName] = useState('');
   const [subCollectionId, setSubCollectionId] = useState('');
   const [participantPayload, setParticipantPayload] = useState<Record<string, string>>(() =>
     emptyParticipantPayload(),
@@ -64,6 +84,11 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
   const [crmBulkLoading, setCrmBulkLoading] = useState(false);
   const [submissionsTick, setSubmissionsTick] = useState(0);
   const nav = useAppNavigation();
+
+  const categoryMetas = useMemo(() => {
+    void categoriesTick;
+    return listCollecteCategories(orgId);
+  }, [orgId, categoriesTick]);
 
   const refresh = useCallback(() => {
     setCollections(dataCollectionService.listDataCollections(orgId));
@@ -86,10 +111,8 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
       const raw = sessionStorage.getItem(NAV_SESSION_COLLECTE_PRESET_PROGRAMME_ID);
       if (!raw) return;
       sessionStorage.removeItem(NAV_SESSION_COLLECTE_PRESET_PROGRAMME_ID);
-      setAssignKind('programme');
-      setProgrammeId(raw);
-      setProjectId('');
-      setFormationId('');
+      setCategoryKey('programme');
+      setAssignTargetId(raw);
       setCollectActivityId('');
       setFilterKind('programme');
     } catch {
@@ -139,19 +162,19 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
   }, [projects, refresh]);
 
   useEffect(() => {
-    if (!projectId) {
+    if (categoryKey !== 'project' || !assignTargetId) {
       setProjectActivitiesForCollect([]);
       setCollectActivityId('');
       return;
     }
     let cancelled = false;
-    programmeService.listProjectActivities(projectId).then((list) => {
+    programmeService.listProjectActivities(assignTargetId).then((list) => {
       if (!cancelled) setProjectActivitiesForCollect(list);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [assignTargetId, categoryKey]);
 
   const submissionCounts = useMemo(() => {
     const subs = dataCollectionService.listSubmissionsForOrg(orgId);
@@ -177,11 +200,19 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
   const filteredList = useMemo(() => {
     if (filterKind === 'all') return collections;
     return collections.filter((c) => {
+      const key = c.assignment?.categoryKey;
+      if (key) return key === filterKind;
       if (filterKind === 'project') return !!c.projectId;
       if (filterKind === 'programme') return !!c.programmeId;
-      return !!c.formationId;
+      if (filterKind === 'formation') return !!c.formationId;
+      return false;
     });
   }, [collections, filterKind]);
+
+  const customEntitiesForCategory = useMemo(
+    () => (isCustomAssignmentCategory(categoryKey) ? listCustomEntities(orgId, categoryKey) : []),
+    [orgId, categoryKey, categoriesTick],
+  );
 
   const fieldsByGroup = useMemo(() => {
     const m = new Map<CollecteParticipantFieldGroup, CollecteParticipantFieldDef[]>();
@@ -269,23 +300,40 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
   const resetForm = () => {
     setName('');
     setDescription('');
-    setAssignKind('project');
-    setProjectId('');
-    setProgrammeId('');
-    setFormationId('');
+    setCategoryKey(defaultCollecteCategoryKey());
+    setAssignTargetId('');
     setCollectActivityId('');
+    setQuickCreateName('');
+  };
+
+  const resolveTargetLabel = (): string | undefined => {
+    if (!assignTargetId) return undefined;
+    if (categoryKey === 'project') {
+      return projects.find((p) => String(p.id) === String(assignTargetId))?.title;
+    }
+    if (categoryKey === 'programme') {
+      return programmes.find((p) => p.id === assignTargetId)?.name;
+    }
+    if (categoryKey === 'formation') {
+      return courses.find((c) => c.id === assignTargetId)?.title;
+    }
+    return listCustomEntities(orgId, categoryKey).find((e) => e.id === assignTargetId)?.name;
   };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!assignTargetId) return;
     const tid = makeId();
     const now = new Date().toISOString();
-    const base: Omit<DataCollection, 'projectId' | 'programmeId' | 'formationId' | 'activityId'> & {
-      projectId?: string | null;
-      programmeId?: string | null;
-      formationId?: string | null;
-      activityId?: string | null;
-    } = {
+    const assignment: DataCollectionAssignment = {
+      categoryKey,
+      targetId: assignTargetId,
+      targetLabel: resolveTargetLabel(),
+      activityId: categoryKey === 'project' ? collectActivityId || null : null,
+    };
+    const proj =
+      categoryKey === 'project' ? projects.find((p) => String(p.id) === String(assignTargetId)) : undefined;
+    const base: DataCollection = {
       id: tid,
       organizationId: orgId,
       name: name.trim(),
@@ -295,30 +343,13 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
       reusedFromCollecteId: null,
       createdAt: now,
       updatedAt: now,
+      assignment,
       projectId: null,
-      programmeId: null,
+      programmeId: categoryKey === 'project' ? proj?.programmeId ?? null : null,
       formationId: null,
-      activityId: null,
+      activityId: categoryKey === 'project' ? collectActivityId || null : null,
     };
-    if (assignKind === 'project') {
-      if (!projectId) return;
-      const proj = projects.find((p) => String(p.id) === String(projectId));
-      base.projectId = projectId;
-      base.activityId = collectActivityId || null;
-      base.programmeId = proj?.programmeId ?? null;
-    } else if (assignKind === 'programme') {
-      if (!programmeId) return;
-      base.programmeId = programmeId;
-      base.projectId = null;
-      base.activityId = null;
-    } else {
-      if (!formationId) return;
-      base.formationId = formationId;
-      base.projectId = null;
-      base.programmeId = null;
-      base.activityId = null;
-    }
-    dataCollectionService.upsertDataCollection(base as DataCollection);
+    dataCollectionService.upsertDataCollection(base);
     refresh();
     resetForm();
   };
@@ -331,6 +362,15 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
       const p = projects.find((x) => String(x.id) === String(src.projectId));
       programmeIdCopy = p?.programmeId ?? programmeIdCopy;
     }
+    const assignmentCopy = src.assignment
+      ? { ...src.assignment }
+      : src.projectId
+        ? { categoryKey: 'project' as const, targetId: String(src.projectId), activityId: src.activityId ?? null }
+        : src.programmeId
+          ? { categoryKey: 'programme' as const, targetId: String(src.programmeId) }
+          : src.formationId
+            ? { categoryKey: 'formation' as const, targetId: String(src.formationId) }
+            : null;
     const copy: DataCollection = {
       ...src,
       id: tid,
@@ -340,6 +380,7 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
       createdAt: now,
       updatedAt: now,
       programmeId: programmeIdCopy,
+      assignment: assignmentCopy,
     };
     dataCollectionService.upsertDataCollection(copy);
     refresh();
@@ -357,6 +398,30 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
   };
 
   const labelForCollection = (c: DataCollection) => {
+    const ak = c.assignment?.categoryKey;
+    if (ak && c.assignment?.targetId) {
+      const meta = categoryMetas.find((m) => m.key === ak);
+      const cat = isFr ? meta?.labelFr ?? ak : meta?.labelEn ?? ak;
+      const label =
+        c.assignment.targetLabel ||
+        (ak === 'project'
+          ? projects.find((x) => String(x.id) === String(c.assignment!.targetId))?.title
+          : ak === 'programme'
+            ? programmes.find((x) => x.id === c.assignment!.targetId)?.name
+            : ak === 'formation'
+              ? courses.find((x) => x.id === c.assignment!.targetId)?.title
+              : listCustomEntities(c.organizationId, ak).find((e) => e.id === c.assignment!.targetId)?.name);
+      const base = `${cat} : ${label ?? c.assignment.targetId}`;
+      if (ak === 'project' && c.activityId) {
+        const act =
+          String(c.projectId) === String(c.assignment.targetId)
+            ? projectActivitiesForCollect.find((a) => a.id === c.activityId)?.title
+            : null;
+        const actLabel = act || `#${String(c.activityId).slice(0, 8)}`;
+        return isFr ? `${base} · Activité : ${actLabel}` : `${base} · Activity: ${actLabel}`;
+      }
+      return base;
+    }
     if (c.projectId) {
       const p = projects.find((x) => String(x.id) === String(c.projectId));
       const base = isFr ? `Projet : ${p?.title ?? c.projectId}` : `Project: ${p?.title ?? c.projectId}`;
@@ -368,7 +433,7 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
       }
       if (c.activityId) {
         const title =
-          String(c.projectId) === String(projectId)
+          String(c.projectId) === String(assignTargetId) && categoryKey === 'project'
             ? projectActivitiesForCollect.find((a) => a.id === c.activityId)?.title
             : null;
         const act = title || `#${String(c.activityId).slice(0, 8)}`;
@@ -387,6 +452,64 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
     return isFr ? 'Non rattachée' : 'Unassigned';
   };
 
+  const handleRegisterCategory = () => {
+    const row = registerCollecteCategory(
+      orgId,
+      newCategoryKey || newCategoryLabelFr,
+      newCategoryLabelFr,
+      newCategoryLabelEn || newCategoryLabelFr,
+    );
+    if (!row) return;
+    setCategoryKey(row.key);
+    setAssignTargetId('');
+    setNewCategoryKey('');
+    setNewCategoryLabelFr('');
+    setNewCategoryLabelEn('');
+    setCategoriesTick((x) => x + 1);
+  };
+
+  const handleQuickCreateBuiltin = async () => {
+    const n = quickCreateName.trim();
+    if (!n) return;
+    try {
+      if (categoryKey === 'project') {
+        const created = await DataAdapter.createProject({ title: n, description: '', status: 'not_started' });
+        if (created?.id) {
+          setProjects(await DataAdapter.getProjects());
+          setAssignTargetId(String(created.id));
+          setQuickCreateName('');
+        }
+      } else if (categoryKey === 'programme') {
+        const created = await programmeService.createProgramme({
+          organizationId: orgId ?? null,
+          name: n,
+        });
+        if (created?.id) {
+          setProgrammes(await programmeService.listProgrammes(orgId ?? undefined));
+          setAssignTargetId(created.id);
+          setQuickCreateName('');
+        }
+      } else if (categoryKey === 'formation') {
+        const created = await DataAdapter.createCourse({ title: n, description: '', status: 'draft' });
+        if (created?.id) {
+          setCourses(await DataAdapter.getCourses());
+          setAssignTargetId(created.id);
+          setQuickCreateName('');
+        }
+      }
+    } catch (err) {
+      console.warn('Collecte quick-create', err);
+    }
+  };
+
+  const handleQuickCreateCustom = () => {
+    const row = addCustomEntity(orgId, categoryKey, quickCreateName);
+    if (!row) return;
+    setAssignTargetId(row.id);
+    setQuickCreateName('');
+    setCategoriesTick((x) => x + 1);
+  };
+
   return (
     <div className={`${embeddedInCrm ? 'max-w-none' : 'max-w-5xl mx-auto'} px-4 py-8 text-slate-900`}>
       <header className="mb-8">
@@ -401,17 +524,17 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
         )}
         <p className="text-sm text-slate-600 mt-1 max-w-3xl">
           {isFr
-            ? 'Chaque campagne se rattache à un projet, un programme ou une formation globale (module Cours), distinct de la formation RH. Les collectes peuvent être réutilisées ou liées au CRM pour enrichir les contacts.'
-            : 'Each campaign links to a project, programme, or global course (Courses module), distinct from HR training. Collections can be reused or pushed to CRM to enrich contacts.'}
+            ? 'Chaque campagne se rattache à une catégorie métier (projet, programme, formation, émission, etc.). Vous pouvez ajouter des catégories et créer l’élément manquant à la volée (comme un champ Odoo). Les collectes peuvent être réutilisées ou liées au CRM.'
+            : 'Each campaign links to a business category (project, programme, course, show, etc.). Add categories and quick-create missing records (Odoo-like). Collections can be reused or pushed to CRM.'}
         </p>
-        {nav?.setView && assignKind === 'programme' && programmeId ? (
+        {nav?.setView && categoryKey === 'programme' && assignTargetId ? (
           <div className="mt-3">
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
               onClick={() => {
                 try {
-                  sessionStorage.setItem(NAV_SESSION_OPEN_PROGRAMME_ID, programmeId);
+                  sessionStorage.setItem(NAV_SESSION_OPEN_PROGRAMME_ID, assignTargetId);
                   sessionStorage.setItem(NAV_SESSION_OPEN_PROGRAMME_DETAIL_TAB, 'collecte');
                 } catch {
                   /* ignore */
@@ -452,24 +575,137 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
             </div>
             <div>
               <span className="block text-sm font-medium text-slate-700 mb-2">{isFr ? 'Rattachement' : 'Assignment'}</span>
-              <div className="flex flex-wrap gap-3">
-                {(['project', 'programme', 'formation'] as AssignmentKind[]).map((k) => (
-                  <label key={k} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                    <input type="radio" name="kind" checked={assignKind === k} onChange={() => setAssignKind(k)} className="rounded-full border-slate-300" />
-                    {k === 'project' && (isFr ? 'Projet' : 'Project')}
-                    {k === 'programme' && (isFr ? 'Programme' : 'Programme')}
-                    {k === 'formation' && (isFr ? 'Formation (cours)' : 'Course')}
-                  </label>
-                ))}
+              {categoryMetas.length > 5 ? (
+                <select
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  value={categoryKey}
+                  onChange={(e) => {
+                    setCategoryKey(e.target.value);
+                    setAssignTargetId('');
+                    setCollectActivityId('');
+                  }}
+                >
+                  {categoryMetas.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {isFr ? m.labelFr : m.labelEn}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {categoryMetas.map((m) => (
+                    <label key={m.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="collecte-cat"
+                        checked={categoryKey === m.key}
+                        onChange={() => {
+                          setCategoryKey(m.key);
+                          setAssignTargetId('');
+                          setCollectActivityId('');
+                        }}
+                        className="rounded-full border-slate-300"
+                      />
+                      {isFr ? m.labelFr : m.labelEn}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/80 space-y-2">
+              <p className="text-xs font-semibold text-slate-700">
+                {isFr ? 'Nouvelle catégorie (extensible)' : 'New category (extensible)'}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-slate-500 mb-0.5">{isFr ? 'Clé technique (optionnel)' : 'Technical key (optional)'}</label>
+                  <input
+                    value={newCategoryKey}
+                    onChange={(e) => setNewCategoryKey(e.target.value)}
+                    placeholder={isFr ? 'ex. emission' : 'e.g. show'}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-0.5">Libellé FR</label>
+                  <input
+                    value={newCategoryLabelFr}
+                    onChange={(e) => setNewCategoryLabelFr(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    placeholder="Émission"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-0.5">Label EN</label>
+                  <input
+                    value={newCategoryLabelEn}
+                    onChange={(e) => setNewCategoryLabelEn(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    placeholder="Show"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRegisterCategory}
+                  className="sm:col-span-2 w-full sm:w-auto px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50"
+                >
+                  {isFr ? 'Ajouter la catégorie' : 'Add category'}
+                </button>
               </div>
             </div>
-            {assignKind === 'project' && (
+
+            {listCollecteCategories(orgId).some((c) => !c.builtin) && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {isFr ? 'Catégories personnalisées' : 'Custom categories'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {isFr ? 'Suppression = retire le référentiel local + ses éléments' : 'Delete removes local registry + entities'}
+                  </p>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {listCollecteCategories(orgId)
+                    .filter((c) => !c.builtin)
+                    .map((c) => (
+                      <div key={c.key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{isFr ? c.labelFr : c.labelEn}</p>
+                          <p className="text-xs text-slate-500 font-mono">{c.key}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(isFr ? `Supprimer la catégorie "${c.labelFr}" ?` : `Delete "${c.labelEn}" category?`)) return;
+                            const ok = unregisterCollecteCategory(orgId, c.key);
+                            if (ok) {
+                              if (categoryKey === c.key) {
+                                setCategoryKey(defaultCollecteCategoryKey());
+                                setAssignTargetId('');
+                                setCollectActivityId('');
+                              }
+                              setCategoriesTick((t) => t + 1);
+                            }
+                          }}
+                          className="shrink-0 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+                        >
+                          <i className="fas fa-trash mr-1" aria-hidden />
+                          {isFr ? 'Supprimer' : 'Delete'}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {categoryKey === 'project' && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Projet' : 'Project'}</label>
                   <select
-                    value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
+                    value={assignTargetId}
+                    onChange={(e) => setAssignTargetId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                     required
                   >
@@ -481,7 +717,27 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
                     ))}
                   </select>
                 </div>
-                {projectId && (
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      {isFr ? 'Créer un projet et le sélectionner' : 'Create project & select'}
+                    </label>
+                    <input
+                      value={quickCreateName}
+                      onChange={(e) => setQuickCreateName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                      placeholder={isFr ? 'Nom du projet' : 'Project name'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickCreateBuiltin()}
+                    className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    {isFr ? 'Créer & sélectionner' : 'Create & select'}
+                  </button>
+                </div>
+                {assignTargetId && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       {isFr ? 'Activité de terrain (optionnel)' : 'Field activity (optional)'}
@@ -507,40 +763,158 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
                 )}
               </>
             )}
-            {assignKind === 'programme' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Programme' : 'Programme'}</label>
-                <select
-                  value={programmeId}
-                  onChange={(e) => setProgrammeId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                  required
-                >
-                  <option value="">{isFr ? '— Choisir —' : '— Choose —'}</option>
-                  {programmes.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+            {categoryKey === 'programme' && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Programme' : 'Programme'}</label>
+                  <select
+                    value={assignTargetId}
+                    onChange={(e) => setAssignTargetId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                    required
+                  >
+                    <option value="">{isFr ? '— Choisir —' : '— Choose —'}</option>
+                    {programmes.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      {isFr ? 'Créer un programme et le sélectionner' : 'Create programme & select'}
+                    </label>
+                    <input
+                      value={quickCreateName}
+                      onChange={(e) => setQuickCreateName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                      placeholder={isFr ? 'Nom du programme' : 'Programme name'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickCreateBuiltin()}
+                    className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    {isFr ? 'Créer & sélectionner' : 'Create & select'}
+                  </button>
+                </div>
               </div>
             )}
-            {assignKind === 'formation' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Cours / formation globale' : 'Global course'}</label>
-                <select
-                  value={formationId}
-                  onChange={(e) => setFormationId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                  required
-                >
-                  <option value="">{isFr ? '— Choisir —' : '— Choose —'}</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
+            {categoryKey === 'formation' && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{isFr ? 'Cours / formation globale' : 'Global course'}</label>
+                  <select
+                    value={assignTargetId}
+                    onChange={(e) => setAssignTargetId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                    required
+                  >
+                    <option value="">{isFr ? '— Choisir —' : '— Choose —'}</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      {isFr ? 'Créer un cours et le sélectionner' : 'Create course & select'}
+                    </label>
+                    <input
+                      value={quickCreateName}
+                      onChange={(e) => setQuickCreateName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                      placeholder={isFr ? 'Titre du cours' : 'Course title'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickCreateBuiltin()}
+                    className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    {isFr ? 'Créer & sélectionner' : 'Create & select'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {isCustomAssignmentCategory(categoryKey) && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {isFr ? 'Élément' : 'Record'}
+                  </label>
+                  <select
+                    value={assignTargetId}
+                    onChange={(e) => setAssignTargetId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                    required
+                  >
+                    <option value="">{isFr ? '— Choisir —' : '— Choose —'}</option>
+                    {customEntitiesForCategory.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      {isFr ? 'Créer et sélectionner' : 'Create & select'}
+                    </label>
+                    <input
+                      value={quickCreateName}
+                      onChange={(e) => setQuickCreateName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                      placeholder={isFr ? 'Libellé' : 'Label'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleQuickCreateCustom}
+                    className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    {isFr ? 'Créer & sélectionner' : 'Create & select'}
+                  </button>
+                </div>
+                {customEntitiesForCategory.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold text-slate-700 mb-2">
+                      {isFr ? 'Gérer les éléments' : 'Manage records'}
+                    </p>
+                    <div className="space-y-1.5">
+                      {customEntitiesForCategory.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm text-slate-900 truncate">{e.name}</p>
+                            <p className="text-[11px] text-slate-500 font-mono">{e.id}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!window.confirm(isFr ? `Supprimer "${e.name}" ?` : `Delete "${e.name}"?`)) return;
+                              const ok = deleteCustomEntity(orgId, categoryKey, e.id);
+                              if (ok) {
+                                if (assignTargetId === e.id) setAssignTargetId('');
+                                setCategoriesTick((t) => t + 1);
+                              }
+                            }}
+                            className="shrink-0 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+                          >
+                            <i className="fas fa-trash mr-1" aria-hidden />
+                            {isFr ? 'Supprimer' : 'Delete'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <button type="submit" className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800">
@@ -554,8 +928,8 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
           <ul className="text-sm text-slate-600 space-y-2 list-disc list-inside">
             <li>
               {isFr
-                ? 'Rattachement « Projet » : le programme du projet est aussi enregistré sur la campagne (filtre « Programmes » + cohérence avec le module Programme).'
-                : 'Project-linked campaigns also store the project’s programme id (visible under the Programmes filter).'}
+                ? 'Catégories natives (projet / programme / cours) : création rapide côté Supabase quand la ligne n’existe pas encore. Catégories métier (ex. émission) : référentiel local par organisation, extensible à tout moment.'
+                : 'Built-in categories sync to Supabase when you quick-create. Custom categories (e.g. show) use a per-organization local registry.'}
             </li>
             <li>{isFr ? 'Une collecte est versionnée localement (navigateur) jusqu’à branchement API / Supabase.' : 'Collections are stored in the browser until API / Supabase is wired.'}</li>
             <li>{isFr ? 'Réutiliser : duplique la campagne pour un autre rattachement ou enrichis le CRM depuis le module CRM.' : 'Reuse: duplicate the campaign or enrich CRM from the CRM module.'}</li>
@@ -570,19 +944,25 @@ const CollecteModule: React.FC<{ embeddedInCrm?: boolean; onAfterCrmBulkSync?: (
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <span className="text-sm text-slate-600">{isFr ? 'Filtre' : 'Filter'}:</span>
-        {(['all', 'project', 'programme', 'formation'] as const).map((fk) => (
+        <button
+          type="button"
+          onClick={() => setFilterKind('all')}
+          className={`px-3 py-1.5 rounded-xl text-sm font-medium border ${
+            filterKind === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          {isFr ? 'Toutes' : 'All'}
+        </button>
+        {categoryMetas.map((m) => (
           <button
-            key={fk}
+            key={m.key}
             type="button"
-            onClick={() => setFilterKind(fk)}
+            onClick={() => setFilterKind(m.key)}
             className={`px-3 py-1.5 rounded-xl text-sm font-medium border ${
-              filterKind === fk ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              filterKind === m.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {fk === 'all' && (isFr ? 'Toutes' : 'All')}
-            {fk === 'project' && (isFr ? 'Projets' : 'Projects')}
-            {fk === 'programme' && (isFr ? 'Programmes' : 'Programmes')}
-            {fk === 'formation' && (isFr ? 'Formations' : 'Courses')}
+            {isFr ? m.labelFr : m.labelEn}
           </button>
         ))}
       </div>

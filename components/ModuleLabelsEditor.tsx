@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { supabase } from '../services/supabaseService';
 import { ModuleName } from '../types';
-import { getAllModuleLabelsForEdit, upsertModuleLabel, ModuleLabelRow } from '../services/moduleLabelsService';
+import { clearModuleLabelsForbiddenMode, getAllModuleLabelsForEdit, hasLocalModuleLabels, upsertModuleLabel, ModuleLabelRow } from '../services/moduleLabelsService';
 import { moduleDisplayNames } from './UserModulePermissions';
 
 const ALL_MODULE_KEYS: ModuleName[] = [
@@ -19,6 +19,7 @@ const ModuleLabelsEditor: React.FC = () => {
   const [rows, setRows] = useState<Record<string, { fr: string; en: string }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +36,13 @@ const ModuleLabelsEditor: React.FC = () => {
           map[key] = { fr: row?.display_name_fr ?? '', en: row?.display_name_en ?? '' };
         });
         if (!cancelled) setRows(map);
+        if (!cancelled && hasLocalModuleLabels(orgId)) {
+          setWarning(
+            "Mode compatibilité activé : l’accès à `module_labels` est refusé (403) dans Supabase. Les libellés sont enregistrés localement (navigateur) pour cette organisation.",
+          );
+        } else if (!cancelled) {
+          setWarning(null);
+        }
       } catch (e) {
         if (!cancelled) setRows({});
       }
@@ -42,6 +50,32 @@ const ModuleLabelsEditor: React.FC = () => {
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  const reloadFromSource = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data: profile } = await supabase.from('profiles').select('organization_id').eq('user_id', user.id).single();
+      const orgId = (profile as any)?.organization_id ?? null;
+      setOrganizationId(orgId);
+      const list = await getAllModuleLabelsForEdit(orgId);
+      const map: Record<string, { fr: string; en: string }> = {};
+      ALL_MODULE_KEYS.forEach((key) => {
+        const row = list.find((r: ModuleLabelRow) => r.module_key === key);
+        map[key] = { fr: row?.display_name_fr ?? '', en: row?.display_name_en ?? '' };
+      });
+      setRows(map);
+      if (hasLocalModuleLabels(orgId)) {
+        setWarning(
+          "Mode compatibilité activé : l’accès à `module_labels` est refusé (403) dans Supabase. Les libellés sont enregistrés localement (navigateur) pour cette organisation.",
+        );
+      } else {
+        setWarning(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (moduleKey: string, lang: 'fr' | 'en', value: string) => {
     setRows((prev) => ({
@@ -79,6 +113,24 @@ const ModuleLabelsEditor: React.FC = () => {
       <p className="text-sm text-gray-600">
         Saisissez les libellés personnalisés (FR/EN). Vide = utilisation du libellé par défaut.
       </p>
+      {warning ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <strong className="font-semibold">Information</strong>
+          <div className="mt-1 text-amber-900">{warning}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-md bg-white border border-amber-200 text-amber-900 hover:bg-amber-100"
+              onClick={() => {
+                clearModuleLabelsForbiddenMode();
+                reloadFromSource();
+              }}
+            >
+              Réessayer Supabase
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="overflow-x-auto max-h-96 overflow-y-auto border rounded-lg">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-100 sticky top-0">

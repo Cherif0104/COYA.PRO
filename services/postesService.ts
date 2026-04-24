@@ -1,16 +1,21 @@
 import { supabase } from './supabaseService';
 import { Poste } from '../types';
+import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 const TABLE = 'postes';
 
 export async function listAllPostes(organizationId?: string | null): Promise<Poste[]> {
+  if (isTableUnavailable(TABLE)) return [];
   try {
     let query = supabase.from(TABLE).select('*').order('name');
     if (organizationId) {
       query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
     }
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+      handleOptionalTableError(error, TABLE, 'postesService.listAllPostes');
+      return [];
+    }
     return (data || []).map((r: any) => ({
       id: r.id,
       organizationId: r.organization_id ?? null,
@@ -26,6 +31,7 @@ export async function listAllPostes(organizationId?: string | null): Promise<Pos
 }
 
 export async function listPostes(organizationId?: string | null): Promise<Poste[]> {
+  if (isTableUnavailable(TABLE)) return [];
   try {
     let query = supabase
       .from(TABLE)
@@ -36,7 +42,10 @@ export async function listPostes(organizationId?: string | null): Promise<Poste[
       query = query.or(`organization_id.eq.${organizationId},organization_id.is.null`);
     }
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+      handleOptionalTableError(error, TABLE, 'postesService.listPostes');
+      return [];
+    }
     return (data || []).map((r: any) => ({
       id: r.id,
       organizationId: r.organization_id ?? null,
@@ -52,9 +61,14 @@ export async function listPostes(organizationId?: string | null): Promise<Poste[
 }
 
 export async function getPoste(id: string): Promise<Poste | null> {
+  if (isTableUnavailable(TABLE)) return null;
   try {
     const { data, error } = await supabase.from(TABLE).select('*').eq('id', id).maybeSingle();
-    if (error || !data) return null;
+    if (error) {
+      handleOptionalTableError(error, TABLE, 'postesService.getPoste');
+      return null;
+    }
+    if (!data) return null;
     return {
       id: data.id,
       organizationId: data.organization_id ?? null,
@@ -74,6 +88,7 @@ export async function createPoste(params: {
   name: string;
   slug?: string | null;
 }): Promise<Poste> {
+  if (isTableUnavailable(TABLE)) throw new Error("Référentiel 'postes' indisponible.");
   const { data, error } = await supabase
     .from(TABLE)
     .insert({
@@ -85,7 +100,10 @@ export async function createPoste(params: {
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    handleOptionalTableError(error, TABLE, 'postesService.createPoste');
+    throw error;
+  }
   return {
     id: data.id,
     organizationId: data.organization_id ?? null,
@@ -105,6 +123,7 @@ export async function updatePoste(
     isActive?: boolean;
   }
 ): Promise<Poste> {
+  if (isTableUnavailable(TABLE)) throw new Error("Référentiel 'postes' indisponible.");
   const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -113,7 +132,10 @@ export async function updatePoste(
   if (params.isActive !== undefined) payload.is_active = params.isActive;
 
   const { data, error } = await supabase.from(TABLE).update(payload).eq('id', id).select().single();
-  if (error) throw error;
+  if (error) {
+    handleOptionalTableError(error, TABLE, 'postesService.updatePoste');
+    throw error;
+  }
   return {
     id: data.id,
     organizationId: data.organization_id ?? null,

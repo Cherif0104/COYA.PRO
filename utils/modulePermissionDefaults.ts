@@ -53,6 +53,7 @@ const STANDARD_MODULES: ModuleName[] = [
   'messagerie',
   'qualite',
   'conseil',
+  'collecte',
 ];
 
 /** Administration : paramétrage / droits (Paramètres) ; désactivé par défaut */

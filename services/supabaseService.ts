@@ -18,6 +18,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+/** Client sans persistance : inscriptions / appels auth isolés sans remplacer la session de l’admin connecté. */
+export function createEphemeralSupabaseClient() {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 // Test de connexion
 export const testSupabaseConnection = async () => {
   try {

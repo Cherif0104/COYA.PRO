@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useLocalization } from '../contexts/LocalizationContext';
 import { useAuth } from '../contexts/AuthContextSupabase';
 import { DataService } from '../services/dataService';
@@ -6,6 +6,13 @@ import OrganizationService from '../services/organizationService';
 import DepartmentService from '../services/departmentService';
 import { User, ModuleName, Role, Department } from '../types';
 import { getDefaultPermissionsForRole, PermissionState } from '../utils/modulePermissionDefaults';
+import {
+  applyDepartmentScopeToPermissions,
+  buildExplicitReadDenyFromRows,
+  BOOTSTRAP_MODULES_NO_DEPT,
+  filterPermissionRowsForDepartmentScope,
+  getSavableModuleFilter,
+} from '../utils/departmentPermissionPolicy';
 import AccessDenied from './common/AccessDenied';
 import { useModuleLabels } from '../hooks/useModuleLabels';
 
@@ -24,6 +31,7 @@ export const moduleDisplayNames: Record<ModuleName, string> = {
   'finance': 'Finance',
   'comptabilite': 'Comptabilité',
   'knowledge_base': 'Archives',
+  'daf_services': 'Services DAF',
   'courses': 'Cours',
   'jobs': 'Offres d\'Emploi',
   'crm_sales': 'CRM & Ventes',
@@ -133,7 +141,10 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
   const [isSaving, setIsSaving] = useState(false);
-  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedUserRef = useRef<User | undefined>(undefined);
+  const allowedSlugsRef = useRef<ModuleName[]>([]);
+  const [allowedSlugsForSelected, setAllowedSlugsForSelected] = useState<ModuleName[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [userDepartmentIds, setUserDepartmentIds] = useState<string[]>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
@@ -146,8 +157,88 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
   // Sélection multi-utilisateurs pour attribution de droits
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string | number>>(new Set());
   const [bulkApplyToSelected, setBulkApplyToSelected] = useState(false);
+  /** Incrémenté après enregistrement des départements pour recharger le périmètre depuis la base. */
+  const [permReloadNonce, setPermReloadNonce] = useState(0);
 
   const selectedUser = users.find(u => u.id === selectedUserId);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    allowedSlugsRef.current = allowedSlugsForSelected;
+  }, [allowedSlugsForSelected]);
+
+  const buildPayloadForTarget = useCallback(
+    (sel: User, allowedSlugs: ModuleName[], perms: Record<ModuleName, PermissionState>) => {
+      const full = Object.entries(perms).map(([moduleName, p]) => ({
+        moduleName,
+        canRead: p.canRead,
+        canWrite: p.canWrite,
+        canDelete: p.canDelete,
+        canApprove: p.canApprove,
+      }));
+      return filterPermissionRowsForDepartmentScope(full, getSavableModuleFilter(allowedSlugs, sel.role as Role));
+    },
+    [],
+  );
+
+  const scheduleAutoSave = useCallback(
+    (updatedPermissions: Record<ModuleName, PermissionState>) => {
+      const sel = selectedUserRef.current;
+      if (!sel?.profileId || !canEdit) return;
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      saveDebounceRef.current = setTimeout(async () => {
+        saveDebounceRef.current = null;
+        const cur = selectedUserRef.current;
+        if (!cur?.profileId) return;
+        setIsSaving(true);
+        try {
+          const payload = buildPayloadForTarget(cur, allowedSlugsRef.current, updatedPermissions);
+          await DataService.upsertUserModulePermissions(String(cur.profileId), payload);
+          window.dispatchEvent(new Event('permissions-reload'));
+        } catch (error) {
+          console.error('❌ Erreur sauvegarde automatique:', error);
+          alert('Erreur lors de la sauvegarde. Veuillez réessayer.');
+        } finally {
+          setIsSaving(false);
+        }
+      }, 500);
+    },
+    [canEdit, buildPayloadForTarget],
+  );
+
+  const isTargetSuperAdmin = selectedUser?.role === 'super_administrator';
+
+  const isModuleInDeptScope = useCallback(
+    (module: ModuleName) => {
+      if (!selectedUser || isTargetSuperAdmin) return true;
+      if (allowedSlugsForSelected.length > 0) {
+        return allowedSlugsForSelected.includes(module);
+      }
+      const bootstrap = selectedUser.role === 'administrator' || selectedUser.role === 'manager';
+      return bootstrap && BOOTSTRAP_MODULES_NO_DEPT.includes(module);
+    },
+    [selectedUser, allowedSlugsForSelected, isTargetSuperAdmin],
+  );
+
+  const deptScopeBanner = useMemo(() => {
+    if (!selectedUser || isTargetSuperAdmin) return null;
+    if (allowedSlugsForSelected.length > 0) {
+      const labels = allowedSlugsForSelected.map(
+        (s) => getDisplayName(s) || moduleDisplayNames[s] || s,
+      );
+      return `Périmètre départements (modules éligibles aux dérogations) : ${labels.join(', ')}.`;
+    }
+    if (selectedUser.role === 'administrator' || selectedUser.role === 'manager') {
+      return 'Aucun département : seuls organisation, départements, utilisateurs et paramètres restent configurables jusqu’à une affectation à un département.';
+    }
+    return 'Aucun département : aucune dérogation sur les modules métier n’est possible tant que l’utilisateur n’est pas rattaché à un département qui expose des modules.';
+  }, [selectedUser, allowedSlugsForSelected, isTargetSuperAdmin, getDisplayName]);
 
   // Charger départements de l'org et assignations de l'utilisateur sélectionné
   useEffect(() => {
@@ -223,81 +314,87 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
     return Array.from(roles).sort();
   }, [users]);
 
-  const handleUserSelect = async (userId: string | number) => {
+  const handleUserSelect = (userId: string | number) => {
     setSelectedUserId(userId);
-    
-    // Charger les permissions depuis Supabase, fallback sur défauts
-    const selectedUser = users.find(u => u.id === userId);
-    
-    if (!selectedUser) {
-      // Si l'utilisateur n'est pas trouvé, utiliser des permissions vides
-      const emptyPermissions: Record<ModuleName, PermissionState> = {} as any;
-      Object.keys(moduleDisplayNames).forEach(moduleName => {
-        emptyPermissions[moduleName as ModuleName] = {
-          canRead: false,
-          canWrite: false,
-          canDelete: false,
-          canApprove: false
-        };
-      });
-      setPermissions(emptyPermissions);
+  };
+
+  useEffect(() => {
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+
+    if (!selectedUserId) {
+      setAllowedSlugsForSelected([]);
       return;
     }
-    
-    // 1. Charger les permissions par défaut basées sur le rôle
-    let effectivePermissions = getDefaultPermissionsForRole(selectedUser.role as Role);
-    console.log('📋 Permissions par défaut pour rôle', selectedUser.role, ':', effectivePermissions);
 
-    try {
-      // 2. Surcharger avec les permissions Supabase si elles existent
-      if (selectedUser.profileId) {
-        const { data } = await DataService.getUserModulePermissions(String(selectedUser.profileId));
-        if (Array.isArray(data) && data.length > 0) {
-          console.log('📋 Permissions Supabase trouvées:', data.length, 'modules');
-          data.forEach((row: any) => {
+    const sel = users.find((u) => String(u.id) === String(selectedUserId));
+    if (!sel) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let effective = getDefaultPermissionsForRole(sel.role as Role);
+        let rows: unknown[] = [];
+        if (sel.profileId) {
+          const { data } = await DataService.getUserModulePermissions(String(sel.profileId));
+          rows = Array.isArray(data) ? data : [];
+          rows.forEach((row: any) => {
             const m = row.module_name as ModuleName;
-            effectivePermissions[m] = {
+            effective[m] = {
               canRead: !!row.can_read,
               canWrite: !!row.can_write,
               canDelete: !!row.can_delete,
-              canApprove: !!row.can_approve
+              canApprove: !!row.can_approve,
             };
           });
-        } else {
-          console.log('📋 Aucune permission personnalisée dans Supabase, utilisation des défauts du rôle');
         }
+
+        const explicitReadDeny = buildExplicitReadDenyFromRows(rows);
+        const isSuperTarget = sel.role === 'super_administrator';
+        const allowedSlugs = isSuperTarget
+          ? []
+          : await DepartmentService.getAllowedModuleSlugsForUser(String(sel.id));
+
+        if (cancelled) return;
+        setAllowedSlugsForSelected(isSuperTarget ? [] : allowedSlugs);
+
+        if (!isSuperTarget) {
+          applyDepartmentScopeToPermissions(effective, allowedSlugs, sel.role as Role, explicitReadDeny);
+        }
+
+        const normalized = Object.entries(effective).reduce((acc, [moduleName, perms]) => {
+          const canRead = !!perms.canRead;
+          acc[moduleName as ModuleName] = {
+            canRead,
+            canWrite: canRead ? perms.canWrite : false,
+            canDelete: canRead ? perms.canDelete : false,
+            canApprove: canRead ? perms.canApprove : false,
+          };
+          return acc;
+        }, {} as Record<ModuleName, PermissionState>);
+
+        if (!cancelled) setPermissions(normalized);
+      } catch (error) {
+        if (!cancelled) console.error('Erreur chargement permissions:', error);
       }
-    } catch (error) {
-      console.error('Erreur chargement permissions Supabase:', error);
-    }
+    })();
 
-    const normalizedPermissions = Object.entries(effectivePermissions).reduce((acc, [moduleName, perms]) => {
-      const canRead = !!perms.canRead;
-      acc[moduleName as ModuleName] = {
-        canRead,
-        canWrite: canRead,
-        canDelete: canRead,
-        canApprove: canRead
-      };
-      return acc;
-    }, {} as Record<ModuleName, PermissionState>);
-
-    console.log('📋 Permissions finales chargées:', normalizedPermissions);
-    setPermissions(normalizedPermissions);
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUserId, users, permReloadNonce]);
 
   const handleSave = async () => {
     if (!canEdit) return;
     if (!selectedUser || !selectedUser.profileId) return;
     
     try {
-      const payload = Object.entries(permissions).map(([moduleName, perms]) => ({
-        moduleName,
-        canRead: perms.canRead,
-        canWrite: perms.canWrite,
-        canDelete: perms.canDelete,
-        canApprove: perms.canApprove
-      }));
+      const payload = buildPayloadForTarget(selectedUser, allowedSlugsForSelected, permissions);
       await DataService.upsertUserModulePermissions(String(selectedUser.profileId), payload);
       
       // Déclencher le rechargement des permissions dans toute l'app
@@ -315,6 +412,7 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
     try {
       const ok = await DepartmentService.setUserDepartments(String(selectedUser.id), userDepartmentIds);
       if (!ok) throw new Error('Échec sauvegarde');
+      setPermReloadNonce((n) => n + 1);
       window.dispatchEvent(new Event('permissions-reload'));
       alert('Départements enregistrés avec succès.');
     } catch (error) {
@@ -346,13 +444,19 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
           };
         });
       }
-      const payload = Object.entries(effectivePermissions).map(([moduleName, perms]) => ({
-        moduleName,
-        canRead: perms.canRead,
-        canWrite: perms.canWrite,
-        canDelete: perms.canDelete,
-        canApprove: perms.canApprove
-      }));
+      const dept = bulkDeptList.find((d) => d.id === bulkDeptId);
+      const deptSlugs = (dept?.moduleSlugs ?? []) as ModuleName[];
+      const savableDept = new Set<ModuleName>(deptSlugs);
+      const payload = filterPermissionRowsForDepartmentScope(
+        Object.entries(effectivePermissions).map(([moduleName, perms]) => ({
+          moduleName,
+          canRead: perms.canRead,
+          canWrite: perms.canWrite,
+          canDelete: perms.canDelete,
+          canApprove: perms.canApprove,
+        })),
+        savableDept.size > 0 ? savableDept : new Set(),
+      );
 
       const userIds = await DepartmentService.getUserIdsInDepartment(bulkDeptId);
       const targetUsers = users.filter(u => userIds.includes(String(u.id)));
@@ -380,19 +484,24 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
     if (!canEdit || !selectedUser || !selectedUser.profileId || selectedUserIds.size === 0) return;
     setBulkApplyToSelected(true);
     try {
-      const payload = Object.entries(permissions).map(([moduleName, perms]) => ({
+      const templateRows = Object.entries(permissions).map(([moduleName, perms]) => ({
         moduleName,
         canRead: perms.canRead,
         canWrite: perms.canWrite,
         canDelete: perms.canDelete,
-        canApprove: perms.canApprove
+        canApprove: perms.canApprove,
       }));
       let applied = 0;
       for (const uid of selectedUserIds) {
         if (String(uid) === String(selectedUser.id)) continue;
         const u = users.find(us => us.id === uid);
         const profileId = u ? ((u as any).profileId || u.id) : null;
-        if (!profileId) continue;
+        if (!profileId || !u) continue;
+        const allowed = await DepartmentService.getAllowedModuleSlugsForUser(String(u.id));
+        const payload = filterPermissionRowsForDepartmentScope(
+          templateRows,
+          getSavableModuleFilter(allowed, u.role as Role),
+        );
         const { error } = await DataService.upsertUserModulePermissions(String(profileId), payload);
         if (!error) applied++;
       }
@@ -446,10 +555,10 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
           </div>
         </div>
         <div className="bg-white bg-opacity-20 rounded-lg p-4 backdrop-blur-sm">
-          <p className="text-sm flex items-start gap-2">
+            <p className="text-sm flex items-start gap-2">
             <i className="fas fa-info-circle mt-1"></i>
             <span>
-              Activez ou désactivez chaque module. Lorsqu’un module est activé, l’utilisateur obtient un accès complet (création, modification, suppression, approbation). Désactiver le module retire totalement l’accès.
+              Les modules visibles pour l’utilisateur viennent d’abord des départements (union des modules des départements assignés). Ici vous définissez des dérogations par module (voir, créer/modifier, supprimer, approuver) dans ce périmètre uniquement. Sans département, aucun contenu métier n’est exposé (sauf garde-fou admin/manager pour l’organisation).
               {!canEdit && ' (lecture seule)'}
             </span>
           </p>
@@ -629,7 +738,7 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
               Départements de l'utilisateur
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Les modules accessibles pour cet utilisateur sont l'union des modules autorisés sur les départements cochés. Cochez les départements auxquels il appartient.
+              Les modules accessibles pour cet utilisateur sont l&apos;union des modules autorisés sur les départements cochés. Cochez les départements auxquels il appartient, puis cliquez sur « Enregistrer les départements » pour mettre à jour le périmètre des permissions ci-dessous.
             </p>
             {loadingDepartments ? (
               <div className="flex items-center gap-2 py-4">
@@ -683,9 +792,15 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
             <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded-r-lg">
               <p className="text-sm text-gray-700 flex items-start gap-2">
                 <i className="fas fa-info-circle text-blue-600 mt-1"></i>
-                <span><strong>Info :</strong> Les modifications sont sauvegardées automatiquement après 0.5s d'inactivité</span>
+                <span><strong>Info :</strong> Les modifications sont sauvegardées automatiquement après 0.5s d&apos;inactivité (uniquement pour les modules dans le périmètre départements).</span>
               </p>
             </div>
+            {deptScopeBanner && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-900 flex gap-2">
+                <i className="fas fa-sitemap mt-0.5" aria-hidden />
+                <span>{deptScopeBanner}</span>
+              </div>
+            )}
             <div className="space-y-6 max-h-[600px] overflow-y-auto">
               {Object.entries(moduleCategories).map(([categoryKey, category]) => (
                 <div key={categoryKey} className="space-y-3">
@@ -702,18 +817,29 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
                     const module = moduleName as ModuleName;
                     const displayName = getDisplayName(module) || moduleDisplayNames[module];
                     const modulePerms = permissions[module] || { canRead: false, canWrite: false, canDelete: false, canApprove: false };
+                    const inDeptScope = isModuleInDeptScope(module);
                     
                     return (
-                      <div key={moduleName} className={`border rounded-lg p-5 transition-all ${
-                        modulePerms.canRead 
-                          ? 'border-emerald-200 bg-emerald-50 hover:border-emerald-300' 
-                          : 'border-gray-200 bg-gray-50'
-                      }`}>
+                      <div
+                        key={moduleName}
+                        className={`border rounded-lg p-5 transition-all ${
+                          !inDeptScope
+                            ? 'opacity-60 border-dashed border-amber-300 bg-amber-50/40'
+                            : modulePerms.canRead
+                              ? 'border-emerald-200 bg-emerald-50 hover:border-emerald-300'
+                              : 'border-gray-200 bg-gray-50'
+                        }`}
+                      >
                     {/* En-tête du module avec toggle principal */}
                     <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-800 text-lg">{displayName}</h4>
                         <span className="text-xs text-gray-500 uppercase font-mono">{moduleName}</span>
+                        {!inDeptScope && (
+                          <span className="mt-1 inline-block text-xs font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                            Hors périmètre départements
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-4">
                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
@@ -730,58 +856,24 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
                           <button
                             type="button"
                             onClick={() => {
-                              if (!canEdit) return;
+                              if (!canEdit || !inDeptScope) return;
                               const newValue = !modulePerms.canRead;
-                              
-                              // Mettre à jour toutes les permissions en une seule fois
                               const updatedPermissions = {
                                 ...permissions,
                                 [module]: {
                                   canRead: newValue,
                                   canWrite: newValue,
                                   canDelete: newValue,
-                                  canApprove: newValue
-                                }
+                                  canApprove: newValue,
+                                },
                               };
                               setPermissions(updatedPermissions);
-
-                              // Sauvegarde avec debounce
-                              if (saveTimeout) {
-                                clearTimeout(saveTimeout);
-                              }
-
-                              if (selectedUser && selectedUser.profileId) {
-                                const timeout = setTimeout(async () => {
-                                  setIsSaving(true);
-                                  try {
-                                    const payload = Object.entries(updatedPermissions).map(([modName, perms]) => ({
-                                      moduleName: modName,
-                                      canRead: perms.canRead,
-                                      canWrite: perms.canWrite,
-                                      canDelete: perms.canDelete,
-                                      canApprove: perms.canApprove
-                                    }));
-                                    
-                                    await DataService.upsertUserModulePermissions(String(selectedUser.profileId), payload);
-                                    
-                                    // Déclencher le rechargement des permissions dans toute l'app
-                                    window.dispatchEvent(new Event('permissions-reload'));
-                                  } catch (error) {
-                                    console.error('❌ Erreur sauvegarde automatique:', error);
-                                    setPermissions(permissions);
-                                    alert('Erreur lors de la sauvegarde. Veuillez réessayer.');
-                                  } finally {
-                                    setIsSaving(false);
-                                  }
-                                }, 500);
-                                
-                                setSaveTimeout(timeout);
-                              }
+                              scheduleAutoSave(updatedPermissions);
                             }}
-                            disabled={!canEdit}
+                            disabled={!canEdit || !inDeptScope}
                             className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
                               modulePerms.canRead ? 'bg-emerald-600' : 'bg-gray-300'
-                            } ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            } ${!canEdit || !inDeptScope ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <span
                               className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
@@ -795,11 +887,59 @@ const UserModulePermissions: React.FC<UserModulePermissionsProps> = ({ users, ca
                     
                     {/* Informations d'accès */}
                     {modulePerms.canRead && (
-                      <div className="bg-white rounded-lg p-4 border border-gray-200 text-sm text-gray-700 flex items-start gap-3">
-                        <i className="fas fa-unlock text-emerald-600 mt-1"></i>
-                        <span>
-                          Accès complet accordé : l’utilisateur peut créer, modifier, supprimer et approuver les éléments de ce module.
-                        </span>
+                      <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-3">
+                        <div className="text-sm text-gray-700 flex items-start gap-3">
+                          <i className="fas fa-sliders-h text-emerald-600 mt-1"></i>
+                          <span>
+                            Ajustez finement les droits pour ce module. Par défaut, un rôle peut donner un accès large ; ici vous pouvez restreindre (ex. lecture seule).
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {([
+                            { k: 'canRead' as const, label: 'Voir', icon: 'fa-eye' },
+                            { k: 'canWrite' as const, label: 'Créer / Modifier', icon: 'fa-pen' },
+                            { k: 'canDelete' as const, label: 'Supprimer', icon: 'fa-trash' },
+                            { k: 'canApprove' as const, label: 'Approuver', icon: 'fa-check' },
+                          ] as const).map(({ k, label, icon }) => (
+                            <label key={`${moduleName}-${k}`} className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                              modulePerms[k] ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
+                            }`}>
+                              <span className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                                <i className={`fas ${icon} text-gray-600`} aria-hidden />
+                                {label}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={!canEdit || !inDeptScope}
+                                onClick={() => {
+                                  if (!canEdit || !inDeptScope) return;
+                                  const nextVal = !modulePerms[k];
+                                  const nextPerms = { ...modulePerms, [k]: nextVal };
+                                  if ((k === 'canWrite' || k === 'canDelete' || k === 'canApprove') && nextVal) {
+                                    nextPerms.canRead = true;
+                                  }
+                                  if (k === 'canRead' && !nextVal) {
+                                    nextPerms.canWrite = false;
+                                    nextPerms.canDelete = false;
+                                    nextPerms.canApprove = false;
+                                  }
+                                  const updatedPermissions = { ...permissions, [module]: nextPerms };
+                                  setPermissions(updatedPermissions);
+                                  scheduleAutoSave(updatedPermissions);
+                                }}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                                  modulePerms[k] ? 'bg-emerald-600' : 'bg-gray-300'
+                                } ${!canEdit || !inDeptScope ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                                    modulePerms[k] ? 'translate-x-5' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     )}
 

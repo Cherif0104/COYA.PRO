@@ -5,6 +5,7 @@ import { useModulePermissions } from '../hooks/useModulePermissions';
 import { Organization } from '../types';
 import OrganizationService from '../services/organizationService';
 import AccessDenied from './common/AccessDenied';
+import { getPrimaryOrganizationId, isSingleOrganizationTenantMode } from '../constants/platformTenant';
 
 const OrganizationManagement: React.FC = () => {
   const { t } = useLocalization();
@@ -152,79 +153,72 @@ const OrganizationManagement: React.FC = () => {
     return <AccessDenied description="Vous n’avez pas les permissions nécessaires pour gérer les organisations. Veuillez contacter votre administrateur." />;
   }
 
+  const singleTenant = isSingleOrganizationTenantMode();
+  const primaryId = getPrimaryOrganizationId();
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header avec gradient */}
-      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Gestion des Organisations</h1>
-              <p className="text-emerald-50 text-sm">
-                Gérez les organisations partenaires et leurs espaces dédiés
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (!canWriteModule) return;
-                setEditingOrg(null);
-                resetForm();
-                setShowCreateModal(true);
-              }}
-              disabled={!canWriteModule}
-              className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
-                canWriteModule ? 'hover:bg-emerald-50' : 'opacity-60 cursor-not-allowed'
-              }`}
-            >
-              <i className="fas fa-plus mr-2"></i>
-              Nouvelle Organisation
-            </button>
-          </div>
+    <div className="space-y-4">
+      {singleTenant && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <p className="font-semibold">Mode organisation unique (maintenance)</p>
+          <p className="mt-1 text-sky-900/90">
+            Une seule organisation est exposée. Pour créer des tenants hébergés, désactivez{' '}
+            <code className="rounded bg-white/80 px-1">VITE_SINGLE_ORGANIZATION_MODE</code> dans l’environnement.
+          </p>
+        </div>
+      )}
+      {!singleTenant && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-950">
+          <p className="font-semibold">Organisation plateforme et tenants hébergés</p>
+          <p className="mt-1 text-emerald-900/95">
+            L’organisation marquée <strong>plateforme</strong> concentre vos projets et données COYA ; elle ne peut pas
+            être supprimée. Les <strong>tenants hébergés</strong> réutilisent le même modèle (départements, utilisateurs,
+            droits modules) avec un contenu dédié : la liste ci-dessous n’affiche pas d’indicateurs sur leur activité
+            (pas de visibilité agrégée). Les restrictions par module se configurent dans{' '}
+            <strong>Utilisateurs &amp; droits</strong> et les départements par organisation.
+          </p>
+        </div>
+      )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-sm text-slate-600">
+          {singleTenant
+            ? 'Identité et coordonnées de votre organisation COYA. Aucun autre tenant n’est prévu dans ce mode.'
+            : 'Modifiez la fiche plateforme ou créez des organisations hébergées (nom et slug propres).'}
+        </p>
+        {!singleTenant && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!canWriteModule) return;
+              setEditingOrg(null);
+              resetForm();
+              setShowCreateModal(true);
+            }}
+            disabled={!canWriteModule}
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i className="fas fa-plus mr-2" aria-hidden />
+            Nouvelle organisation
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase text-slate-500">Total</p>
+          <p className="text-2xl font-bold text-slate-900">{organizations.length}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase text-slate-500">Actives</p>
+          <p className="text-2xl font-bold text-slate-900">{organizations.filter((o) => o.isActive).length}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs uppercase text-slate-500">Inactives</p>
+          <p className="text-2xl font-bold text-slate-900">{organizations.filter((o) => !o.isActive).length}</p>
         </div>
       </div>
 
-      {/* Métriques */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Organisations</span>
-              <i className="fas fa-building text-2xl text-blue-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{organizations.length}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Actives</span>
-              <i className="fas fa-check-circle text-2xl text-green-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {organizations.filter(o => o.isActive).length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Inactives</span>
-              <i className="fas fa-pause-circle text-2xl text-yellow-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {organizations.filter(o => !o.isActive).length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Partenaires</span>
-              <i className="fas fa-handshake text-2xl text-purple-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {organizations.filter(o => o.id !== '550e8400-e29b-41d4-a716-446655440000').length}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Liste des organisations */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+      <div>
         {loading ? (
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
@@ -245,7 +239,8 @@ const OrganizationManagement: React.FC = () => {
                 onEdit={() => openEditModal(org)}
                 onDelete={() => setDeleteConfirm(org.id)}
                 onToggleActive={() => handleToggleActive(org)}
-                isSenegel={org.id === '550e8400-e29b-41d4-a716-446655440000'}
+                primaryOrganizationId={primaryId}
+                singleTenantMode={singleTenant}
                 canWrite={canWriteModule}
               />
             ))}
@@ -391,15 +386,24 @@ const OrganizationCard: React.FC<{
   onEdit: () => void;
   onDelete: () => void;
   onToggleActive: () => void;
-  isSenegel: boolean;
+  primaryOrganizationId: string;
+  singleTenantMode: boolean;
   canWrite: boolean;
-}> = ({ organization, onEdit, onDelete, onToggleActive, isSenegel, canWrite }) => {
+}> = ({ organization, onEdit, onDelete, onToggleActive, primaryOrganizationId, singleTenantMode, canWrite }) => {
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
+  const isPlatformOrg =
+    organization.isPlatformRoot === true || organization.id === primaryOrganizationId;
+
   useEffect(() => {
-    loadStats();
-  }, [organization.id]);
+    if (!isPlatformOrg) {
+      setStats(null);
+      setLoadingStats(false);
+      return;
+    }
+    void loadStats();
+  }, [organization.id, isPlatformOrg]);
 
   const loadStats = async () => {
     try {
@@ -415,15 +419,20 @@ const OrganizationCard: React.FC<{
 
   return (
     <div className={`bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 ${
-      isSenegel ? 'border-emerald-500' : 'border-gray-200'
+      isPlatformOrg ? 'border-emerald-500' : 'border-gray-200'
     }`}>
       <div className="flex items-start justify-between">
         <div className="flex-grow">
           <div className="flex items-center gap-3 mb-2">
             <h3 className="text-xl font-bold text-gray-800">{organization.name}</h3>
-            {isSenegel && (
+            {isPlatformOrg && (
               <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full">
-                Organisation Principale
+                Plateforme (mère)
+              </span>
+            )}
+            {!isPlatformOrg && (
+              <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">
+                Tenant hébergé
               </span>
             )}
             <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
@@ -451,14 +460,14 @@ const OrganizationCard: React.FC<{
             )}
           </div>
 
-          {/* Statistiques */}
-          {loadingStats ? (
+          {/* Statistiques : uniquement pour l’organisation plateforme (pas de visibilité sur les tenants hébergés) */}
+          {isPlatformOrg && loadingStats ? (
             <div className="animate-pulse flex gap-4 mt-3">
               <div className="h-8 bg-gray-200 rounded w-24"></div>
               <div className="h-8 bg-gray-200 rounded w-24"></div>
               <div className="h-8 bg-gray-200 rounded w-24"></div>
             </div>
-          ) : stats && (
+          ) : isPlatformOrg && stats ? (
             <div className="mt-3 pt-3 border-t border-gray-200 flex gap-4 text-xs">
               <div className="flex items-center gap-1">
                 <i className="fas fa-users text-blue-500"></i>
@@ -477,18 +486,24 @@ const OrganizationCard: React.FC<{
                 <span className="font-semibold text-gray-700">{stats.jobsCount} offres</span>
               </div>
             </div>
-          )}
+          ) : !isPlatformOrg ? (
+            <p className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+              Contenu et volumétrie non visibles depuis la plateforme — gérés au sein du tenant.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2 ml-4">
           <button
+            type="button"
             onClick={onToggleActive}
+            disabled={isPlatformOrg || !canWrite}
             className={`p-2 rounded-lg transition-colors ${
               organization.isActive
                 ? 'text-green-600 hover:bg-green-50'
                 : 'text-yellow-600 hover:bg-yellow-50'
-            }`}
-            title={organization.isActive ? 'Désactiver' : 'Activer'}
+            } ${isPlatformOrg || !canWrite ? 'opacity-40 cursor-not-allowed' : ''}`}
+            title={isPlatformOrg ? 'Organisation plateforme — non désactivable' : organization.isActive ? 'Désactiver' : 'Activer'}
           >
             <i className={`fas ${organization.isActive ? 'fa-toggle-on' : 'fa-toggle-off'} text-xl`}></i>
           </button>
@@ -499,8 +514,9 @@ const OrganizationCard: React.FC<{
           >
             <i className="fas fa-edit"></i>
           </button>
-          {!isSenegel && (
+          {!singleTenantMode && !isPlatformOrg && (
             <button
+              type="button"
               onClick={onDelete}
               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Supprimer"

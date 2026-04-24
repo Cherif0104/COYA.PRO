@@ -1,5 +1,6 @@
 import { DataCollection, DataCollectionSubmission } from '../types';
 import * as crmIngestService from './crmIngestService';
+import { normalizeDataCollectionRecord } from '../modules/collecte-rattachement';
 
 const STORAGE_KEY = 'coya_data_collections_v1';
 const SUBMISSIONS_KEY = 'coya_data_collection_submissions_v1';
@@ -9,7 +10,8 @@ function readAll(): DataCollection[] {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const list = Array.isArray(parsed) ? parsed : [];
+    return list.map((c: DataCollection) => normalizeDataCollectionRecord(c));
   } catch {
     return [];
   }
@@ -57,10 +59,11 @@ export function getDataCollection(id: string): DataCollection | null {
 }
 
 export function upsertDataCollection(item: DataCollection): void {
+  const normalized = normalizeDataCollectionRecord(item);
   const all = readAll();
-  const idx = all.findIndex((x) => x.id === item.id);
-  if (idx >= 0) all[idx] = item;
-  else all.push(item);
+  const idx = all.findIndex((x) => x.id === normalized.id);
+  if (idx >= 0) all[idx] = normalized;
+  else all.push(normalized);
   writeAll(all);
 }
 

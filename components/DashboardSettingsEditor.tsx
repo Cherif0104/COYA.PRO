@@ -21,8 +21,8 @@ const DashboardSettingsEditor: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-coya-text-muted">
-        <span className="animate-spin rounded-full h-5 w-5 border-2 border-coya-primary border-t-transparent" />
+      <div className="flex items-center gap-2 text-slate-500">
+        <span className="animate-spin rounded-full h-5 w-5 border-2 border-slate-700 border-t-transparent" />
         <span>{t('loading') || 'Chargement...'}</span>
       </div>
     );
@@ -30,7 +30,7 @@ const DashboardSettingsEditor: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-coya-text-muted mb-4">
+      <p className="text-sm text-slate-600 mb-4">
         {isFr
           ? 'Activez ou désactivez les blocs affichés sur le tableau de bord pour votre organisation.'
           : 'Enable or disable blocks displayed on the dashboard for your organization.'}
@@ -39,14 +39,14 @@ const DashboardSettingsEditor: React.FC = () => {
         const label = WIDGET_LABELS[key] ? (isFr ? WIDGET_LABELS[key].fr : WIDGET_LABELS[key].en) : key;
         const enabled = visibility[key] !== false;
         return (
-          <div key={key} className="flex items-center justify-between py-2 border-b border-coya-border last:border-0">
-            <span className="text-coya-text font-medium">{label}</span>
+          <div key={key} className="flex items-center justify-between py-2 border-b border-slate-200 last:border-0">
+            <span className="text-slate-800 font-medium">{label}</span>
             <button
               type="button"
               role="switch"
               aria-checked={enabled}
               onClick={() => setWidgetEnabled(key, !enabled)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-coya-primary focus:ring-offset-2 ${enabled ? 'bg-coya-primary' : 'bg-gray-200'}`}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 ${enabled ? 'bg-slate-900' : 'bg-slate-200'}`}
             >
               <span
                 className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${enabled ? 'translate-x-5' : 'translate-x-1'}`}

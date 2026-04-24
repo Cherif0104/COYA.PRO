@@ -2242,13 +2242,16 @@ CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'partially_paid') OR statu
     approverId: string,
     comment?: string,
     departmentId?: string | null
-  ): Promise<User | null> {
-    if (!this.useSupabase) return null;
+  ): Promise<{ user: User | null; departmentAssignmentFailed: boolean }> {
+    if (!this.useSupabase) return { user: null, departmentAssignmentFailed: false };
     try {
-      const { data, error } = await DataService.approveProfileRole({ profileId, approverId, comment, departmentId });
-      if (error) throw error;
-      if (!data) return null;
-      return this.mapProfileToUser(data);
+      const result = await DataService.approveProfileRole({ profileId, approverId, comment, departmentId });
+      if (result.error) throw result.error;
+      if (!result.data) return { user: null, departmentAssignmentFailed: false };
+      return {
+        user: this.mapProfileToUser(result.data),
+        departmentAssignmentFailed: Boolean(result.departmentAssignmentFailed)
+      };
     } catch (error) {
       console.error('❌ Erreur approbation profil:', error);
       throw error;

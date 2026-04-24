@@ -18,8 +18,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   canEdit: boolean;
-  /** Panneau latéral (défaut) ou bloc intégré dans une page (ex. fiche contact). */
-  variant?: 'drawer' | 'embedded';
+  /** Panneau latéral (défaut) ou bloc intégré dans une page (ex. fiche contact). `embedded_minimal` = onglets + corps sans carte dupliquée. */
+  variant?: 'drawer' | 'embedded' | 'embedded_minimal';
 };
 
 const ContactDossierDrawer: React.FC<Props> = ({ contact, open, onClose, canEdit, variant = 'drawer' }) => {
@@ -39,7 +39,8 @@ const ContactDossierDrawer: React.FC<Props> = ({ contact, open, onClose, canEdit
 
   const resolvedOrgId = contact?.organizationId ?? orgId;
 
-  const embedded = variant === 'embedded';
+  const embedded = variant === 'embedded' || variant === 'embedded_minimal';
+  const embeddedMinimal = variant === 'embedded_minimal';
 
   const load = useCallback(async () => {
     if (!contact) return;
@@ -315,6 +316,15 @@ const ContactDossierDrawer: React.FC<Props> = ({ contact, open, onClose, canEdit
           )}
     </div>
   );
+
+  if (embeddedMinimal) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        {nav}
+        {body}
+      </div>
+    );
+  }
 
   if (embedded) {
     return (

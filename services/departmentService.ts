@@ -1,5 +1,5 @@
 import { supabase } from './supabaseService';
-import { Department, UserDepartment, ModuleName } from '../types';
+import { Department, UserDepartment, ModuleName, DepartmentMemberRole } from '../types';
 import { handleOptionalTableError, isTableUnavailable } from './optionalTableGuard';
 
 function mapRowToDepartment(row: any): Department {
@@ -22,9 +22,62 @@ function mapRowToUserDepartment(row: any): UserDepartment {
     id: row.id,
     userId: row.user_id,
     departmentId: row.department_id,
-    roleInDepartment: row.role_in_department,
+    roleInDepartment: row.role_in_department as DepartmentMemberRole | string | null | undefined,
     createdAt: row.created_at
   };
+}
+
+export function normalizeDepartmentMemberRole(v: string | null | undefined): DepartmentMemberRole {
+  if (v === 'supervisor' || v === 'manager' || v === 'member') return v;
+  return 'member';
+}
+
+/**
+ * Règles métier : au moins deux personnes, exactement un superviseur, au moins un manager
+ * (un seul rôle par personne : le superviseur n’est pas manager sur la même ligne).
+ */
+export function validateDepartmentMemberRoster(links: UserDepartment[]): string | null {
+  if (!links.length) {
+    return 'Ajoutez au moins une personne au département.';
+  }
+  if (links.length < 2) {
+    return 'Au moins deux personnes sont nécessaires : un superviseur et au moins un manager.';
+  }
+  const roles = links.map((l) => normalizeDepartmentMemberRole(l.roleInDepartment as string | undefined));
+  const supCount = roles.filter((r) => r === 'supervisor').length;
+  const mgrCount = roles.filter((r) => r === 'manager').length;
+  if (supCount !== 1) {
+    return 'Désignez exactement un superviseur du département.';
+  }
+  if (mgrCount < 1) {
+    return 'Désignez au moins un manager du département.';
+  }
+  return null;
+}
+
+/** Validation côté formulaire (membres cochés + superviseur + managers) avant enregistrement. */
+export function validateDepartmentMemberDraft(
+  memberSelection: string[],
+  supervisorUserId: string,
+  managerUserIds: string[],
+): string | null {
+  if (memberSelection.length === 0) {
+    return 'Ajoutez au moins une personne au département.';
+  }
+  if (memberSelection.length < 2) {
+    return 'Au moins deux personnes sont nécessaires : un superviseur et au moins un manager.';
+  }
+  if (!supervisorUserId || !memberSelection.includes(supervisorUserId)) {
+    return 'Choisissez un superviseur parmi les membres cochés.';
+  }
+  const managersIn = managerUserIds.filter((id) => memberSelection.includes(id));
+  if (managersIn.length < 1) {
+    return 'Désignez au moins un manager (cases à cocher) parmi les membres.';
+  }
+  if (managersIn.includes(supervisorUserId)) {
+    return 'Le superviseur ne peut pas être en même temps manager.';
+  }
+  return null;
 }
 
 export class DepartmentService {
@@ -142,7 +195,11 @@ export class DepartmentService {
   /**
    * Assigner un utilisateur à un département
    */
-  static async assignUserToDepartment(userId: string, departmentId: string, roleInDepartment?: string): Promise<boolean> {
+  static async assignUserToDepartment(
+    userId: string,
+    departmentId: string,
+    roleInDepartment?: DepartmentMemberRole | string | null
+  ): Promise<boolean> {
     try {
       const { error } = await supabase.from('user_departments').upsert(
         {
@@ -197,7 +254,7 @@ export class DepartmentService {
       const toRemove = existing.filter((l) => !targetIds.has(l.departmentId));
 
       for (const id of toAdd) {
-        await this.assignUserToDepartment(userId, id);
+        await this.assignUserToDepartment(userId, id, 'member');
       }
       for (const link of toRemove) {
         await this.removeUserFromDepartment(userId, link.departmentId);
@@ -318,6 +375,21 @@ export class DepartmentService {
       return (data || []).map((r) => r.user_id);
     } catch (error) {
       console.error('❌ Erreur getUserIdsInDepartment:', error);
+      return [];
+    }
+  }
+
+  /** Toutes les affectations d’un département (rôles locaux inclus). */
+  static async getDepartmentMemberLinks(departmentId: string): Promise<UserDepartment[]> {
+    try {
+      const { data, error } = await supabase.from('user_departments').select('*').eq('department_id', departmentId);
+      if (error) {
+        console.error('❌ Erreur getDepartmentMemberLinks:', error);
+        return [];
+      }
+      return (data || []).map(mapRowToUserDepartment);
+    } catch (error) {
+      console.error('❌ Erreur getDepartmentMemberLinks:', error);
       return [];
     }
   }

@@ -1,6 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocalization } from '../../contexts/LocalizationContext';
+
+/** Racine dédiée pour éviter les conflits de placement avec d’autres nœuds sous `body`. */
+let confirmationPortalHost: HTMLDivElement | null = null;
+function getConfirmationPortalHost(): HTMLDivElement {
+  if (typeof document === 'undefined') {
+    throw new Error('document indisponible');
+  }
+  if (!confirmationPortalHost || !document.body.contains(confirmationPortalHost)) {
+    confirmationPortalHost = document.createElement('div');
+    confirmationPortalHost.setAttribute('data-coya-confirmation-root', 'true');
+    document.body.appendChild(confirmationPortalHost);
+  }
+  return confirmationPortalHost;
+}
 
 interface ConfirmationModalProps {
   title: string;
@@ -32,6 +46,14 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   children,
 }) => {
   const { t } = useLocalization();
+  const [portalEl] = useState<HTMLDivElement | null>(() => {
+    if (typeof document === 'undefined') return null;
+    try {
+      return getConfirmationPortalHost();
+    } catch {
+      return null;
+    }
+  });
   const effectiveConfirmClass = confirmButtonClass ?? (variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-coya-primary hover:opacity-90');
   const effectiveConfirmText = confirmLabel ?? confirmText ?? t('confirm_delete');
   const effectiveCancelText = cancelLabel ?? cancelText ?? t('cancel');
@@ -47,12 +69,15 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       >
         <div className="p-6">
           <div className="flex items-start">
-            <div className="mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-              {isLoading ? (
-                <div key="spinner" className="h-8 w-8 animate-spin rounded-full border-b-2 border-red-600" />
-              ) : (
-                <i key="icon" className="fas fa-exclamation-triangle text-red-600" aria-hidden />
-              )}
+            <div className="relative mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+              <div
+                className={`absolute inset-0 m-auto h-8 w-8 animate-spin rounded-full border-b-2 border-red-600 transition-opacity ${isLoading ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+                aria-hidden={!isLoading}
+              />
+              <i
+                className={`fas fa-exclamation-triangle text-red-600 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                aria-hidden={isLoading}
+              />
             </div>
             <div className="ml-4 min-w-0 flex-1 text-left">
               <h3 id="confirm-modal-title" className="text-lg font-medium leading-6 text-gray-900">
@@ -70,11 +95,12 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             disabled={isLoading}
             className={`inline-flex w-full items-center justify-center rounded-md border border-transparent px-4 py-2 text-base font-medium text-white shadow-sm sm:ml-3 sm:w-auto sm:text-sm ${effectiveConfirmClass} ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
-            <span className="inline-flex items-center">
-              {isLoading ? (
-                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
-              ) : null}
-              {effectiveConfirmText}
+            <span className="inline-flex items-center justify-center gap-2">
+              <span
+                className={`inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-b-2 border-white transition-all ${isLoading ? 'opacity-100' : 'h-0 w-0 border-0 opacity-0'}`}
+                aria-hidden={!isLoading}
+              />
+              <span>{effectiveConfirmText}</span>
             </span>
           </button>
           <button
@@ -90,8 +116,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     </div>
   );
 
-  if (typeof document === 'undefined') return modal;
-  return createPortal(modal, document.body);
+  if (typeof document === 'undefined' || !portalEl) return modal;
+  return createPortal(modal, portalEl);
 };
 
 export default ConfirmationModal;

@@ -1287,6 +1287,15 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleRefreshUsers = useCallback(async () => {
+    try {
+      const fresh = await DataAdapter.getUsers();
+      setUsers(fresh);
+    } catch (e) {
+      console.error('Erreur rechargement utilisateurs:', e);
+    }
+  }, []);
+
   // Overlay de chargement unique : initialisation et vérification auth
   if (!isInitialized || (authLoading && !user)) {
     return (
@@ -3016,7 +3025,15 @@ const App: React.FC = () => {
                   onDeleteLeaveRequest={handleDeleteLeaveRequest}
                 />;
       case 'user_management':
-        return <UserManagement users={users} onUpdateUser={handleUpdateUser} onToggleActive={handleToggleActive} onDeleteUser={handleDeleteUser} />;
+        return (
+          <UserManagement
+            users={users}
+            onUpdateUser={handleUpdateUser}
+            onToggleActive={handleToggleActive}
+            onDeleteUser={handleDeleteUser}
+            onRefreshUsers={handleRefreshUsers}
+          />
+        );
       case 'organization_management':
         return <OrganizationManagement />;
       case 'department_management':
@@ -3141,6 +3158,7 @@ const App: React.FC = () => {
             reminderDays={reminderDays}
             onSetReminderDays={setReminderDays}
             users={users}
+            onRefreshUsers={handleRefreshUsers}
             setView={handleSetView}
             leaveRequests={leaveRequests}
             courses={courses}

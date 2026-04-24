@@ -298,6 +298,8 @@ interface JobManagementProps {
   onUpdateJob: (job: Job) => void;
   onDeleteJob: (jobId: number) => void;
   onNavigate?: (view: string) => void;
+  /** Dans Paramètres : layout compact sans plein écran ni gradient. */
+  embedded?: boolean;
 }
 
 const JobManagement: React.FC<JobManagementProps> = ({
@@ -305,7 +307,8 @@ const JobManagement: React.FC<JobManagementProps> = ({
   onAddJob,
   onUpdateJob,
   onDeleteJob,
-  onNavigate
+  onNavigate,
+  embedded = false,
 }) => {
   const { t } = useLocalization();
   const { user } = useAuth();
@@ -428,76 +431,120 @@ const JobManagement: React.FC<JobManagementProps> = ({
     return <AccessDenied description="Vous n’avez pas les permissions nécessaires pour gérer les offres d’emploi. Veuillez contacter votre administrateur." />;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header avec gradient */}
-      <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Gestion des Offres d'Emploi</h1>
-              <p className="text-emerald-50 text-sm">
-                Gérez, modifiez et surveillez toutes vos offres d'emploi
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (!canWriteModule) return;
-                if (onNavigate) {
-                  onNavigate('create_job');
-                } else {
-                  // Fallback si onNavigate n'est pas fourni
-                  const event = new CustomEvent('navigate', { detail: { view: 'create_job' } });
-                  window.dispatchEvent(event);
-                }
-              }}
-              disabled={!canWriteModule}
-              className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
-                canWriteModule ? 'hover:bg-emerald-50' : 'opacity-60 cursor-not-allowed'
-              }`}
-            >
-              <i className="fas fa-plus mr-2"></i>
-              Nouvelle Offre
-            </button>
-          </div>
-        </div>
+  const primaryMetrics = embedded ? (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs uppercase text-slate-500">Total</p>
+        <p className="text-2xl font-bold text-slate-900">{totalJobs}</p>
       </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs uppercase text-slate-500">Publiées</p>
+        <p className="text-2xl font-bold text-slate-900">{publishedJobs}</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs uppercase text-slate-500">Brouillons</p>
+        <p className="text-2xl font-bold text-slate-900">{draftJobs}</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs uppercase text-slate-500">Candidats</p>
+        <p className="text-2xl font-bold text-slate-900">{totalApplicants}</p>
+      </div>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-600">Total Offres</span>
+          <i className="fas fa-briefcase text-2xl text-blue-500"></i>
+        </div>
+        <p className="text-3xl font-bold text-gray-900">{totalJobs}</p>
+      </div>
+      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-600">Publiées</span>
+          <i className="fas fa-globe text-2xl text-green-500"></i>
+        </div>
+        <p className="text-3xl font-bold text-gray-900">{publishedJobs}</p>
+      </div>
+      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-600">Brouillons</span>
+          <i className="fas fa-save text-2xl text-yellow-500"></i>
+        </div>
+        <p className="text-3xl font-bold text-gray-900">{draftJobs}</p>
+      </div>
+      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-600">Candidats Total</span>
+          <i className="fas fa-users text-2xl text-purple-500"></i>
+        </div>
+        <p className="text-3xl font-bold text-gray-900">{totalApplicants}</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={embedded ? 'space-y-4' : 'min-h-screen bg-gray-50'}>
+      {embedded ? (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-slate-600">
+            Gérez les offres d&apos;emploi. La création détaillée s&apos;ouvre dans l&apos;écran dédié.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!canWriteModule) return;
+              if (onNavigate) onNavigate('create_job');
+              else window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'create_job' } }));
+            }}
+            disabled={!canWriteModule}
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            <i className="fas fa-plus mr-2" />
+            Nouvelle offre
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow-lg">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-4xl font-bold mb-2">Gestion des Offres d'Emploi</h1>
+                  <p className="text-emerald-50 text-sm">Gérez, modifiez et surveillez toutes vos offres d'emploi</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!canWriteModule) return;
+                    if (onNavigate) {
+                      onNavigate('create_job');
+                    } else {
+                      const event = new CustomEvent('navigate', { detail: { view: 'create_job' } });
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  disabled={!canWriteModule}
+                  className={`bg-white text-emerald-600 font-bold py-2 px-4 rounded-lg flex items-center shadow-md transition-all ${
+                    canWriteModule ? 'hover:bg-emerald-50' : 'opacity-60 cursor-not-allowed'
+                  }`}
+                >
+                  <i className="fas fa-plus mr-2"></i>
+                  Nouvelle Offre
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Métriques Power BI style */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Total Offres</span>
-              <i className="fas fa-briefcase text-2xl text-blue-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{totalJobs}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Publiées</span>
-              <i className="fas fa-globe text-2xl text-green-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{publishedJobs}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Brouillons</span>
-              <i className="fas fa-save text-2xl text-yellow-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{draftJobs}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-600">Candidats Total</span>
-              <i className="fas fa-users text-2xl text-purple-500"></i>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{totalApplicants}</p>
-          </div>
-        </div>
-        
+      <div className={embedded ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 mb-8'}>
+        {primaryMetrics}
+
         {/* Métriques détaillées par source de candidature */}
-        {(() => {
+        {!embedded &&
+        (() => {
           const statsBySource = localJobs.reduce((acc, job) => {
             const stats = job.applicationStats || {
               total: job.applicants?.length || 0,
@@ -566,7 +613,7 @@ const JobManagement: React.FC<JobManagementProps> = ({
       </div>
 
       {/* Barre de recherche et filtres */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+      <div className={embedded ? 'pb-0' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8'}>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[200px]">
