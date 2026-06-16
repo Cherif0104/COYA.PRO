@@ -44,10 +44,7 @@ Ces modules sont en navigation (ou le sont encore) mais ont souvent un contenu *
 
 | Module              | État actuel probable | Options |
 |----------------------|----------------------|----------|
-| **Conseil**          | Souvent placeholder  | Intégrer dans CRM ou Qualité, ou définir un périmètre métier clair (missions, livrables). |
-| **Qualité**          | Peu industrialisé    | Soit le développer (indicateurs, audits, non-conformités), soit le lier à Projets (qualité livrables) ou RH (évaluations). |
-| **Juridique**        | Souvent minimal      | Soit module léger (contrats, échéances), soit intégré à un module « Administration » ou « Documents » (Espace documentaire). |
-| **Studio**           | Souvent minimal      | Si c’est production audiovisuelle : soit module dédié (workflow, livrables), soit sous-partie Projets ou Espace documentaire. |
+| **Juridique**        | Souvent minimal      | Intégrer à « Documents » ou CRM si le besoin est confirmé, sans module dédié à court terme. |
 | **Collecte**         | Périmètre flou       | Définir : formulaires, import de données, enquêtes ? Puis soit intégrer (Espace documentaire, CRM), soit module transverse. |
 | **Trinité**          | Spécifique métier    | À garder seulement si usage réel ; sinon retirer ou intégrer comme « type de projet » ou vue dédiée dans Projets. |
 | **Messagerie**       | Souvent Discuss / chat | Si non implémenté, retirer de la sidebar jusqu’à livraison ; sinon garder. |
@@ -80,7 +77,7 @@ Ces modules sont en navigation (ou le sont encore) mais ont souvent un contenu *
 ### Modules à clarifier avant de garder ou supprimer
 
 - **Collecte** : définir le périmètre (formulaires, données, enquêtes) puis soit intégrer (Espace documentaire, CRM), soit module transverse.
-- **Trinité, Studio, Juridique, Qualité, Messagerie, Signalement** : décider pour chacun entre « développer », « intégrer ailleurs » ou « retirer de la sidebar » jusqu’à maturité.
+- **Trinité, Juridique, Messagerie, Signalement** : décider pour chacun entre « développer », « intégrer ailleurs » ou « retirer de la sidebar » jusqu’à maturité.
 
 ---
 

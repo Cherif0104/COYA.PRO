@@ -42,7 +42,7 @@
 | **RH** | RhModule | Fiche poste, fiche employé, organigramme, paie (bulletin, politique), planning type My Timesquare, congés intégrés |
 | **Formations / Emplois** | Courses, Jobs, CRUD | Déjà opérationnels ; renforcer liens avec Projets et RH |
 | **CRM** | CRM composant | Partenaires, catégories extensibles ; droits par département |
-| **Modules "stub" devenus vrais** | Partenariat, Collecte, Qualité, Conseil, Juridique, Studio, Tech, Trinité | Soit contenu minimal (liste + détail + CRUD générique), soit lien fort avec Projets/Programme (Collecte = formulaires rattachés) |
+| **Modules à intégrer plutôt qu'à recréer** | Partenariat, Collecte, Juridique, Trinité | Rattacher les besoins aux modules existants plutôt que créer de nouvelles entrées dédiées |
 | **Nouveaux modules** | Logistique, Parc auto, Ticket IT, Alerte anonyme, Messagerie | Tables + workflow + UI ; Ticket IT = demande → validation manager → IT |
 | **Admin** | UserManagement, Org, Départements, Postes, Permissions par module | Sélection multi-utilisateurs ; cohérence rôle/poste ; droits par département déjà partiellement là |
 | **Supabase** | Pro, MCP disponible | Toutes les migrations sur **un seul projet** (celui de l’app) ; Storage (buckets) ; pas de 404 sur tables attendues |
@@ -136,9 +136,9 @@
 12. **CRM** : Partenaires, catégories extensibles, droits par département.  
 13. **Formations / Emplois** : Renforcer liens avec Projets et RH ; pas de refonte majeure si déjà stables.
 
-### Phase 4 – Modules "métier" et nouveaux
+### Phase 4 – Extensions métier ciblées
 
-14. **Modules stub → contenu minimal** : Partenariat, Qualité, Conseil, Juridique, Studio, Tech, Trinité : soit CRUD générique + champs métier, soit lien fort avec Projets/Programme (Collecte = formulaires).  
+14. **Extensions métier sans nouveaux modules fantômes** : Partenariat, Juridique et Trinité doivent être intégrés aux modules existants si le besoin est confirmé.  
 15. **Logistique** : Tables, workflow demande → validation → mise à disposition, fiche équipement.  
 16. **Parc automobile** : Idem logique Logistique, dédié véhicules.  
 17. **Ticket IT** : Demande → validation manager → envoi IT ; droits clairs.  
