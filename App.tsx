@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from './contexts/AuthContextSupabase';
 import { authGuard } from './middleware/authGuard';
-import { mockProjects, mockGoals } from './constants/data';
+import { mockGoals } from './constants/data';
 import { Course, Job, Project, Objective, Contact, Document, User, Role, TimeLog, LeaveRequest, Invoice, Expense, AppNotification, RecurringInvoice, RecurringExpense, RecurrenceFrequency, Budget, Meeting, ProjectModuleSettings } from './types';
 import { useLocalization } from './contexts/LocalizationContext';
 import DataAdapter from './services/dataAdapter';
@@ -32,7 +32,6 @@ import JobManagement from './components/JobManagement';
 import LeaveManagementAdmin from './components/LeaveManagementAdmin';
 import Analytics from './components/Analytics';
 import TalentAnalytics from './components/TalentAnalytics';
-import Goals from './components/Goals';
 import CRM from './components/CRM';
 import Drive from './components/Drive';
 import DafServicesModule from './components/DafServicesModule';

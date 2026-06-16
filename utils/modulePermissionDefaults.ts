@@ -45,14 +45,11 @@ const STANDARD_MODULES: ModuleName[] = [
   'postes_management',
   'trinite',
   'programme',
-  'tech',
   'settings',
   'logistique',
   'parc_auto',
   'ticket_it',
   'messagerie',
-  'qualite',
-  'conseil',
   'collecte',
 ];
 
