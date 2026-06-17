@@ -20,15 +20,15 @@
 | # | Département (Odoo) | Besoins principaux | Écrans cibles COYA.PRO | Champs / données clés | Priorisation |
 |---|--------------------|--------------------|------------------------|----------------------|--------------|
 | 1 | **Administratif & Financier** | Budgets, dépenses, factures, validation multi-niveaux, rapports bailleur, ligne prévisionnel/réel | Finance (existant) ; Dépenses programmes ; Workflow validation ; Rapports | Budget, Ligne budgétaire, Poste dépense, Statut validation, Niveau approbation | Phase 2 (droits) + Phase 4 bloc 3 (Programme/Budget) |
-| 2 | **Juridique** | Contrats, contentieux, risques juridiques | Module Juridique (à créer) : listes Contrats, Contentieux, Risques | Contrat (partenaire, dates, type), Contentieux (réf, statut), Risque (gravité, statut) | Phase 4 bloc 4 |
-| 3 | **Audiovisuel / Production** | Projets média, production | Module Studio (à créer) : projets audiovisuel, livrables | Projet, Type production, Livrables, Planning | Phase 4 bloc 4 |
+| 2 | **Juridique** | Contrats, contentieux, risques juridiques | À intégrer dans Documents / CRM si besoin, sans module dédié à court terme | Contrat (partenaire, dates, type), Contentieux (réf, statut), Risque (gravité, statut) | Hors périmètre rapide |
+| 3 | **Audiovisuel / Production** | Projets média, production | À intégrer dans Projets / Documents si besoin | Projet, Type production, Livrables, Planning | Hors périmètre rapide |
 | 4 | **Formation & Bootcamp** | Cours, parcours, collecte, bootcamp | Courses (existant) ; Collecte ; Bootcamp (parcours, fiches) | Cours, Parcours, Fiche collecte, Session bootcamp | Phase 4 bloc 4 (étendre Courses + Collecte + Bootcamp) |
 | 5 | **RH** | Pointage, présence, congés, paie, évaluations, attestations | Leave (existant) ; Pointage/Présence ; Paie ; Talent Analytics (évaluations) ; Génération documents (attestations, certificats) | Présence, Retard, Heures sup, Bulletin, Évaluation, Document généré | Phase 2 (droits par dept) + Phase 4 blocs 1 et 2 |
 | 6 | **Project Management** | Projets, tâches, objectifs SMART, programmes, jalons | Projects, Goals (existant) ; Tâches hebdo ; Lien Programme/Projet/Budget | Projet, Programme, Tâche, OKR, Ligne budgétaire | Phase 4 blocs 3 et 5 (tâches, objectifs) |
 | 7 | **Prospection & Partenariat** | CRM, opportunités, pipeline | CRM (existant) ; extension Partenariat (opportunités, pipeline) | Opportunité, Partenaire, Pipeline, Statut | Phase 4 bloc 4 |
-| 8 | **Conseil consultatif** | Gouvernance, avis, suivi | Module Conseil (à créer) : dossiers conseil, avis | Dossier, Avis, Gouvernance | Phase 4 bloc 5 |
-| 9 | **Qualité & Suivi performance** | Indicateurs, scores, conformité | Analytics (existant) ; extension Qualité (scores, conformité, alertes) | Indicateur, Score, Conformité, Alerte | Phase 4 bloc 5 |
-| 10 | **IT & Tech Solutions** | Projets tech, interventions | Module Tech (à créer) ; lien avec Projects | Projet tech, Type intervention, Statut | Phase 4 bloc 4 |
+| 8 | **Conseil consultatif** | Gouvernance, avis, suivi | À intégrer dans CRM / Projets / Documents si besoin | Dossier, Avis, Gouvernance | Hors périmètre rapide |
+| 9 | **Qualité & Suivi performance** | Indicateurs, scores, conformité | À rattacher à Analytics / Dashboard si besoin, sans module Qualité dédié | Indicateur, Score, Conformité, Alerte | Hors périmètre rapide |
+| 10 | **IT & Tech Solutions** | Projets tech, interventions | À gérer via Ticket IT / Projets si besoin, sans module Tech dédié | Projet tech, Type intervention, Statut | Hors périmètre rapide |
 
 **Implémentation cible** : entité **Département** (table Supabase) avec nom, slug, liste de modules autorisés (ModuleName), et association utilisateur ↔ département(s). Droits par module granulaires (read/write/delete/approve), croisés avec le département.
 
@@ -50,15 +50,13 @@
 | coya_payroll | Finance | Créer : Paie (bulletins, taux horaire, cotisations CNSS/AMO/IR, primes Trinité). |
 | coya_hr_trinite_appraisal | Talent Analytics | Étendre : évaluations RH liées à la Trinité. |
 | coya_appraisal_manager | Talent Analytics | Étendre : évaluations managers. |
-| coya_juridique | — | Créer : contrats, contentieux, risques juridiques. |
+| coya_juridique | — | Retiré du périmètre rapide : intégrer dans Documents / CRM si nécessaire. |
 | coya_partenariat | CRM | Étendre : opportunités, partenariat, pipeline. |
-| coya_tech | — | Créer : projets IT / tech. |
-| coya_tech_project | Projects | Lier projet tech à module Tech. |
-| coya_studio | — | Créer : projets audiovisuel / production. |
+| coya_tech | — | Retiré du périmètre rapide : gérer via Ticket IT / Projets si nécessaire. |
+| coya_tech_project | Projects | Retiré du périmètre rapide : rattacher directement aux projets si nécessaire. |
 | coya_collecte | — | Créer : collecte (données, formulaires). |
 | coya_bootcamp | Courses | Étendre : Bootcamp (parcours, collecte). |
-| coya_conseil | — | Créer : conseil, gouvernance. |
-| coya_qualite | Analytics | Étendre : qualité, scores, conformité. |
+| coya_qualite | Analytics | Retiré du périmètre rapide : rattacher aux analytics si nécessaire. |
 | coya_tasks_weekly | Projects / Goals | Étendre : tâches hebdo, objectifs SMART, lien projet/programme. |
 | coya_modern_navbar | Header/Sidebar | Déjà présent ; aligner charte et UX. |
 
@@ -103,8 +101,8 @@
   - Bloc 1 : RH / Présence / Planning (pointage, politique présence, extractions J+7).  
   - Bloc 2 : Trinité / Paie (bulletins, cotisations).  
   - Bloc 3 : Programme / Budget / Projets (programmes, projets, lignes budgétaires, rapports bailleur, validation multi-niveaux dépenses).  
-  - Bloc 4 : Partenariat, Juridique, Studio, Tech, Collecte, Bootcamp.  
-  - Bloc 5 : Conseil, Qualité.  
+  - Bloc 4 : Collecte, Bootcamp et extensions ciblées des modules existants.  
+  - Bloc 5 : Analytics / conformité intégrés aux modules existants.  
   Génération de documents (factures, paie, attestations) et alertes/conformité en transversal.
 
 Chaque phase doit être testée (régression navigation, permissions, données existantes) avant la suivante.

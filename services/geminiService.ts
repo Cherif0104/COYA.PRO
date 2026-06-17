@@ -113,18 +113,6 @@ const callAI = async (prompt: string, systemPrompt?: string): Promise<string> =>
   return "Aucune clé API configurée. Veuillez définir VITE_GEMINI_API_KEY ou VITE_GROQ_API_KEY dans le fichier .env";
 };
 
-// Modules AI Coach et Gen AI Lab retirés de la plateforme (Phase 1 ERP 360°)
-// Ces exports sont conservés pour éviter les erreurs si un lien résiduel les appelle.
-/** @deprecated Module ai_coach retiré - utiliser un autre module */
-export const runAICoach = async (_prompt: string): Promise<string> => {
-  return "Ce module n'est plus disponible.";
-};
-
-/** @deprecated Module gen_ai_lab retiré - utiliser un autre module */
-export const runGenAILab = async (_prompt: string): Promise<string> => {
-  return "Ce module n'est plus disponible.";
-};
-
 export const enhanceTask = async (task: Task): Promise<Task> => {
   return task;
 };

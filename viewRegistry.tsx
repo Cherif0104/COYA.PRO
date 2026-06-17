@@ -5,7 +5,6 @@
  */
 import React from 'react';
 import ProgrammeModule from './components/ProgrammeModule';
-import TechModule from './components/TechModule';
 import TriniteModule from './components/TriniteModule';
 import LogistiqueModule from './components/LogistiqueModule';
 import ParcAutoModule from './components/ParcAutoModule';
@@ -15,7 +14,6 @@ export type ViewName = string;
 
 const MODULE_VIEWS: Record<string, React.ComponentType<{}>> = {
   programme: ProgrammeModule,
-  tech: TechModule,
   trinite: TriniteModule,
   logistique: LogistiqueModule,
   parc_auto: ParcAutoModule,
@@ -45,7 +43,6 @@ export const ViewRouter: React.FC<{ currentView: string; children: React.ReactNo
 export const MODULE_LABELS: Record<string, { fr: string; en: string }> = {
   programme: { fr: 'Programme & Bailleur', en: 'Programme & Donor' },
   comptabilite: { fr: 'Comptabilité', en: 'Accounting' },
-  tech: { fr: 'Tech / IT', en: 'Tech / IT' },
   trinite: { fr: 'Trinité', en: 'Trinité' },
   logistique: { fr: 'Logistique', en: 'Logistics' },
   parc_auto: { fr: 'Parc automobile', en: 'Fleet management' },

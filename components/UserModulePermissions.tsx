@@ -37,13 +37,10 @@ export const moduleDisplayNames: Record<ModuleName, string> = {
   'crm_sales': 'CRM & Ventes',
   'analytics': 'Analytics',
   'talent_analytics': 'Talent Analytics',
-  'qualite': 'Qualité',
   'rh': 'Ressources humaines',
   'trinite': 'Trinité',
   'programme': 'Programme / Budget',
-  'tech': 'Tech',
   'collecte': 'Collecte',
-  'conseil': 'Conseil',
   'user_management': 'Droits d\'accès / Utilisateurs',
   'course_management': 'Gestion des Cours',
   'job_management': 'Gestion des Jobs',
@@ -90,15 +87,10 @@ const moduleCategories: Record<string, { label: string; icon: string; modules: M
     icon: 'fas fa-handshake',
     modules: ['crm_sales'],
   },
-  conseil_qualite: {
-    label: 'Conseil & Qualité',
+  analytics: {
+    label: 'Analytics',
     icon: 'fas fa-chart-pie',
-    modules: ['conseil', 'analytics', 'qualite', 'talent_analytics'],
-  },
-  tech: {
-    label: 'IT & Tech',
-    icon: 'fas fa-laptop-code',
-    modules: ['tech'],
+    modules: ['analytics', 'talent_analytics'],
   },
   collecte: {
     label: 'Collecte',

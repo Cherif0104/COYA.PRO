@@ -14,8 +14,8 @@ import { moduleDisplayNames } from './UserModulePermissions';
 const ALL_MODULE_NAMES: ModuleName[] = [
   'dashboard', 'projects', 'goals_okrs', 'time_tracking', 'planning',
   'leave_management', 'finance', 'comptabilite', 'knowledge_base', 'courses', 'jobs',
-  'crm_sales', 'analytics', 'talent_analytics', 'qualite',
-  'rh', 'trinite', 'programme', 'tech', 'conseil', 'daf_services', 'collecte',
+  'crm_sales', 'analytics', 'talent_analytics',
+  'rh', 'trinite', 'programme', 'daf_services', 'collecte',
   'user_management', 'course_management', 'job_management', 'leave_management_admin',
   'organization_management', 'department_management', 'postes_management', 'settings',
   'logistique', 'parc_auto', 'ticket_it', 'messagerie',

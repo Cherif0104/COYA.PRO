@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Manuel de procédures COYA / SENEGEL</title>
+  <style>
+    @page { margin: 18mm; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #172033; line-height: 1.48; max-width: 980px; margin: 0 auto; padding: 32px; }
+    h1 { color: #0f5132; font-size: 30px; border-bottom: 4px solid #f2c94c; padding-bottom: 12px; }
+    h2 { color: #0f5132; font-size: 23px; margin-top: 34px; border-bottom: 1px solid #d9eadf; padding-bottom: 6px; }
+    h3 { color: #1f6f45; font-size: 18px; margin-top: 24px; }
+    h4, h5, h6 { color: #334155; }
+    p, li, td { font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 13px; }
+    td, th { border: 1px solid #d5dbe3; padding: 8px; vertical-align: top; }
+    tr:first-child td { background: #eef7f0; font-weight: 700; }
+    code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
+    hr { border: 0; border-top: 1px solid #d5dbe3; margin: 26px 0; }
+    .cover { border: 1px solid #d9eadf; background: #f8fbf8; padding: 24px; margin-bottom: 28px; }
+    .meta { color: #475569; font-size: 13px; }
+    @media print { body { padding: 0; } h1, h2 { page-break-after: avoid; } }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <h1>Manuel de procédures utilisateur et administrateur</h1>
+    <p><strong>Plateforme COYA / SENEGEL</strong></p>
+    <p class="meta">Document généré le 17/06/2026 - Format HTML imprimable</p>
+  </div>
+  <h1>Manuel de procédures utilisateur et administrateur</h1>
+<h2>Plateforme COYA / SENEGEL</h2>
+<p><strong>Version du document :</strong> 1.0</p>
+<p><strong>Public cible :</strong> client, direction, administrateurs, responsables de département, utilisateurs finaux</p>
+<p><strong>Objectif :</strong> fournir une procédure complète d&#x27;utilisation de la plateforme, module par module, avec les règles d&#x27;accès, les workflows et les paramètres d&#x27;administration.</p>
+<hr>
+<h2>Table des matières</h2>
+<ol>
+<li><a href="#1-présentation-générale-de-la-plateforme">Présentation générale de la plateforme</a></li>
+<li><a href="#2-connexion-premier-accès-et-navigation">Connexion, premier accès et navigation</a></li>
+<li><a href="#3-rôles-droits-et-règles-daccès">Rôles, droits et règles d&#x27;accès</a></li>
+<li><a href="#4-procédures-transverses">Procédures transverses</a></li>
+<li><a href="#5-tableau-de-bord">Tableau de bord</a></li>
+<li><a href="#6-projets">Projets</a></li>
+<li><a href="#7-planning">Planning</a></li>
+<li><a href="#8-ressources-humaines">Ressources humaines</a></li>
+<li><a href="#9-comptabilité-et-finance">Comptabilité et Finance</a></li>
+<li><a href="#10-programme--budget">Programme &amp; Budget</a></li>
+<li><a href="#11-cours-et-formations">Cours et formations</a></li>
+<li><a href="#12-crm--ventes">CRM &amp; Ventes</a></li>
+<li><a href="#13-trinité">Trinité</a></li>
+<li><a href="#14-logistique">Logistique</a></li>
+<li><a href="#15-parc-automobile">Parc automobile</a></li>
+<li><a href="#16-messagerie">Messagerie</a></li>
+<li><a href="#17-ticket-it">Ticket IT</a></li>
+<li><a href="#18-docs-senegel">DOCS SENEGEL</a></li>
+<li><a href="#19-moyens-généraux--daf">Moyens généraux &amp; DAF</a></li>
+<li><a href="#20-suivi-du-temps">Suivi du temps</a></li>
+<li><a href="#21-objectifs-et-okr">Objectifs et OKR</a></li>
+<li><a href="#22-analytics-et-talent-analytics">Analytics et Talent Analytics</a></li>
+<li><a href="#23-centre-de-notifications">Centre de notifications</a></li>
+<li><a href="#24-historique-des-activités">Historique des activités</a></li>
+<li><a href="#25-paramètres-personnels">Paramètres personnels</a></li>
+<li><a href="#26-administration-de-la-plateforme">Administration de la plateforme</a></li>
+<li><a href="#27-annexes--statuts-règles-et-référentiels">Annexes : statuts, règles et référentiels</a></li>
+</ol>
+<hr>
+<h2>1. Présentation générale de la plateforme</h2>
+<p>La plateforme COYA / SENEGEL est un espace de pilotage intégré permettant de centraliser :</p>
+<ul>
+<li>la gestion des projets ;</li>
+<li>la planification ;</li>
+<li>les ressources humaines ;</li>
+<li>la comptabilité ;</li>
+<li>le suivi des programmes et budgets ;</li>
+<li>les formations ;</li>
+<li>le CRM et les ventes ;</li>
+<li>la gestion documentaire ;</li>
+<li>les demandes DAF ;</li>
+<li>la messagerie interne ;</li>
+<li>les tickets IT ;</li>
+<li>les paramètres d&#x27;administration et de sécurité.</li>
+</ul>
+<p>La plateforme fonctionne par modules. Chaque utilisateur voit uniquement les modules auxquels il a accès selon :</p>
+<ol>
+<li>son rôle ;</li>
+<li>ses permissions individuelles ;</li>
+<li>son ou ses départements ;</li>
+<li>les droits de lecture, écriture, suppression et approbation définis par l&#x27;administrateur.</li>
+</ol>
+<h3>1.1 Principes clés</h3>
+<ul>
+<li><strong>Une seule plateforme, plusieurs usages :</strong> chaque direction ou département utilise les modules nécessaires à son activité.</li>
+<li><strong>Accès contrôlé :</strong> un module non autorisé n&#x27;apparaît pas dans la barre latérale.</li>
+<li><strong>Traçabilité :</strong> les actions importantes sont historisées.</li>
+<li><strong>Multi-organisation :</strong> la plateforme peut gérer une organisation principale et, si configuré, plusieurs organisations hébergées.</li>
+<li><strong>Langues :</strong> l&#x27;interface peut être utilisée en français ou en anglais.</li>
+</ul>
+<hr>
+<h2>2. Connexion, premier accès et navigation</h2>
+<h3>2.1 Connexion</h3>
+<ol>
+<li>Ouvrir l&#x27;adresse de la plateforme dans le navigateur.</li>
+<li>Saisir son adresse e-mail.</li>
+<li>Saisir son mot de passe.</li>
+<li>Cliquer sur <strong>Se connecter</strong>.</li>
+</ol>
+<p>Si l&#x27;utilisateur n&#x27;a pas encore de compte actif, il doit contacter l&#x27;administrateur plateforme ou l&#x27;administrateur de son organisation.</p>
+<h3>2.2 Compte en attente</h3>
+<p>Certains rôles nécessitent une validation administrateur. Dans ce cas :</p>
+<ul>
+<li>l&#x27;utilisateur peut voir un écran indiquant que son accès est en attente ;</li>
+<li>l&#x27;administrateur doit approuver la demande ;</li>
+<li>un département doit être affecté si la règle départementale est active ;</li>
+<li>les droits de modules doivent être configurés.</li>
+</ul>
+<h3>2.3 Première connexion et statut de présence</h3>
+<p>Après connexion, la plateforme peut afficher un sélecteur de statut. L&#x27;utilisateur choisit son état de disponibilité :</p>
+<ul>
+<li>disponible / en ligne ;</li>
+<li>pause ;</li>
+<li>réunion ;</li>
+<li>absent ;</li>
+<li>autre statut configuré.</li>
+</ul>
+<p>Ce statut permet d&#x27;alimenter les indicateurs RH, la présence et le planning.</p>
+<h3>2.4 Navigation principale</h3>
+<p>La navigation se fait depuis la barre latérale gauche. Les modules visibles dépendent des droits de l&#x27;utilisateur.</p>
+<p>Modules principaux :</p>
+<ol>
+<li>Tableau de bord</li>
+<li>Projets</li>
+<li>Planning</li>
+<li>Ressources humaines</li>
+<li>Comptabilité</li>
+<li>Programme &amp; Budget</li>
+<li>Cours</li>
+<li>CRM &amp; Ventes</li>
+<li>Trinité</li>
+<li>Logistique</li>
+<li>Parc automobile</li>
+<li>Messagerie</li>
+<li>Ticket IT</li>
+<li>DOCS SENEGEL</li>
+<li>Moyens généraux &amp; DAF</li>
+<li>Paramètres</li>
+</ol>
+<h3>2.5 Barre supérieure</h3>
+<p>La barre supérieure permet de :</p>
+<ul>
+<li>consulter les notifications ;</li>
+<li>accéder aux paramètres ;</li>
+<li>changer la langue ;</li>
+<li>ouvrir le profil ;</li>
+<li>se déconnecter ;</li>
+<li>accéder à l&#x27;historique ou à certaines vues internes selon les droits.</li>
+</ul>
+<h3>2.6 Assistant flottant</h3>
+<p>Un assistant flottant peut être disponible pour orienter l&#x27;utilisateur vers :</p>
+<ul>
+<li>la messagerie ;</li>
+<li>les tickets IT ;</li>
+<li>des raccourcis d&#x27;aide.</li>
+</ul>
+<hr>
+<h2>3. Rôles, droits et règles d&#x27;accès</h2>
+<h3>3.1 Catégories de rôles</h3>
+<p>La plateforme distingue plusieurs familles de rôles.</p>
+<h4>Rôles de gestion</h4>
+<ul>
+<li>super_administrator ;</li>
+<li>administrator ;</li>
+<li>manager ;</li>
+<li>supervisor ;</li>
+<li>intern.</li>
+</ul>
+<h4>Rôles RH, paie et recrutement</h4>
+<ul>
+<li>hr_business_partner ;</li>
+<li>hr_officer ;</li>
+<li>recruiter ;</li>
+<li>payroll_specialist ;</li>
+<li>team_lead.</li>
+</ul>
+<h4>Rôles d&#x27;accompagnement</h4>
+<ul>
+<li>trainer ;</li>
+<li>coach ;</li>
+<li>facilitator ;</li>
+<li>partner_facilitator ;</li>
+<li>mentor.</li>
+</ul>
+<h4>Rôles académiques et jeunesse</h4>
+<ul>
+<li>student ;</li>
+<li>alumni.</li>
+</ul>
+<h4>Rôles économiques et partenaires</h4>
+<ul>
+<li>entrepreneur ;</li>
+<li>employer ;</li>
+<li>implementer ;</li>
+<li>funder.</li>
+</ul>
+<h4>Rôles créatifs et médias</h4>
+<ul>
+<li>publisher ;</li>
+<li>editor ;</li>
+<li>producer ;</li>
+<li>artist.</li>
+</ul>
+<h3>3.2 Droits par module</h3>
+<p>Chaque module dispose de quatre niveaux de droits :</p>
+<table><tbody>
+<tr><td>Droit</td><td>Signification</td></tr>
+<tr><td>Voir</td><td>Accéder au module et consulter les données</td></tr>
+<tr><td>Créer / Modifier</td><td>Ajouter ou modifier des données</td></tr>
+<tr><td>Supprimer</td><td>Supprimer des données</td></tr>
+<tr><td>Approuver</td><td>Valider ou refuser des demandes</td></tr>
+</tbody></table>
+<p>Règle importante : si le droit <strong>Voir</strong> est désactivé, les autres droits ne sont pas utilisables.</p>
+<h3>3.3 Règle des départements</h3>
+<p>Les départements servent à limiter le périmètre d&#x27;accès.</p>
+<p>Règles principales :</p>
+<ul>
+<li>chaque département doit être rattaché à exactement <strong>2 modules</strong> ;</li>
+<li>un utilisateur ne voit que les modules autorisés par ses départements et ses droits ;</li>
+<li>une équipe département conforme doit contenir au minimum 2 personnes ;</li>
+<li>chaque département doit avoir 1 superviseur ;</li>
+<li>chaque département doit avoir au moins 1 manager ;</li>
+<li>le superviseur ne peut pas être manager du même département en même temps.</li>
+</ul>
+<h3>3.4 Super administrateur</h3>
+<p>Le super administrateur dispose d&#x27;un accès complet à la plateforme. Il peut :</p>
+<ul>
+<li>gérer les organisations ;</li>
+<li>gérer les départements ;</li>
+<li>gérer les utilisateurs ;</li>
+<li>modifier les libellés des modules ;</li>
+<li>configurer le tableau de bord ;</li>
+<li>définir certains paramètres globaux ;</li>
+<li>consulter les rubriques d&#x27;administration.</li>
+</ul>
+<h3>3.5 Utilisateur sans accès</h3>
+<p>Si un utilisateur ne dispose d&#x27;aucun module autorisé, il est dirigé vers un écran d&#x27;accès en attente ou d&#x27;accès insuffisant. L&#x27;administrateur doit alors vérifier :</p>
+<ol>
+<li>son rôle ;</li>
+<li>ses départements ;</li>
+<li>ses droits par module ;</li>
+<li>le statut actif du compte.</li>
+</ol>
+<hr>
+<h2>4. Procédures transverses</h2>
+<h3>4.1 Créer un nouvel utilisateur</h3>
+<ol>
+<li>Aller dans <strong>Paramètres</strong>.</li>
+<li>Ouvrir <strong>Administration</strong>.</li>
+<li>Cliquer sur <strong>Utilisateurs &amp; droits</strong>.</li>
+<li>Cliquer sur <strong>Nouvel utilisateur</strong>.</li>
+<li>Renseigner :</li>
+</ol>
+<ul>
+<li>e-mail ;</li>
+<li>nom complet ;</li>
+<li>téléphone ;</li>
+<li>organisation si applicable ;</li>
+<li>rôle ;</li>
+<li>poste si le référentiel des postes est actif.</li>
+</ul>
+<ol>
+<li>Choisir si un e-mail de mot de passe doit être envoyé.</li>
+<li>Enregistrer.</li>
+<li>Si le rôle nécessite validation, traiter la demande dans <strong>Demandes d&#x27;accès</strong>.</li>
+<li>Affecter l&#x27;utilisateur à un département.</li>
+<li>Vérifier ses permissions.</li>
+</ol>
+<h3>4.2 Donner accès à un module</h3>
+<ol>
+<li>Vérifier que le module est autorisé dans le département de l&#x27;utilisateur.</li>
+<li>Aller dans <strong>Paramètres &gt; Utilisateurs &amp; droits &gt; Permissions</strong>.</li>
+<li>Sélectionner l&#x27;utilisateur.</li>
+<li>Activer le module.</li>
+<li>Définir les droits :</li>
+</ol>
+<ul>
+<li>Voir ;</li>
+<li>Créer / Modifier ;</li>
+<li>Supprimer ;</li>
+<li>Approuver.</li>
+</ul>
+<ol>
+<li>Attendre la sauvegarde automatique ou confirmer selon l&#x27;écran.</li>
+<li>Demander à l&#x27;utilisateur de rafraîchir sa session si nécessaire.</li>
+</ol>
+<h3>4.3 Retirer l&#x27;accès à un module</h3>
+<ol>
+<li>Aller dans <strong>Utilisateurs &amp; droits</strong>.</li>
+<li>Sélectionner l&#x27;utilisateur.</li>
+<li>Désactiver le droit <strong>Voir</strong> sur le module concerné.</li>
+<li>Vérifier également les modules du département.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>4.4 Modifier son mot de passe</h3>
+<ol>
+<li>Aller dans <strong>Paramètres</strong>.</li>
+<li>Ouvrir <strong>Mon compte &gt; Profil</strong>.</li>
+<li>Saisir le nouveau mot de passe.</li>
+<li>Confirmer le nouveau mot de passe.</li>
+<li>Valider.</li>
+</ol>
+<p>Règle : le mot de passe doit contenir au minimum 8 caractères.</p>
+<h3>4.5 Consulter les notifications</h3>
+<ol>
+<li>Cliquer sur l&#x27;icône de notification dans la barre supérieure.</li>
+<li>Filtrer si nécessaire par type ou module.</li>
+<li>Cliquer sur une notification pour accéder à l&#x27;élément concerné.</li>
+<li>Marquer comme lu ou supprimer si nécessaire.</li>
+</ol>
+<h3>4.6 Consulter l&#x27;historique d&#x27;activité</h3>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Notifications &amp; activité</strong>.</li>
+<li>Ouvrir <strong>Historique des activités</strong>.</li>
+<li>Filtrer par module, action ou période.</li>
+<li>Ouvrir les détails pour consulter les métadonnées d&#x27;une action.</li>
+</ol>
+<hr>
+<h2>5. Tableau de bord</h2>
+<h3>5.1 Objectif</h3>
+<p>Le tableau de bord est la page d&#x27;accueil de pilotage. Il centralise les indicateurs, alertes et raccourcis utiles.</p>
+<h3>5.2 Contenu principal</h3>
+<p>Selon les droits et la configuration, l&#x27;utilisateur peut voir :</p>
+<ul>
+<li>indicateurs clés ;</li>
+<li>jours travaillés ;</li>
+<li>alertes ;</li>
+<li>objectifs du jour ;</li>
+<li>synthèse des projets ;</li>
+<li>synthèse des congés ;</li>
+<li>synthèse des factures ;</li>
+<li>tendances d&#x27;heures ;</li>
+<li>performance ;</li>
+<li>analytics prédictif ;</li>
+<li>raccourcis vers les modules.</li>
+</ul>
+<h3>5.3 Procédure d&#x27;utilisation</h3>
+<ol>
+<li>Ouvrir <strong>Tableau de bord</strong>.</li>
+<li>Consulter les indicateurs prioritaires.</li>
+<li>Cliquer sur un raccourci pour ouvrir le module correspondant.</li>
+<li>Traiter les alertes visibles.</li>
+<li>Vérifier les objectifs ou actions du jour.</li>
+</ol>
+<h3>5.4 Règles</h3>
+<ul>
+<li>Les widgets visibles peuvent être configurés par le super administrateur.</li>
+<li>Les données affichées dépendent des modules autorisés.</li>
+<li>Les liens vers Finance, Projets, Suivi du temps ou Objectifs ne fonctionnent que si l&#x27;utilisateur a les droits associés.</li>
+</ul>
+<hr>
+<h2>6. Projets</h2>
+<h3>6.1 Objectif</h3>
+<p>Le module <strong>Projets</strong> permet de créer, suivre, piloter et clôturer les projets. Il centralise les tâches, risques, objectifs, budgets, rapports et pièces jointes.</p>
+<h3>6.2 Écrans disponibles</h3>
+<ul>
+<li>liste des projets ;</li>
+<li>création de projet ;</li>
+<li>détail projet ;</li>
+<li>tâches ;</li>
+<li>risques ;</li>
+<li>rapports ;</li>
+<li>historique ;</li>
+<li>objectifs ;</li>
+<li>pièces jointes ;</li>
+<li>budget.</li>
+</ul>
+<h3>6.3 Créer un projet</h3>
+<ol>
+<li>Ouvrir <strong>Projets</strong>.</li>
+<li>Cliquer sur le bouton de création.</li>
+<li>Renseigner les informations générales :</li>
+</ol>
+<ul>
+<li>titre ;</li>
+<li>description ;</li>
+<li>type ;</li>
+<li>statut ;</li>
+<li>dates ;</li>
+<li>responsables ou membres associés.</li>
+</ul>
+<ol>
+<li>Enregistrer.</li>
+</ol>
+<h3>6.4 Gérer les tâches</h3>
+<ol>
+<li>Ouvrir le détail d&#x27;un projet.</li>
+<li>Aller dans l&#x27;onglet <strong>Tâches</strong>.</li>
+<li>Ajouter une tâche.</li>
+<li>Définir :</li>
+</ol>
+<ul>
+<li>titre ;</li>
+<li>responsable ;</li>
+<li>priorité ;</li>
+<li>échéance ;</li>
+<li>statut.</li>
+</ul>
+<ol>
+<li>Mettre à jour la tâche au fil de l&#x27;avancement.</li>
+<li>Ajouter un justificatif si la règle l&#x27;exige.</li>
+</ol>
+<h3>6.5 Gérer les risques</h3>
+<ol>
+<li>Ouvrir un projet.</li>
+<li>Aller dans <strong>Risques</strong>.</li>
+<li>Ajouter un risque.</li>
+<li>Renseigner :</li>
+</ol>
+<ul>
+<li>description ;</li>
+<li>probabilité ;</li>
+<li>impact ;</li>
+<li>stratégie de mitigation.</li>
+</ul>
+<ol>
+<li>Mettre à jour le risque selon son évolution.</li>
+</ol>
+<h3>6.6 Gérer le budget projet</h3>
+<ol>
+<li>Ouvrir le projet.</li>
+<li>Aller dans <strong>Budget</strong>.</li>
+<li>Ajouter ou consulter les lignes budgétaires.</li>
+<li>Comparer le prévisionnel et le réel.</li>
+<li>Surveiller les alertes de dépassement.</li>
+</ol>
+<h3>6.7 Clôturer un projet</h3>
+<p>Avant clôture, vérifier :</p>
+<ul>
+<li>les tâches critiques ;</li>
+<li>les justificatifs ;</li>
+<li>les risques ;</li>
+<li>le budget ;</li>
+<li>le rapport final ;</li>
+<li>les objectifs.</li>
+</ul>
+<h3>6.8 Règles du module Projets</h3>
+<p>Les règles peuvent être configurées dans <strong>Paramètres &gt; Module Projets</strong> :</p>
+<ul>
+<li>types de projet ;</li>
+<li>statuts projet ;</li>
+<li>seuil d&#x27;alerte retard ;</li>
+<li>score par tâche réalisée ;</li>
+<li>score manager ;</li>
+<li>justificatif obligatoire ;</li>
+<li>gel automatique des tâches en retard ;</li>
+<li>date de démarrage des évaluations ;</li>
+<li>seuils budget warning / critique ;</li>
+<li>seuil objectif off-track.</li>
+</ul>
+<hr>
+<h2>7. Planning</h2>
+<h3>7.1 Objectif</h3>
+<p>Le module <strong>Planning</strong> permet de suivre les créneaux, les absences, la présence, les réunions, les équipes et les conflits de planification.</p>
+<h3>7.2 Rubriques principales</h3>
+<ul>
+<li>pilotage ;</li>
+<li>mon planning ;</li>
+<li>équipe &amp; planning ;</li>
+<li>présence RH ;</li>
+<li>absences RH ;</li>
+<li>postes RH ;</li>
+<li>shifts &amp; échanges ;</li>
+<li>conflits ;</li>
+<li>notifications.</li>
+</ul>
+<h3>7.3 Utiliser son planning</h3>
+<ol>
+<li>Ouvrir <strong>Planning</strong>.</li>
+<li>Aller dans <strong>Mon planning</strong>.</li>
+<li>Consulter ses créneaux.</li>
+<li>Vérifier les réunions, absences ou modulations.</li>
+<li>Utiliser les liens vers le suivi du temps si nécessaire.</li>
+</ol>
+<h3>7.4 Gérer le planning d&#x27;équipe</h3>
+<ol>
+<li>Ouvrir <strong>Équipe &amp; planning</strong>.</li>
+<li>Filtrer par collaborateur, département ou période.</li>
+<li>Vérifier les disponibilités.</li>
+<li>Identifier les conflits.</li>
+<li>Coordonner les absences et réunions.</li>
+</ol>
+<h3>7.5 Types de créneaux</h3>
+<ul>
+<li>présentiel ;</li>
+<li>télétravail ;</li>
+<li>congé ;</li>
+<li>réunion ;</li>
+<li>modulation ;</li>
+<li>autre.</li>
+</ul>
+<h3>7.6 Règles</h3>
+<ul>
+<li>L&#x27;accès à la vue équipe dépend du rôle et des permissions.</li>
+<li>Les modules RH intégrés au Planning s&#x27;affichent seulement si l&#x27;utilisateur dispose des droits nécessaires.</li>
+</ul>
+<hr>
+<h2>8. Ressources humaines</h2>
+<h3>8.1 Objectif</h3>
+<p>Le module <strong>Ressources humaines</strong> regroupe la gestion des salariés, de la présence, des congés, des postes, de l&#x27;organigramme, de la paie et des offres d&#x27;emploi.</p>
+<h3>8.2 Onglets disponibles</h3>
+<table><tbody>
+<tr><td>Onglet</td><td>Utilisation</td></tr>
+<tr><td>Salariés</td><td>consulter les collaborateurs et fiches individuelles</td></tr>
+<tr><td>Présence</td><td>suivre les statuts, retards, pauses et temps de présence</td></tr>
+<tr><td>Congés</td><td>déposer et suivre les demandes de congés</td></tr>
+<tr><td>Fiche poste</td><td>consulter les postes</td></tr>
+<tr><td>Organigramme</td><td>consulter la structure organisationnelle</td></tr>
+<tr><td>Paie</td><td>consulter ou préparer les éléments de paie</td></tr>
+<tr><td>Offres d&#x27;emploi</td><td>gérer ou consulter les offres</td></tr>
+</tbody></table>
+<h3>8.3 Consulter une fiche salarié</h3>
+<ol>
+<li>Ouvrir <strong>Ressources humaines</strong>.</li>
+<li>Aller dans <strong>Salariés</strong>.</li>
+<li>Rechercher un collaborateur.</li>
+<li>Ouvrir sa fiche.</li>
+<li>Consulter les informations autorisées.</li>
+</ol>
+<h3>8.4 Suivre la présence</h3>
+<ol>
+<li>Aller dans <strong>Présence</strong>.</li>
+<li>Consulter les statuts du jour.</li>
+<li>Identifier les retards, pauses ou absences.</li>
+<li>Vérifier l&#x27;historique si nécessaire.</li>
+</ol>
+<h3>8.5 Demander un congé</h3>
+<ol>
+<li>Aller dans <strong>Congés</strong>.</li>
+<li>Cliquer sur <strong>Nouvelle demande</strong>.</li>
+<li>Sélectionner le type de congé.</li>
+<li>Renseigner les dates.</li>
+<li>Ajouter un motif.</li>
+<li>Soumettre la demande.</li>
+</ol>
+<h3>8.6 Valider un congé</h3>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Congés (validation)</strong> ou dans la vue admin RH.</li>
+<li>Filtrer les demandes en attente.</li>
+<li>Ouvrir une demande.</li>
+<li>Approuver ou rejeter.</li>
+<li>Saisir une raison obligatoire.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>8.7 Règles de présence</h3>
+<p>Règles de référence :</p>
+<ul>
+<li>seuil de retard : 15 minutes ;</li>
+<li>pause maximale indicative : 60 minutes ;</li>
+<li>durée hebdomadaire cible : 44 heures ;</li>
+<li>plage journalière indicative : 9h à 19h.</li>
+</ul>
+<p>Ces règles peuvent être adaptées selon les politiques internes.</p>
+<hr>
+<h2>9. Comptabilité et Finance</h2>
+<h3>9.1 Objectif</h3>
+<p>La plateforme distingue :</p>
+<ul>
+<li><strong>Comptabilité</strong> : comptabilité générale, écritures, plan comptable, journaux, rapports ;</li>
+<li><strong>Finance</strong> : factures, dépenses, budgets opérationnels, récurrents et analytics.</li>
+</ul>
+<p>La barre latérale affiche principalement <strong>Comptabilité</strong>. Certaines vues internes ou anciens liens peuvent ouvrir <strong>Finance</strong>.</p>
+<h3>9.2 Module Comptabilité</h3>
+<h4>Contenu</h4>
+<ul>
+<li>plan comptable ;</li>
+<li>écritures ;</li>
+<li>rapports ;</li>
+<li>clôture ;</li>
+<li>paramètres ;</li>
+<li>journaux ;</li>
+<li>centres de coûts ;</li>
+<li>budgets ;</li>
+<li>fiscal ;</li>
+<li>lettrage ;</li>
+<li>rapprochement.</li>
+</ul>
+<h4>Modes</h4>
+<ul>
+<li><strong>Essentiel</strong> : accès aux fonctions principales ;</li>
+<li><strong>Avancé</strong> : accès aux paramètres comptables et fonctions détaillées.</li>
+</ul>
+<h4>Procédure : consulter les écritures</h4>
+<ol>
+<li>Ouvrir <strong>Comptabilité</strong>.</li>
+<li>Aller dans <strong>Écritures</strong>.</li>
+<li>Filtrer par date, journal, compte ou statut.</li>
+<li>Ouvrir une écriture pour consulter le détail.</li>
+</ol>
+<h4>Procédure : gérer le plan comptable</h4>
+<ol>
+<li>Aller dans <strong>Plan comptable</strong>.</li>
+<li>Rechercher un compte.</li>
+<li>Créer ou modifier un compte si le droit d&#x27;écriture est disponible.</li>
+<li>Vérifier le cadre comptable applicable.</li>
+</ol>
+<h4>Règles</h4>
+<ul>
+<li>L&#x27;utilisateur en lecture seule ne peut pas modifier les données.</li>
+<li>Les paramètres comptables sont réservés aux utilisateurs disposant des droits d&#x27;écriture.</li>
+<li>Les cadres comptables pris en charge peuvent inclure SYSCOHADA / SYCEBNL selon la configuration.</li>
+</ul>
+<h3>9.3 Vue Finance</h3>
+<h4>Contenu</h4>
+<ul>
+<li>factures ;</li>
+<li>dépenses ;</li>
+<li>factures récurrentes ;</li>
+<li>dépenses récurrentes ;</li>
+<li>budgets ;</li>
+<li>analytics.</li>
+</ul>
+<h4>Procédure : gérer une facture</h4>
+<ol>
+<li>Ouvrir la vue Finance si disponible.</li>
+<li>Aller dans <strong>Factures</strong>.</li>
+<li>Créer ou ouvrir une facture.</li>
+<li>Renseigner client, montant, statut, date et informations associées.</li>
+<li>Enregistrer.</li>
+</ol>
+<h4>Statuts de facture</h4>
+<p>Les statuts peuvent inclure :</p>
+<ul>
+<li>brouillon ;</li>
+<li>envoyée ;</li>
+<li>payée ;</li>
+<li>partiellement payée ;</li>
+<li>en retard ;</li>
+<li>annulée.</li>
+</ul>
+<h4>Règles</h4>
+<ul>
+<li>La modification est réservée au créateur ou aux rôles de gestion.</li>
+<li>Les données financières doivent être vérifiées avant validation ou clôture.</li>
+</ul>
+<hr>
+<h2>10. Programme &amp; Budget</h2>
+<h3>10.1 Objectif</h3>
+<p>Le module <strong>Programme &amp; Budget</strong> permet de suivre les programmes, bailleurs, budgets, projets terrain, bénéficiaires et actions associées.</p>
+<h3>10.2 Rubriques principales</h3>
+<ul>
+<li>Programmes ;</li>
+<li>Bailleurs ;</li>
+<li>Résumé programme ;</li>
+<li>Budget ;</li>
+<li>Projets terrain ;</li>
+<li>Acteurs / collecte.</li>
+</ul>
+<h3>10.3 Créer ou consulter un programme</h3>
+<ol>
+<li>Ouvrir <strong>Programme &amp; Budget</strong>.</li>
+<li>Aller dans <strong>Programmes</strong>.</li>
+<li>Créer un programme ou ouvrir un programme existant.</li>
+<li>Renseigner :</li>
+</ol>
+<ul>
+<li>nom ;</li>
+<li>bailleur ;</li>
+<li>dates ;</li>
+<li>budget ;</li>
+<li>objectifs ;</li>
+<li>projets liés.</li>
+</ul>
+<h3>10.4 Gérer les bailleurs</h3>
+<ol>
+<li>Ouvrir l&#x27;onglet <strong>Bailleurs</strong>.</li>
+<li>Ajouter un bailleur.</li>
+<li>Renseigner les informations de contact.</li>
+<li>Lier le bailleur aux programmes concernés.</li>
+</ol>
+<h3>10.5 Suivre le budget</h3>
+<ol>
+<li>Ouvrir le détail d&#x27;un programme.</li>
+<li>Aller dans <strong>Budget</strong>.</li>
+<li>Consulter les lignes budgétaires.</li>
+<li>Comparer le prévisionnel au réel.</li>
+<li>Identifier les écarts.</li>
+</ol>
+<h3>10.6 Suivre les projets terrain</h3>
+<ol>
+<li>Aller dans <strong>Projets terrain</strong>.</li>
+<li>Consulter les projets liés au programme.</li>
+<li>Vérifier les activités, tâches et dépenses associées.</li>
+</ol>
+<h3>10.7 Règles</h3>
+<ul>
+<li>Certains profils peuvent être en lecture seule, notamment les auditeurs.</li>
+<li>Les dépenses et lignes budgétaires doivent être rattachées à un programme ou projet lorsque la règle métier l&#x27;impose.</li>
+</ul>
+<hr>
+<h2>11. Cours et formations</h2>
+<h3>11.1 Objectif</h3>
+<p>Le module <strong>Cours</strong> permet de consulter les formations disponibles et de suivre les parcours d&#x27;apprentissage.</p>
+<h3>11.2 Utilisateur : consulter un cours</h3>
+<ol>
+<li>Ouvrir <strong>Cours</strong>.</li>
+<li>Parcourir le catalogue.</li>
+<li>Filtrer ou rechercher une formation.</li>
+<li>Cliquer sur un cours.</li>
+<li>Consulter les modules, leçons, documents et progression.</li>
+</ol>
+<h3>11.3 Administrateur : gérer le catalogue</h3>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Formations</strong>.</li>
+<li>Consulter la liste des cours.</li>
+<li>Créer ou modifier un cours.</li>
+<li>Définir :</li>
+</ol>
+<ul>
+<li>titre ;</li>
+<li>description ;</li>
+<li>formateur ;</li>
+<li>durée ;</li>
+<li>niveau ;</li>
+<li>catégorie ;</li>
+<li>prix ;</li>
+<li>statut ;</li>
+<li>modules et leçons ;</li>
+<li>documents ;</li>
+<li>quiz ;</li>
+<li>public cible.</li>
+</ul>
+<ol>
+<li>Publier ou laisser en brouillon.</li>
+</ol>
+<h3>11.4 Statuts de cours</h3>
+<ul>
+<li>brouillon ;</li>
+<li>publié ;</li>
+<li>archivé.</li>
+</ul>
+<h3>11.5 Règles</h3>
+<ul>
+<li>Seuls les utilisateurs autorisés peuvent créer, modifier ou supprimer une formation.</li>
+<li>Un cours publié est visible aux utilisateurs ciblés selon la configuration.</li>
+</ul>
+<hr>
+<h2>12. CRM &amp; Ventes</h2>
+<h3>12.1 Objectif</h3>
+<p>Le module <strong>CRM &amp; Ventes</strong> permet de gérer les contacts, prospects, clients, pipeline commercial et opérations de collecte.</p>
+<h3>12.2 Vues principales</h3>
+<ul>
+<li>liste des contacts ;</li>
+<li>pipeline ;</li>
+<li>collecte ;</li>
+<li>dossier contact ;</li>
+<li>détails et échanges.</li>
+</ul>
+<h3>12.3 Créer un contact</h3>
+<ol>
+<li>Ouvrir <strong>CRM &amp; Ventes</strong>.</li>
+<li>Cliquer sur <strong>Ajouter un contact</strong>.</li>
+<li>Renseigner les informations :</li>
+</ol>
+<ul>
+<li>nom ;</li>
+<li>e-mail ;</li>
+<li>téléphone ;</li>
+<li>organisation ;</li>
+<li>statut ;</li>
+<li>source ;</li>
+<li>notes.</li>
+</ul>
+<ol>
+<li>Enregistrer.</li>
+</ol>
+<h3>12.4 Gérer le pipeline</h3>
+<ol>
+<li>Aller dans <strong>Pipeline</strong>.</li>
+<li>Identifier le contact ou prospect.</li>
+<li>Modifier son statut selon l&#x27;évolution.</li>
+<li>Ajouter les notes ou interactions nécessaires.</li>
+</ol>
+<h3>12.5 Statuts CRM</h3>
+<p>Statuts de référence :</p>
+<ul>
+<li>lead ;</li>
+<li>contacté ;</li>
+<li>injoignable ;</li>
+<li>rappel attendu ;</li>
+<li>prospect ;</li>
+<li>client.</li>
+</ul>
+<h3>12.6 Collecte</h3>
+<p>La collecte est intégrée au CRM. Elle permet de :</p>
+<ul>
+<li>créer des campagnes ou formulaires de collecte ;</li>
+<li>définir des champs participants ;</li>
+<li>rattacher la collecte à un programme, projet ou cours ;</li>
+<li>synchroniser certains participants vers le CRM ;</li>
+<li>enrichir les contacts.</li>
+</ul>
+<h3>12.7 Règles</h3>
+<ul>
+<li>Le créateur d&#x27;un contact peut généralement gérer son contact.</li>
+<li>Les rôles de gestion peuvent disposer d&#x27;une vision plus large.</li>
+<li>Les actions de synchronisation ou webhook sont réservées aux profils autorisés.</li>
+</ul>
+<hr>
+<h2>13. Trinité</h2>
+<h3>13.1 Objectif</h3>
+<p>Le module <strong>Trinité</strong> permet de suivre des indicateurs liés aux piliers internes : Ndiguel, Yar et Barké. Il peut servir à l&#x27;auto-évaluation, aux revues manager et à l&#x27;analyse de performance.</p>
+<h3>13.2 Procédure utilisateur</h3>
+<ol>
+<li>Ouvrir <strong>Trinité</strong>.</li>
+<li>Sélectionner la période.</li>
+<li>Consulter ses indicateurs.</li>
+<li>Renseigner une auto-note si la fonctionnalité est ouverte.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>13.3 Procédure manager</h3>
+<ol>
+<li>Ouvrir <strong>Trinité</strong>.</li>
+<li>Sélectionner un collaborateur ou une équipe.</li>
+<li>Consulter les scores.</li>
+<li>Ajouter une revue manager.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>13.4 Règles</h3>
+<ul>
+<li>Les managers et superviseurs peuvent avoir accès aux données d&#x27;équipe.</li>
+<li>Les utilisateurs voient principalement leurs propres données, sauf droits étendus.</li>
+<li>Les périodes doivent être cohérentes avec le calendrier de suivi interne.</li>
+</ul>
+<hr>
+<h2>14. Logistique</h2>
+<h3>14.1 Objectif</h3>
+<p>Le module <strong>Logistique</strong> permet de gérer les équipements et les demandes de matériel ou de ressources logistiques.</p>
+<h3>14.2 Contenu</h3>
+<ul>
+<li>catalogue d&#x27;équipements ;</li>
+<li>demandes logistiques ;</li>
+<li>statuts de traitement.</li>
+</ul>
+<h3>14.3 Créer une demande logistique</h3>
+<ol>
+<li>Ouvrir <strong>Logistique</strong>.</li>
+<li>Cliquer sur <strong>Nouvelle demande</strong>.</li>
+<li>Sélectionner l&#x27;équipement ou la catégorie.</li>
+<li>Renseigner le besoin, les dates et la justification.</li>
+<li>Soumettre.</li>
+</ol>
+<h3>14.4 Traiter une demande</h3>
+<ol>
+<li>Ouvrir la demande.</li>
+<li>Vérifier les informations.</li>
+<li>Valider, rejeter ou mettre à disposition.</li>
+<li>Mettre à jour le statut.</li>
+</ol>
+<h3>14.5 Statuts</h3>
+<ul>
+<li>demandé ;</li>
+<li>validé ;</li>
+<li>mis à disposition ;</li>
+<li>retourné ;</li>
+<li>rejeté.</li>
+</ul>
+<h3>14.6 Règles</h3>
+<ul>
+<li>La création ou modification du catalogue est réservée aux profils autorisés.</li>
+<li>Les demandes doivent être justifiées et rattachées à un besoin réel.</li>
+</ul>
+<hr>
+<h2>15. Parc automobile</h2>
+<h3>15.1 Objectif</h3>
+<p>Le module <strong>Parc automobile</strong> permet de gérer les véhicules, disponibilités, affectations et demandes d&#x27;utilisation.</p>
+<h3>15.2 Contenu</h3>
+<ul>
+<li>liste des véhicules ;</li>
+<li>demandes de véhicule ;</li>
+<li>suivi de mise à disposition ;</li>
+<li>retours.</li>
+</ul>
+<h3>15.3 Créer une demande de véhicule</h3>
+<ol>
+<li>Ouvrir <strong>Parc automobile</strong>.</li>
+<li>Cliquer sur <strong>Nouvelle demande</strong>.</li>
+<li>Indiquer le motif du déplacement.</li>
+<li>Renseigner dates, horaires et destination.</li>
+<li>Soumettre.</li>
+</ol>
+<h3>15.4 Traiter une demande</h3>
+<ol>
+<li>Ouvrir la demande.</li>
+<li>Vérifier la disponibilité.</li>
+<li>Valider ou refuser.</li>
+<li>Affecter le véhicule si validé.</li>
+<li>Mettre à jour le statut après retour.</li>
+</ol>
+<h3>15.5 Statuts</h3>
+<ul>
+<li>demandé ;</li>
+<li>validé ;</li>
+<li>mis à disposition ;</li>
+<li>retourné ;</li>
+<li>rejeté.</li>
+</ul>
+<hr>
+<h2>16. Messagerie</h2>
+<h3>16.1 Objectif</h3>
+<p>Le module <strong>Messagerie</strong> permet les échanges internes via canaux ou messages directs.</p>
+<h3>16.2 Rubriques</h3>
+<ul>
+<li>canaux ;</li>
+<li>messages directs.</li>
+</ul>
+<h3>16.3 Utiliser un canal</h3>
+<ol>
+<li>Ouvrir <strong>Messagerie</strong>.</li>
+<li>Aller dans <strong>Canaux</strong>.</li>
+<li>Sélectionner un canal.</li>
+<li>Lire les messages.</li>
+<li>Envoyer un message si autorisé.</li>
+<li>Ajouter une mention si nécessaire.</li>
+</ol>
+<h3>16.4 Envoyer un message direct</h3>
+<ol>
+<li>Aller dans <strong>Messages directs</strong>.</li>
+<li>Sélectionner un utilisateur.</li>
+<li>Rédiger le message.</li>
+<li>Envoyer.</li>
+</ol>
+<h3>16.5 Règles</h3>
+<ul>
+<li>Certains canaux peuvent être publics ou privés.</li>
+<li>Les droits d&#x27;administration des canaux sont réservés aux profils autorisés.</li>
+<li>Les pièces jointes et mentions doivent respecter les règles internes de confidentialité.</li>
+</ul>
+<hr>
+<h2>17. Ticket IT</h2>
+<h3>17.1 Objectif</h3>
+<p>Le module <strong>Ticket IT</strong> permet de signaler un problème technique, une demande d&#x27;assistance ou une intervention informatique.</p>
+<h3>17.2 Créer un ticket</h3>
+<ol>
+<li>Ouvrir <strong>Ticket IT</strong>.</li>
+<li>Cliquer sur <strong>Nouveau ticket</strong>.</li>
+<li>Renseigner :</li>
+</ol>
+<ul>
+<li>titre ;</li>
+<li>description ;</li>
+<li>priorité ;</li>
+<li>type de problème ;</li>
+<li>visibilité ;</li>
+<li>capture ou pièce jointe si nécessaire.</li>
+</ul>
+<ol>
+<li>Soumettre.</li>
+</ol>
+<h3>17.3 Workflow d&#x27;un ticket</h3>
+<p>Statuts possibles :</p>
+<ol>
+<li>brouillon ;</li>
+<li>en attente validation ;</li>
+<li>reformulation demandée ;</li>
+<li>validé ;</li>
+<li>envoyé IT ;</li>
+<li>en cours ;</li>
+<li>résolu ;</li>
+<li>refusé.</li>
+</ol>
+<h3>17.4 Traitement manager / IT</h3>
+<ol>
+<li>Ouvrir le ticket.</li>
+<li>Vérifier la demande.</li>
+<li>Demander une reformulation si nécessaire.</li>
+<li>Valider ou refuser.</li>
+<li>Affecter à un intervenant IT.</li>
+<li>Mettre à jour l&#x27;avancement.</li>
+<li>Marquer comme résolu.</li>
+</ol>
+<h3>17.5 Règles de visibilité</h3>
+<ul>
+<li>le créateur voit ses tickets ;</li>
+<li>le manager peut voir les tickets de son périmètre ;</li>
+<li>l&#x27;intervenant affecté voit les tickets qui lui sont assignés ;</li>
+<li>le super administrateur peut voir l&#x27;ensemble.</li>
+</ul>
+<hr>
+<h2>18. DOCS SENEGEL</h2>
+<h3>18.1 Objectif</h3>
+<p><strong>DOCS SENEGEL</strong> est l&#x27;espace documentaire de la plateforme. Il permet de gérer dossiers, fichiers, droits d&#x27;accès et partage interne.</p>
+<h3>18.2 Actions principales</h3>
+<ul>
+<li>créer un dossier ;</li>
+<li>importer un fichier ;</li>
+<li>renommer ;</li>
+<li>déplacer ;</li>
+<li>supprimer ;</li>
+<li>gérer les droits ;</li>
+<li>partager avec des utilisateurs.</li>
+</ul>
+<h3>18.3 Importer un document</h3>
+<ol>
+<li>Ouvrir <strong>DOCS SENEGEL</strong>.</li>
+<li>Sélectionner le dossier cible.</li>
+<li>Cliquer sur l&#x27;action d&#x27;import.</li>
+<li>Choisir le fichier.</li>
+<li>Vérifier le nom et les droits.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>18.4 Créer un dossier</h3>
+<ol>
+<li>Aller dans le dossier parent.</li>
+<li>Cliquer sur <strong>Nouveau dossier</strong>.</li>
+<li>Nommer le dossier.</li>
+<li>Définir la visibilité si disponible.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>18.5 Gérer les droits</h3>
+<p>Les niveaux d&#x27;accès peuvent inclure :</p>
+<ul>
+<li>propriétaire ;</li>
+<li>administrateur ;</li>
+<li>éditeur ;</li>
+<li>lecteur ;</li>
+<li>aucun accès.</li>
+</ul>
+<p>Procédure :</p>
+<ol>
+<li>Ouvrir le dossier ou fichier.</li>
+<li>Accéder aux options de partage.</li>
+<li>Ajouter l&#x27;utilisateur.</li>
+<li>Choisir le rôle : lecteur ou éditeur.</li>
+<li>Valider.</li>
+</ol>
+<h3>18.6 Règles</h3>
+<ul>
+<li>Les documents sensibles doivent rester en accès privé ou restreint.</li>
+<li>Les droits doivent être attribués selon le besoin réel.</li>
+<li>Les suppressions doivent être réalisées avec prudence.</li>
+</ul>
+<hr>
+<h2>19. Moyens généraux &amp; DAF</h2>
+<h3>19.1 Objectif</h3>
+<p>Le module <strong>Moyens généraux &amp; DAF</strong> permet de gérer les demandes administratives, documents, signatures, informations ou moyens généraux.</p>
+<h3>19.2 Types de demandes</h3>
+<ul>
+<li>demande générale ;</li>
+<li>remise ou livraison de document ;</li>
+<li>demande d&#x27;information ;</li>
+<li>workflow de signature.</li>
+</ul>
+<h3>19.3 Catégories</h3>
+<ul>
+<li>fournitures ;</li>
+<li>logistique ;</li>
+<li>IT / divers ;</li>
+<li>véhicule ;</li>
+<li>mobilier ;</li>
+<li>déplacement ;</li>
+<li>autre.</li>
+</ul>
+<h3>19.4 Créer une demande DAF</h3>
+<ol>
+<li>Ouvrir <strong>Moyens généraux &amp; DAF</strong>.</li>
+<li>Cliquer sur <strong>Nouvelle demande</strong>.</li>
+<li>Choisir le type.</li>
+<li>Choisir la catégorie.</li>
+<li>Renseigner le besoin.</li>
+<li>Ajouter les pièces nécessaires.</li>
+<li>Enregistrer en brouillon ou soumettre.</li>
+</ol>
+<h3>19.5 Traiter une demande DAF</h3>
+<ol>
+<li>Ouvrir la demande.</li>
+<li>Vérifier les informations.</li>
+<li>Affecter un responsable si nécessaire.</li>
+<li>Échanger avec le demandeur.</li>
+<li>Ajouter des pièces ou commentaires.</li>
+<li>Approuver, rejeter, mettre en attente ou clôturer.</li>
+</ol>
+<h3>19.6 Statuts</h3>
+<ul>
+<li>brouillon ;</li>
+<li>soumis ;</li>
+<li>en revue ;</li>
+<li>en attente demandeur ;</li>
+<li>en attente signature externe ;</li>
+<li>approuvé ;</li>
+<li>rejeté ;</li>
+<li>traité ;</li>
+<li>annulé.</li>
+</ul>
+<h3>19.7 Règles</h3>
+<ul>
+<li>Le demandeur peut modifier ou supprimer ses brouillons.</li>
+<li>Les reviewers DAF traitent les demandes soumises.</li>
+<li>Les messages internes DAF ne doivent être utilisés que pour les échanges réservés.</li>
+</ul>
+<hr>
+<h2>20. Suivi du temps</h2>
+<h3>20.1 Objectif</h3>
+<p>Le <strong>Suivi du temps</strong> permet de suivre les heures travaillées, réunions et temps associés aux projets ou activités.</p>
+<p>Ce module peut être accessible depuis le tableau de bord, le planning ou certains liens internes.</p>
+<h3>20.2 Ajouter un temps</h3>
+<ol>
+<li>Ouvrir <strong>Suivi du temps</strong>.</li>
+<li>Cliquer sur <strong>Ajouter un temps</strong>.</li>
+<li>Choisir le projet, cours ou activité.</li>
+<li>Renseigner la durée.</li>
+<li>Ajouter une description.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>20.3 Ajouter une réunion</h3>
+<ol>
+<li>Ouvrir l&#x27;onglet réunions si disponible.</li>
+<li>Créer une réunion.</li>
+<li>Renseigner date, heure, participants et sujet.</li>
+<li>Enregistrer.</li>
+</ol>
+<h3>20.4 Règles</h3>
+<ul>
+<li>Les managers peuvent avoir une vision plus large de l&#x27;équipe.</li>
+<li>Les utilisateurs standards consultent principalement leurs propres temps.</li>
+<li>Les temps doivent être saisis régulièrement pour alimenter les indicateurs.</li>
+</ul>
+<hr>
+<h2>21. Objectifs et OKR</h2>
+<h3>21.1 Objectif</h3>
+<p>Les objectifs et OKR permettent de suivre les priorités, résultats clés et engagements. Dans l&#x27;état actuel, la gestion OKR est principalement accessible via le tableau de bord et les détails de projet.</p>
+<h3>21.2 Utilisation</h3>
+<ol>
+<li>Ouvrir <strong>Tableau de bord</strong> ou un <strong>Projet</strong>.</li>
+<li>Consulter les objectifs associés.</li>
+<li>Suivre les progrès.</li>
+<li>Mettre à jour les résultats selon les droits.</li>
+</ol>
+<h3>21.3 Règles</h3>
+<ul>
+<li>Les objectifs doivent être rattachés à un projet ou à une priorité claire.</li>
+<li>Un objectif doit être mesurable.</li>
+<li>Les écarts peuvent déclencher des alertes selon le paramétrage projet.</li>
+</ul>
+<hr>
+<h2>22. Analytics et Talent Analytics</h2>
+<h3>22.1 Objectif</h3>
+<p>Les vues <strong>Analytics</strong> et <strong>Talent Analytics</strong> permettent d&#x27;accéder à des analyses détaillées. Elles ne sont pas nécessairement affichées dans la barre latérale, mais peuvent être accessibles selon les droits ou depuis certaines vues.</p>
+<h3>22.2 Analytics</h3>
+<p>Peut regrouper :</p>
+<ul>
+<li>activité plateforme ;</li>
+<li>projets ;</li>
+<li>cours ;</li>
+<li>emplois ;</li>
+<li>indicateurs globaux.</li>
+</ul>
+<h3>22.3 Talent Analytics</h3>
+<p>Peut regrouper :</p>
+<ul>
+<li>compétences ;</li>
+<li>talents ;</li>
+<li>candidatures ;</li>
+<li>évaluations ;</li>
+<li>prévisions RH.</li>
+</ul>
+<h3>22.4 Règles</h3>
+<ul>
+<li>Ces vues sont réservées aux profils disposant des droits correspondants.</li>
+<li>Les données affichées doivent être interprétées comme des indicateurs d&#x27;aide à la décision.</li>
+</ul>
+<hr>
+<h2>23. Centre de notifications</h2>
+<h3>23.1 Objectif</h3>
+<p>Le centre de notifications centralise les alertes et événements liés aux modules.</p>
+<h3>23.2 Accéder aux notifications</h3>
+<ol>
+<li>Cliquer sur la cloche dans la barre supérieure.</li>
+<li>Consulter les notifications récentes.</li>
+<li>Cliquer sur <strong>Voir toutes les notifications</strong> pour ouvrir la page complète.</li>
+</ol>
+<h3>23.3 Actions possibles</h3>
+<ul>
+<li>ouvrir l&#x27;élément lié ;</li>
+<li>marquer comme lu ;</li>
+<li>marquer toutes comme lues ;</li>
+<li>supprimer ;</li>
+<li>filtrer par module ou état.</li>
+</ul>
+<h3>23.4 Types de notifications</h3>
+<ul>
+<li>information ;</li>
+<li>succès ;</li>
+<li>avertissement ;</li>
+<li>erreur.</li>
+</ul>
+<h3>23.5 Modules concernés</h3>
+<p>Les notifications peuvent concerner :</p>
+<ul>
+<li>projets ;</li>
+<li>factures ;</li>
+<li>dépenses ;</li>
+<li>cours ;</li>
+<li>objectifs ;</li>
+<li>suivi du temps ;</li>
+<li>congés ;</li>
+<li>documents ;</li>
+<li>utilisateurs ;</li>
+<li>tickets IT ;</li>
+<li>messagerie ;</li>
+<li>système.</li>
+</ul>
+<hr>
+<h2>24. Historique des activités</h2>
+<h3>24.1 Objectif</h3>
+<p>L&#x27;historique des activités permet de retracer les actions importantes effectuées dans la plateforme.</p>
+<h3>24.2 Accès</h3>
+<ol>
+<li>Aller dans <strong>Paramètres</strong>.</li>
+<li>Ouvrir <strong>Notifications &amp; activité</strong>.</li>
+<li>Cliquer sur <strong>Historique des activités</strong>.</li>
+</ol>
+<h3>24.3 Informations visibles</h3>
+<ul>
+<li>utilisateur ayant réalisé l&#x27;action ;</li>
+<li>module concerné ;</li>
+<li>type d&#x27;action ;</li>
+<li>date et heure ;</li>
+<li>résumé ;</li>
+<li>entité concernée ;</li>
+<li>détails techniques ou métier si disponibles.</li>
+</ul>
+<h3>24.4 Filtres</h3>
+<ul>
+<li>module ;</li>
+<li>action ;</li>
+<li>recherche ;</li>
+<li>pagination.</li>
+</ul>
+<h3>24.5 Actions suivies</h3>
+<ul>
+<li>création ;</li>
+<li>modification ;</li>
+<li>suppression ;</li>
+<li>lecture ;</li>
+<li>connexion ;</li>
+<li>déconnexion ;</li>
+<li>export ;</li>
+<li>notification ;</li>
+<li>action personnalisée.</li>
+</ul>
+<hr>
+<h2>25. Paramètres personnels</h2>
+<h3>25.1 Accès</h3>
+<ol>
+<li>Cliquer sur <strong>Paramètres</strong> dans la barre latérale.</li>
+<li>Ouvrir l&#x27;espace <strong>Mon compte</strong>.</li>
+</ol>
+<h3>25.2 Profil</h3>
+<p>Permet de consulter ou modifier :</p>
+<ul>
+<li>nom ;</li>
+<li>e-mail ;</li>
+<li>rôle ;</li>
+<li>téléphone ;</li>
+<li>localisation ;</li>
+<li>photo ;</li>
+<li>bio ;</li>
+<li>mot de passe.</li>
+</ul>
+<h3>25.3 Préférences</h3>
+<p>Permet de configurer :</p>
+<ul>
+<li>langue ;</li>
+<li>rappels d&#x27;échéances ;</li>
+<li>préférences d&#x27;interface.</li>
+</ul>
+<h3>25.4 Notifications &amp; activité</h3>
+<p>Permet d&#x27;accéder :</p>
+<ul>
+<li>au centre de notifications ;</li>
+<li>à l&#x27;historique des activités.</li>
+</ul>
+<h3>25.5 Compétences</h3>
+<p>Permet de gérer la liste des compétences de l&#x27;utilisateur. Ces compétences peuvent être utilisées pour :</p>
+<ul>
+<li>le profil ;</li>
+<li>le matching emploi ;</li>
+<li>l&#x27;analyse des talents.</li>
+</ul>
+<hr>
+<h2>26. Administration de la plateforme</h2>
+<p>L&#x27;espace <strong>Administration</strong> est disponible dans <strong>Paramètres</strong> selon les droits de l&#x27;utilisateur.</p>
+<h3>26.1 Libellés des modules</h3>
+<h4>Objectif</h4>
+<p>Renommer les modules pour une organisation.</p>
+<h4>Accès</h4>
+<p>Super administrateur uniquement.</p>
+<h4>Procédure</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Administration &gt; Libellés modules</strong>.</li>
+<li>Identifier la clé technique du module.</li>
+<li>Saisir le libellé français.</li>
+<li>Saisir le libellé anglais.</li>
+<li>Enregistrer.</li>
+</ol>
+<p>Règle : un champ vide utilise le libellé par défaut.</p>
+<h3>26.2 Widgets tableau de bord</h3>
+<h4>Objectif</h4>
+<p>Activer ou désactiver les blocs visibles sur le tableau de bord.</p>
+<h4>Accès</h4>
+<p>Super administrateur uniquement.</p>
+<h4>Widgets configurables</h4>
+<ul>
+<li>jours travaillés ;</li>
+<li>alertes ;</li>
+<li>objectifs du jour ;</li>
+<li>indicateurs ;</li>
+<li>performance ;</li>
+<li>analytics prédictif ;</li>
+<li>analyse intelligente ;</li>
+<li>raccourcis par module.</li>
+</ul>
+<h4>Procédure</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Administration &gt; Widgets tableau de bord</strong>.</li>
+<li>Activer ou désactiver les widgets.</li>
+<li>Enregistrer ou attendre la sauvegarde selon l&#x27;interface.</li>
+</ol>
+<h3>26.3 Module Projets</h3>
+<h4>Objectif</h4>
+<p>Configurer les règles du module Projets.</p>
+<h4>Paramètres disponibles</h4>
+<ul>
+<li>types de projet ;</li>
+<li>statuts ;</li>
+<li>seuil alerte retard ;</li>
+<li>score tâche ;</li>
+<li>score manager ;</li>
+<li>justificatif obligatoire ;</li>
+<li>gel automatique ;</li>
+<li>date de démarrage des évaluations ;</li>
+<li>SLA congés ;</li>
+<li>seuil objectif off-track ;</li>
+<li>seuils budget.</li>
+</ul>
+<h3>26.4 Automatisation &amp; observabilité</h3>
+<h4>Objectif</h4>
+<p>Suivre les cycles d&#x27;automatisation et les actions générées automatiquement.</p>
+<h4>Indicateurs</h4>
+<ul>
+<li>date du dernier cycle ;</li>
+<li>nombre total d&#x27;actions ;</li>
+<li>notifications générées ;</li>
+<li>mises à jour automatiques ;</li>
+<li>répartition par sévérité.</li>
+</ul>
+<h3>26.5 Organisations</h3>
+<h4>Objectif</h4>
+<p>Gérer les organisations ou tenants.</p>
+<h4>Champs</h4>
+<ul>
+<li>nom ;</li>
+<li>slug ;</li>
+<li>description ;</li>
+<li>site web ;</li>
+<li>e-mail de contact ;</li>
+<li>statut actif.</li>
+</ul>
+<h4>Procédure de création</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Organisations</strong>.</li>
+<li>Cliquer sur <strong>Créer</strong>.</li>
+<li>Renseigner les champs obligatoires.</li>
+<li>Enregistrer.</li>
+</ol>
+<h4>Règles</h4>
+<ul>
+<li>Le slug est immuable après création.</li>
+<li>L&#x27;organisation plateforme ne doit pas être désactivée ou supprimée.</li>
+<li>En mode organisation unique, la création de tenants peut être désactivée.</li>
+</ul>
+<h3>26.6 Départements</h3>
+<h4>Objectif</h4>
+<p>Créer les périmètres d&#x27;accès par département.</p>
+<h4>Champs</h4>
+<ul>
+<li>nom ;</li>
+<li>slug ;</li>
+<li>ordre ;</li>
+<li>statut ;</li>
+<li>modules autorisés ;</li>
+<li>membres ;</li>
+<li>superviseur ;</li>
+<li>managers.</li>
+</ul>
+<h4>Procédure de création</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Départements</strong>.</li>
+<li>Cliquer sur <strong>Créer</strong>.</li>
+<li>Renseigner le nom et le slug.</li>
+<li>Sélectionner exactement 2 modules.</li>
+<li>Enregistrer.</li>
+<li>Affecter les membres.</li>
+<li>Désigner le superviseur.</li>
+<li>Désigner au moins un manager.</li>
+<li>Vérifier le badge de conformité.</li>
+</ol>
+<h3>26.7 Postes &amp; fiches de poste</h3>
+<h4>Objectif</h4>
+<p>Gérer le référentiel des postes.</p>
+<h4>Champs</h4>
+<ul>
+<li>nom ;</li>
+<li>slug ;</li>
+<li>portée globale ou organisation ;</li>
+<li>statut actif.</li>
+</ul>
+<h4>Procédure</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Postes &amp; fiches de poste</strong>.</li>
+<li>Créer ou modifier un poste.</li>
+<li>Activer ou désactiver selon besoin.</li>
+</ol>
+<h3>26.8 Utilisateurs &amp; droits</h3>
+<h4>Objectif</h4>
+<p>Gérer les comptes, rôles, demandes d&#x27;accès, permissions, départements et postes.</p>
+<h4>Onglets</h4>
+<ul>
+<li>Utilisateurs ;</li>
+<li>Demandes d&#x27;accès ;</li>
+<li>Permissions ;</li>
+<li>Départements ;</li>
+<li>Postes ;</li>
+<li>Super Admin.</li>
+</ul>
+<h4>Actions utilisateur</h4>
+<ul>
+<li>activer / désactiver ;</li>
+<li>modifier le profil ;</li>
+<li>changer le rôle ;</li>
+<li>envoyer une réinitialisation de mot de passe ;</li>
+<li>supprimer ;</li>
+<li>configurer les permissions.</li>
+</ul>
+<h4>Règles de changement de rôle</h4>
+<ul>
+<li>Ne pas retirer le dernier super administrateur.</li>
+<li>Seul un super administrateur peut approuver ou attribuer certains rôles sensibles.</li>
+<li>Modifier son propre rôle peut entraîner une perte d&#x27;accès.</li>
+</ul>
+<h3>26.9 Formations</h3>
+<p>Voir section <a href="#11-cours-et-formations">Cours et formations</a>.</p>
+<h3>26.10 Offres d&#x27;emploi</h3>
+<h4>Objectif</h4>
+<p>Créer et publier les offres d&#x27;emploi.</p>
+<h4>Procédure</h4>
+<ol>
+<li>Aller dans <strong>Paramètres &gt; Offres d&#x27;emploi</strong>.</li>
+<li>Créer une offre.</li>
+<li>Renseigner :</li>
+</ol>
+<ul>
+<li>titre ;</li>
+<li>entreprise ;</li>
+<li>localisation ;</li>
+<li>type de contrat ;</li>
+<li>compétences requises ;</li>
+<li>description ;</li>
+<li>salaire ;</li>
+<li>contact candidature ;</li>
+<li>statut.</li>
+</ul>
+<ol>
+<li>Publier ou enregistrer en brouillon.</li>
+</ol>
+<h4>Suivi des candidats</h4>
+<ul>
+<li>consulter les candidats ;</li>
+<li>vérifier le score de matching ;</li>
+<li>identifier les meilleurs profils ;</li>
+<li>suivre la source de candidature.</li>
+</ul>
+<h3>26.11 Congés (validation)</h3>
+<p>Voir section <a href="#8-ressources-humaines">Ressources humaines</a>.</p>
+<h3>26.12 Évaluation</h3>
+<p>Cette rubrique peut être réservée à l&#x27;évaluation RH. Selon l&#x27;état de déploiement, elle peut être utilisée comme espace préparatoire ou rubrique à compléter.</p>
+<hr>
+<h2>27. Annexes : statuts, règles et référentiels</h2>
+<h3>27.1 Modules assignables</h3>
+<p>Modules métier :</p>
+<ul>
+<li>dashboard ;</li>
+<li>projects ;</li>
+<li>goals_okrs ;</li>
+<li>time_tracking ;</li>
+<li>planning ;</li>
+<li>leave_management ;</li>
+<li>finance ;</li>
+<li>comptabilite ;</li>
+<li>knowledge_base ;</li>
+<li>daf_services ;</li>
+<li>courses ;</li>
+<li>jobs ;</li>
+<li>crm_sales ;</li>
+<li>analytics ;</li>
+<li>talent_analytics ;</li>
+<li>rh ;</li>
+<li>trinite ;</li>
+<li>programme ;</li>
+<li>collecte ;</li>
+<li>logistique ;</li>
+<li>parc_auto ;</li>
+<li>ticket_it ;</li>
+<li>messagerie ;</li>
+<li>settings.</li>
+</ul>
+<p>Modules d&#x27;administration :</p>
+<ul>
+<li>organization_management ;</li>
+<li>department_management ;</li>
+<li>postes_management ;</li>
+<li>user_management ;</li>
+<li>course_management ;</li>
+<li>job_management ;</li>
+<li>leave_management_admin.</li>
+</ul>
+<h3>27.2 Statuts de congé</h3>
+<ul>
+<li>pending / en attente ;</li>
+<li>approved / approuvé ;</li>
+<li>rejected / rejeté ;</li>
+<li>cancelled / annulé.</li>
+</ul>
+<h3>27.3 Statuts DAF</h3>
+<ul>
+<li>draft ;</li>
+<li>submitted ;</li>
+<li>in_review ;</li>
+<li>awaiting_requester ;</li>
+<li>pending_external_signature ;</li>
+<li>approved ;</li>
+<li>rejected ;</li>
+<li>fulfilled ;</li>
+<li>cancelled.</li>
+</ul>
+<h3>27.4 Statuts Ticket IT</h3>
+<ul>
+<li>draft ;</li>
+<li>pending_validation ;</li>
+<li>needs_reformulation ;</li>
+<li>validated ;</li>
+<li>sent_to_it ;</li>
+<li>in_progress ;</li>
+<li>resolved ;</li>
+<li>rejected.</li>
+</ul>
+<h3>27.5 Statuts CRM</h3>
+<ul>
+<li>lead ;</li>
+<li>contacted ;</li>
+<li>unreachable ;</li>
+<li>callback_expected ;</li>
+<li>prospect ;</li>
+<li>customer.</li>
+</ul>
+<h3>27.6 Statuts logistique / parc auto</h3>
+<ul>
+<li>requested ;</li>
+<li>approved ;</li>
+<li>provided ;</li>
+<li>returned ;</li>
+<li>rejected.</li>
+</ul>
+<h3>27.7 Bonnes pratiques d&#x27;administration</h3>
+<ol>
+<li>Toujours créer les départements avant d&#x27;attribuer massivement les droits.</li>
+<li>Limiter les droits de suppression.</li>
+<li>Ne donner le droit d&#x27;approbation qu&#x27;aux responsables identifiés.</li>
+<li>Contrôler régulièrement les comptes inactifs.</li>
+<li>Vérifier les membres et managers de chaque département.</li>
+<li>Utiliser les notifications et l&#x27;historique pour suivre les actions sensibles.</li>
+<li>Archiver ou restreindre les documents confidentiels.</li>
+<li>Tester les accès d&#x27;un nouvel utilisateur avant mise en production complète.</li>
+</ol>
+<h3>27.8 Procédure de restitution client recommandée</h3>
+<p>Pour présenter la plateforme au client :</p>
+<ol>
+<li>Présenter le tableau de bord et la logique générale.</li>
+<li>Expliquer les rôles et droits.</li>
+<li>Montrer la navigation module par module.</li>
+<li>Démontrer un workflow complet :</li>
+</ol>
+<ul>
+<li>création d&#x27;utilisateur ;</li>
+<li>affectation département ;</li>
+<li>création projet ;</li>
+<li>demande de congé ;</li>
+<li>ticket IT ;</li>
+<li>document partagé ;</li>
+<li>notification et historique.</li>
+</ul>
+<ol>
+<li>Terminer par les Paramètres et l&#x27;administration.</li>
+</ol>
+<hr>
+<h2>Conclusion</h2>
+<p>Ce manuel décrit l&#x27;utilisation opérationnelle de la plateforme COYA / SENEGEL pour les utilisateurs, managers et administrateurs. Il peut être transformé en document Word ou PDF pour la restitution client, complété par des captures d&#x27;écran et adapté aux procédures internes définitives du client.</p>
+</body>
+</html>

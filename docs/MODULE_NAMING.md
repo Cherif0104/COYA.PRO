@@ -44,11 +44,6 @@
 | programme       | Programme & Budget         |
 | courses         | Cours                      |
 | crm_sales       | CRM & Ventes               |
-| partenariat     | Partenariat                |
-| conseil         | Conseil                    |
-| qualite         | Qualité                    |
-| juridique       | Juridique                  |
-| studio          | Studio                     |
 | collecte        | Collecte                   |
 | trinite         | Trinité                    |
 | logistique      | Logistique                 |
