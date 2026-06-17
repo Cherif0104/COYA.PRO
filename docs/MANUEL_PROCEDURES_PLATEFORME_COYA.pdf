@@ -1,0 +1,4962 @@
+%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R 19 0 R 21 0 R 23 0 R 25 0 R 27 0 R 29 0 R 31 0 R 33 0 R 35 0 R 37 0 R 39 0 R 41 0 R 43 0 R 45 0 R 47 0 R 49 0 R 51 0 R 53 0 R 55 0 R 57 0 R 59 0 R 61 0 R 63 0 R 65 0 R 67 0 R 69 0 R 71 0 R 73 0 R 75 0 R] /Count 36 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Length 1881 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+(MANUEL DE PROCÉDURES UTILISATEUR ET ADMINISTRATEUR) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(PLATEFORME COYA / SENEGEL) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Version du document : 1.0) Tj
+T*
+(Public cible : client, direction, administrateurs, responsables de département, utilisateurs) Tj
+T*
+(finaux) Tj
+T*
+(Objectif : fournir une procédure complète d'utilisation de la plateforme, module par module,) Tj
+T*
+(avec les règles d'accès, les workflows et les paramètres d'administration.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(TABLE DES MATIÈRES) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Présentation générale de la plateforme) Tj
+T*
+(2. Connexion, premier accès et navigation) Tj
+T*
+(3. Rôles, droits et règles d'accès) Tj
+T*
+(4. Procédures transverses) Tj
+T*
+(5. Tableau de bord) Tj
+T*
+(6. Projets) Tj
+T*
+(7. Planning) Tj
+T*
+(8. Ressources humaines) Tj
+T*
+(9. Comptabilité et Finance) Tj
+T*
+(10. Programme & Budget) Tj
+T*
+(11. Cours et formations) Tj
+T*
+(12. CRM & Ventes) Tj
+T*
+(13. Trinité) Tj
+T*
+(14. Logistique) Tj
+T*
+(15. Parc automobile) Tj
+T*
+(16. Messagerie) Tj
+T*
+(17. Ticket IT) Tj
+T*
+(18. DOCS SENEGEL) Tj
+T*
+(19. Moyens généraux & DAF) Tj
+T*
+(20. Suivi du temps) Tj
+T*
+(21. Objectifs et OKR) Tj
+T*
+(22. Analytics et Talent Analytics) Tj
+T*
+(23. Centre de notifications) Tj
+T*
+(24. Historique des activités) Tj
+T*
+(25. Paramètres personnels) Tj
+T*
+(26. Administration de la plateforme) Tj
+T*
+(27. Annexes : statuts, règles et référentiels) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. PRÉSENTATION GÉNÉRALE DE LA PLATEFORME) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La plateforme COYA / SENEGEL est un espace de pilotage intégré permettant de centraliser :) Tj
+T*
+() Tj
+T*
+(- la gestion des projets ;) Tj
+T*
+(- la planification ;) Tj
+T*
+(- les ressources humaines ;) Tj
+T*
+(- la comptabilité ;) Tj
+T*
+(- le suivi des programmes et budgets ;) Tj
+T*
+(- les formations ;) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 2325 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- le CRM et les ventes ;) Tj
+T*
+(- la gestion documentaire ;) Tj
+T*
+(- les demandes DAF ;) Tj
+T*
+(- la messagerie interne ;) Tj
+T*
+(- les tickets IT ;) Tj
+T*
+(- les paramètres d'administration et de sécurité.) Tj
+T*
+() Tj
+T*
+(La plateforme fonctionne par modules. Chaque utilisateur voit uniquement les modules) Tj
+T*
+(auxquels il a accès selon :) Tj
+T*
+() Tj
+T*
+(1. son rôle ;) Tj
+T*
+(2. ses permissions individuelles ;) Tj
+T*
+(3. son ou ses départements ;) Tj
+T*
+(4. les droits de lecture, écriture, suppression et approbation définis par l'administrateur.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1.1 Principes clés) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Une seule plateforme, plusieurs usages : chaque direction ou département utilise les) Tj
+T*
+(modules nécessaires à son activité.) Tj
+T*
+(- Accès contrôlé : un module non autorisé n'apparaît pas dans la barre latérale.) Tj
+T*
+(- Traçabilité : les actions importantes sont historisées.) Tj
+T*
+(- Multi-organisation : la plateforme peut gérer une organisation principale et, si) Tj
+T*
+(configuré, plusieurs organisations hébergées.) Tj
+T*
+(- Langues : l'interface peut être utilisée en français ou en anglais.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2. CONNEXION, PREMIER ACCÈS ET NAVIGATION) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.1 Connexion) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir l'adresse de la plateforme dans le navigateur.) Tj
+T*
+(2. Saisir son adresse e-mail.) Tj
+T*
+(3. Saisir son mot de passe.) Tj
+T*
+(4. Cliquer sur Se connecter.) Tj
+T*
+() Tj
+T*
+(Si l'utilisateur n'a pas encore de compte actif, il doit contacter l'administrateur) Tj
+T*
+(plateforme ou l'administrateur de son organisation.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.2 Compte en attente) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Certains rôles nécessitent une validation administrateur. Dans ce cas :) Tj
+T*
+() Tj
+T*
+(- l'utilisateur peut voir un écran indiquant que son accès est en attente ;) Tj
+T*
+(- l'administrateur doit approuver la demande ;) Tj
+T*
+(- un département doit être affecté si la règle départementale est active ;) Tj
+T*
+(- les droits de modules doivent être configurés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.3 Première connexion et statut de présence) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Après connexion, la plateforme peut afficher un sélecteur de statut. L'utilisateur choisit) Tj
+T*
+(son état de disponibilité :) Tj
+T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 1577 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+(- disponible / en ligne ;) Tj
+T*
+(- pause ;) Tj
+T*
+(- réunion ;) Tj
+T*
+(- absent ;) Tj
+T*
+(- autre statut configuré.) Tj
+T*
+() Tj
+T*
+(Ce statut permet d'alimenter les indicateurs RH, la présence et le planning.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.4 Navigation principale) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La navigation se fait depuis la barre latérale gauche. Les modules visibles dépendent des) Tj
+T*
+(droits de l'utilisateur.) Tj
+T*
+() Tj
+T*
+(Modules principaux :) Tj
+T*
+() Tj
+T*
+(1. Tableau de bord) Tj
+T*
+(2. Projets) Tj
+T*
+(3. Planning) Tj
+T*
+(4. Ressources humaines) Tj
+T*
+(5. Comptabilité) Tj
+T*
+(6. Programme & Budget) Tj
+T*
+(7. Cours) Tj
+T*
+(8. CRM & Ventes) Tj
+T*
+(9. Trinité) Tj
+T*
+(10. Logistique) Tj
+T*
+(11. Parc automobile) Tj
+T*
+(12. Messagerie) Tj
+T*
+(13. Ticket IT) Tj
+T*
+(14. DOCS SENEGEL) Tj
+T*
+(15. Moyens généraux & DAF) Tj
+T*
+(16. Paramètres) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.5 Barre supérieure) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La barre supérieure permet de :) Tj
+T*
+() Tj
+T*
+(- consulter les notifications ;) Tj
+T*
+(- accéder aux paramètres ;) Tj
+T*
+(- changer la langue ;) Tj
+T*
+(- ouvrir le profil ;) Tj
+T*
+(- se déconnecter ;) Tj
+T*
+(- accéder à l'historique ou à certaines vues internes selon les droits.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2.6 Assistant flottant) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Un assistant flottant peut être disponible pour orienter l'utilisateur vers :) Tj
+T*
+() Tj
+T*
+(- la messagerie ;) Tj
+T*
+(- les tickets IT ;) Tj
+T*
+(- des raccourcis d'aide.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3. RÔLES, DROITS ET RÈGLES D'ACCÈS) Tj
+T*
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 1156 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3.1 Catégories de rôles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La plateforme distingue plusieurs familles de rôles.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles de gestion) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- super_administrator ;) Tj
+T*
+(- administrator ;) Tj
+T*
+(- manager ;) Tj
+T*
+(- supervisor ;) Tj
+T*
+(- intern.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles RH, paie et recrutement) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- hr_business_partner ;) Tj
+T*
+(- hr_officer ;) Tj
+T*
+(- recruiter ;) Tj
+T*
+(- payroll_specialist ;) Tj
+T*
+(- team_lead.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles d'accompagnement) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- trainer ;) Tj
+T*
+(- coach ;) Tj
+T*
+(- facilitator ;) Tj
+T*
+(- partner_facilitator ;) Tj
+T*
+(- mentor.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles académiques et jeunesse) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- student ;) Tj
+T*
+(- alumni.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles économiques et partenaires) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- entrepreneur ;) Tj
+T*
+(- employer ;) Tj
+T*
+(- implementer ;) Tj
+T*
+(- funder.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Rôles créatifs et médias) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- publisher ;) Tj
+T*
+(- editor ;) Tj
+T*
+(- producer ;) Tj
+T*
+(- artist.) Tj
+T*
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 2082 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(3.2 Droits par module) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Chaque module dispose de quatre niveaux de droits :) Tj
+T*
+() Tj
+T*
+(Droit | Signification) Tj
+T*
+(Voir | Accéder au module et consulter les données) Tj
+T*
+(Créer / Modifier | Ajouter ou modifier des données) Tj
+T*
+(Supprimer | Supprimer des données) Tj
+T*
+(Approuver | Valider ou refuser des demandes) Tj
+T*
+() Tj
+T*
+(Règle importante : si le droit Voir est désactivé, les autres droits ne sont pas) Tj
+T*
+(utilisables.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3.3 Règle des départements) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les départements servent à limiter le périmètre d'accès.) Tj
+T*
+() Tj
+T*
+(Règles principales :) Tj
+T*
+() Tj
+T*
+(- chaque département doit être rattaché à exactement 2 modules ;) Tj
+T*
+(- un utilisateur ne voit que les modules autorisés par ses départements et ses droits ;) Tj
+T*
+(- une équipe département conforme doit contenir au minimum 2 personnes ;) Tj
+T*
+(- chaque département doit avoir 1 superviseur ;) Tj
+T*
+(- chaque département doit avoir au moins 1 manager ;) Tj
+T*
+(- le superviseur ne peut pas être manager du même département en même temps.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3.4 Super administrateur) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le super administrateur dispose d'un accès complet à la plateforme. Il peut :) Tj
+T*
+() Tj
+T*
+(- gérer les organisations ;) Tj
+T*
+(- gérer les départements ;) Tj
+T*
+(- gérer les utilisateurs ;) Tj
+T*
+(- modifier les libellés des modules ;) Tj
+T*
+(- configurer le tableau de bord ;) Tj
+T*
+(- définir certains paramètres globaux ;) Tj
+T*
+(- consulter les rubriques d'administration.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3.5 Utilisateur sans accès) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Si un utilisateur ne dispose d'aucun module autorisé, il est dirigé vers un écran d'accès en) Tj
+T*
+(attente ou d'accès insuffisant. L'administrateur doit alors vérifier :) Tj
+T*
+() Tj
+T*
+(1. son rôle ;) Tj
+T*
+(2. ses départements ;) Tj
+T*
+(3. ses droits par module ;) Tj
+T*
+(4. le statut actif du compte.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4. PROCÉDURES TRANSVERSES) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 1996 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(4.1 Créer un nouvel utilisateur) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres.) Tj
+T*
+(2. Ouvrir Administration.) Tj
+T*
+(3. Cliquer sur Utilisateurs & droits.) Tj
+T*
+(4. Cliquer sur Nouvel utilisateur.) Tj
+T*
+(5. Renseigner :) Tj
+T*
+(- e-mail ;) Tj
+T*
+(- nom complet ;) Tj
+T*
+(- téléphone ;) Tj
+T*
+(- organisation si applicable ;) Tj
+T*
+(- rôle ;) Tj
+T*
+(- poste si le référentiel des postes est actif.) Tj
+T*
+(6. Choisir si un e-mail de mot de passe doit être envoyé.) Tj
+T*
+(7. Enregistrer.) Tj
+T*
+(8. Si le rôle nécessite validation, traiter la demande dans Demandes d'accès.) Tj
+T*
+(9. Affecter l'utilisateur à un département.) Tj
+T*
+(10. Vérifier ses permissions.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4.2 Donner accès à un module) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Vérifier que le module est autorisé dans le département de l'utilisateur.) Tj
+T*
+(2. Aller dans Paramètres > Utilisateurs & droits > Permissions.) Tj
+T*
+(3. Sélectionner l'utilisateur.) Tj
+T*
+(4. Activer le module.) Tj
+T*
+(5. Définir les droits :) Tj
+T*
+(- Voir ;) Tj
+T*
+(- Créer / Modifier ;) Tj
+T*
+(- Supprimer ;) Tj
+T*
+(- Approuver.) Tj
+T*
+(6. Attendre la sauvegarde automatique ou confirmer selon l'écran.) Tj
+T*
+(7. Demander à l'utilisateur de rafraîchir sa session si nécessaire.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4.3 Retirer l'accès à un module) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Utilisateurs & droits.) Tj
+T*
+(2. Sélectionner l'utilisateur.) Tj
+T*
+(3. Désactiver le droit Voir sur le module concerné.) Tj
+T*
+(4. Vérifier également les modules du département.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4.4 Modifier son mot de passe) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres.) Tj
+T*
+(2. Ouvrir Mon compte > Profil.) Tj
+T*
+(3. Saisir le nouveau mot de passe.) Tj
+T*
+(4. Confirmer le nouveau mot de passe.) Tj
+T*
+(5. Valider.) Tj
+T*
+() Tj
+T*
+(Règle : le mot de passe doit contenir au minimum 8 caractères.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4.5 Consulter les notifications) Tj
+T*
+ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<< /Length 1822 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(1. Cliquer sur l'icône de notification dans la barre supérieure.) Tj
+T*
+(2. Filtrer si nécessaire par type ou module.) Tj
+T*
+(3. Cliquer sur une notification pour accéder à l'élément concerné.) Tj
+T*
+(4. Marquer comme lu ou supprimer si nécessaire.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(4.6 Consulter l'historique d'activité) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Notifications & activité.) Tj
+T*
+(2. Ouvrir Historique des activités.) Tj
+T*
+(3. Filtrer par module, action ou période.) Tj
+T*
+(4. Ouvrir les détails pour consulter les métadonnées d'une action.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(5. TABLEAU DE BORD) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(5.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le tableau de bord est la page d'accueil de pilotage. Il centralise les indicateurs, alertes) Tj
+T*
+(et raccourcis utiles.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(5.2 Contenu principal) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Selon les droits et la configuration, l'utilisateur peut voir :) Tj
+T*
+() Tj
+T*
+(- indicateurs clés ;) Tj
+T*
+(- jours travaillés ;) Tj
+T*
+(- alertes ;) Tj
+T*
+(- objectifs du jour ;) Tj
+T*
+(- synthèse des projets ;) Tj
+T*
+(- synthèse des congés ;) Tj
+T*
+(- synthèse des factures ;) Tj
+T*
+(- tendances d'heures ;) Tj
+T*
+(- performance ;) Tj
+T*
+(- analytics prédictif ;) Tj
+T*
+(- raccourcis vers les modules.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(5.3 Procédure d'utilisation) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Tableau de bord.) Tj
+T*
+(2. Consulter les indicateurs prioritaires.) Tj
+T*
+(3. Cliquer sur un raccourci pour ouvrir le module correspondant.) Tj
+T*
+(4. Traiter les alertes visibles.) Tj
+T*
+(5. Vérifier les objectifs ou actions du jour.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(5.4 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Les widgets visibles peuvent être configurés par le super administrateur.) Tj
+T*
+ET
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 16 0 R >>
+endobj
+18 0 obj
+<< /Length 1598 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- Les données affichées dépendent des modules autorisés.) Tj
+T*
+(- Les liens vers Finance, Projets, Suivi du temps ou Objectifs ne fonctionnent que si) Tj
+T*
+(l'utilisateur a les droits associés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6. PROJETS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Projets permet de créer, suivre, piloter et clôturer les projets. Il centralise) Tj
+T*
+(les tâches, risques, objectifs, budgets, rapports et pièces jointes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.2 Écrans disponibles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- liste des projets ;) Tj
+T*
+(- création de projet ;) Tj
+T*
+(- détail projet ;) Tj
+T*
+(- tâches ;) Tj
+T*
+(- risques ;) Tj
+T*
+(- rapports ;) Tj
+T*
+(- historique ;) Tj
+T*
+(- objectifs ;) Tj
+T*
+(- pièces jointes ;) Tj
+T*
+(- budget.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.3 Créer un projet) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Projets.) Tj
+T*
+(2. Cliquer sur le bouton de création.) Tj
+T*
+(3. Renseigner les informations générales :) Tj
+T*
+(- titre ;) Tj
+T*
+(- description ;) Tj
+T*
+(- type ;) Tj
+T*
+(- statut ;) Tj
+T*
+(- dates ;) Tj
+T*
+(- responsables ou membres associés.) Tj
+T*
+(4. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.4 Gérer les tâches) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir le détail d'un projet.) Tj
+T*
+(2. Aller dans l'onglet Tâches.) Tj
+T*
+(3. Ajouter une tâche.) Tj
+T*
+(4. Définir :) Tj
+T*
+(- titre ;) Tj
+T*
+(- responsable ;) Tj
+T*
+(- priorité ;) Tj
+T*
+(- échéance ;) Tj
+T*
+(- statut.) Tj
+T*
+(5. Mettre à jour la tâche au fil de l'avancement.) Tj
+T*
+(6. Ajouter un justificatif si la règle l'exige.) Tj
+T*
+ET
+endstream
+endobj
+19 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 18 0 R >>
+endobj
+20 0 obj
+<< /Length 1534 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(6.5 Gérer les risques) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir un projet.) Tj
+T*
+(2. Aller dans Risques.) Tj
+T*
+(3. Ajouter un risque.) Tj
+T*
+(4. Renseigner :) Tj
+T*
+(- description ;) Tj
+T*
+(- probabilité ;) Tj
+T*
+(- impact ;) Tj
+T*
+(- stratégie de mitigation.) Tj
+T*
+(5. Mettre à jour le risque selon son évolution.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.6 Gérer le budget projet) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir le projet.) Tj
+T*
+(2. Aller dans Budget.) Tj
+T*
+(3. Ajouter ou consulter les lignes budgétaires.) Tj
+T*
+(4. Comparer le prévisionnel et le réel.) Tj
+T*
+(5. Surveiller les alertes de dépassement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.7 Clôturer un projet) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Avant clôture, vérifier :) Tj
+T*
+() Tj
+T*
+(- les tâches critiques ;) Tj
+T*
+(- les justificatifs ;) Tj
+T*
+(- les risques ;) Tj
+T*
+(- le budget ;) Tj
+T*
+(- le rapport final ;) Tj
+T*
+(- les objectifs.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(6.8 Règles du module Projets) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les règles peuvent être configurées dans Paramètres > Module Projets :) Tj
+T*
+() Tj
+T*
+(- types de projet ;) Tj
+T*
+(- statuts projet ;) Tj
+T*
+(- seuil d'alerte retard ;) Tj
+T*
+(- score par tâche réalisée ;) Tj
+T*
+(- score manager ;) Tj
+T*
+(- justificatif obligatoire ;) Tj
+T*
+(- gel automatique des tâches en retard ;) Tj
+T*
+(- date de démarrage des évaluations ;) Tj
+T*
+(- seuils budget warning / critique ;) Tj
+T*
+(- seuil objectif off-track.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7. PLANNING) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+21 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 20 0 R >>
+endobj
+22 0 obj
+<< /Length 1584 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(7.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Planning permet de suivre les créneaux, les absences, la présence, les réunions,) Tj
+T*
+(les équipes et les conflits de planification.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7.2 Rubriques principales) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- pilotage ;) Tj
+T*
+(- mon planning ;) Tj
+T*
+(- équipe & planning ;) Tj
+T*
+(- présence RH ;) Tj
+T*
+(- absences RH ;) Tj
+T*
+(- postes RH ;) Tj
+T*
+(- shifts & échanges ;) Tj
+T*
+(- conflits ;) Tj
+T*
+(- notifications.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7.3 Utiliser son planning) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Planning.) Tj
+T*
+(2. Aller dans Mon planning.) Tj
+T*
+(3. Consulter ses créneaux.) Tj
+T*
+(4. Vérifier les réunions, absences ou modulations.) Tj
+T*
+(5. Utiliser les liens vers le suivi du temps si nécessaire.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7.4 Gérer le planning d'équipe) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Équipe & planning.) Tj
+T*
+(2. Filtrer par collaborateur, département ou période.) Tj
+T*
+(3. Vérifier les disponibilités.) Tj
+T*
+(4. Identifier les conflits.) Tj
+T*
+(5. Coordonner les absences et réunions.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7.5 Types de créneaux) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- présentiel ;) Tj
+T*
+(- télétravail ;) Tj
+T*
+(- congé ;) Tj
+T*
+(- réunion ;) Tj
+T*
+(- modulation ;) Tj
+T*
+(- autre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(7.6 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- L'accès à la vue équipe dépend du rôle et des permissions.) Tj
+T*
+(- Les modules RH intégrés au Planning s'affichent seulement si l'utilisateur dispose des) Tj
+T*
+(droits nécessaires.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+23 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 22 0 R >>
+endobj
+24 0 obj
+<< /Length 1905 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(8. RESSOURCES HUMAINES) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Ressources humaines regroupe la gestion des salariés, de la présence, des congés,) Tj
+T*
+(des postes, de l'organigramme, de la paie et des offres d'emploi.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.2 Onglets disponibles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Onglet | Utilisation) Tj
+T*
+(Salariés | consulter les collaborateurs et fiches individuelles) Tj
+T*
+(Présence | suivre les statuts, retards, pauses et temps de présence) Tj
+T*
+(Congés | déposer et suivre les demandes de congés) Tj
+T*
+(Fiche poste | consulter les postes) Tj
+T*
+(Organigramme | consulter la structure organisationnelle) Tj
+T*
+(Paie | consulter ou préparer les éléments de paie) Tj
+T*
+(Offres d'emploi | gérer ou consulter les offres) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.3 Consulter une fiche salarié) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Ressources humaines.) Tj
+T*
+(2. Aller dans Salariés.) Tj
+T*
+(3. Rechercher un collaborateur.) Tj
+T*
+(4. Ouvrir sa fiche.) Tj
+T*
+(5. Consulter les informations autorisées.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.4 Suivre la présence) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Présence.) Tj
+T*
+(2. Consulter les statuts du jour.) Tj
+T*
+(3. Identifier les retards, pauses ou absences.) Tj
+T*
+(4. Vérifier l'historique si nécessaire.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.5 Demander un congé) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Congés.) Tj
+T*
+(2. Cliquer sur Nouvelle demande.) Tj
+T*
+(3. Sélectionner le type de congé.) Tj
+T*
+(4. Renseigner les dates.) Tj
+T*
+(5. Ajouter un motif.) Tj
+T*
+(6. Soumettre la demande.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.6 Valider un congé) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Congés \(validation\) ou dans la vue admin RH.) Tj
+T*
+(2. Filtrer les demandes en attente.) Tj
+T*
+(3. Ouvrir une demande.) Tj
+T*
+(4. Approuver ou rejeter.) Tj
+T*
+(5. Saisir une raison obligatoire.) Tj
+T*
+ET
+endstream
+endobj
+25 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 24 0 R >>
+endobj
+26 0 obj
+<< /Length 1545 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(6. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(8.7 Règles de présence) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Règles de référence :) Tj
+T*
+() Tj
+T*
+(- seuil de retard : 15 minutes ;) Tj
+T*
+(- pause maximale indicative : 60 minutes ;) Tj
+T*
+(- durée hebdomadaire cible : 44 heures ;) Tj
+T*
+(- plage journalière indicative : 9h à 19h.) Tj
+T*
+() Tj
+T*
+(Ces règles peuvent être adaptées selon les politiques internes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(9. COMPTABILITÉ ET FINANCE) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(9.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La plateforme distingue :) Tj
+T*
+() Tj
+T*
+(- Comptabilité : comptabilité générale, écritures, plan comptable, journaux, rapports ;) Tj
+T*
+(- Finance : factures, dépenses, budgets opérationnels, récurrents et analytics.) Tj
+T*
+() Tj
+T*
+(La barre latérale affiche principalement Comptabilité. Certaines vues internes ou anciens) Tj
+T*
+(liens peuvent ouvrir Finance.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(9.2 Module Comptabilité) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Contenu) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- plan comptable ;) Tj
+T*
+(- écritures ;) Tj
+T*
+(- rapports ;) Tj
+T*
+(- clôture ;) Tj
+T*
+(- paramètres ;) Tj
+T*
+(- journaux ;) Tj
+T*
+(- centres de coûts ;) Tj
+T*
+(- budgets ;) Tj
+T*
+(- fiscal ;) Tj
+T*
+(- lettrage ;) Tj
+T*
+(- rapprochement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Modes) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Essentiel : accès aux fonctions principales ;) Tj
+T*
+(- Avancé : accès aux paramètres comptables et fonctions détaillées.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure : consulter les écritures) Tj
+T*
+ET
+endstream
+endobj
+27 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 26 0 R >>
+endobj
+28 0 obj
+<< /Length 1639 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Comptabilité.) Tj
+T*
+(2. Aller dans Écritures.) Tj
+T*
+(3. Filtrer par date, journal, compte ou statut.) Tj
+T*
+(4. Ouvrir une écriture pour consulter le détail.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure : gérer le plan comptable) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Plan comptable.) Tj
+T*
+(2. Rechercher un compte.) Tj
+T*
+(3. Créer ou modifier un compte si le droit d'écriture est disponible.) Tj
+T*
+(4. Vérifier le cadre comptable applicable.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- L'utilisateur en lecture seule ne peut pas modifier les données.) Tj
+T*
+(- Les paramètres comptables sont réservés aux utilisateurs disposant des droits d'écriture.) Tj
+T*
+(- Les cadres comptables pris en charge peuvent inclure SYSCOHADA / SYCEBNL selon la) Tj
+T*
+(configuration.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(9.3 Vue Finance) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Contenu) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- factures ;) Tj
+T*
+(- dépenses ;) Tj
+T*
+(- factures récurrentes ;) Tj
+T*
+(- dépenses récurrentes ;) Tj
+T*
+(- budgets ;) Tj
+T*
+(- analytics.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure : gérer une facture) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir la vue Finance si disponible.) Tj
+T*
+(2. Aller dans Factures.) Tj
+T*
+(3. Créer ou ouvrir une facture.) Tj
+T*
+(4. Renseigner client, montant, statut, date et informations associées.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Statuts de facture) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les statuts peuvent inclure :) Tj
+T*
+() Tj
+T*
+(- brouillon ;) Tj
+T*
+(- envoyée ;) Tj
+T*
+(- payée ;) Tj
+T*
+(- partiellement payée ;) Tj
+T*
+(- en retard ;) Tj
+T*
+(- annulée.) Tj
+T*
+ET
+endstream
+endobj
+29 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 28 0 R >>
+endobj
+30 0 obj
+<< /Length 1494 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- La modification est réservée au créateur ou aux rôles de gestion.) Tj
+T*
+(- Les données financières doivent être vérifiées avant validation ou clôture.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10. PROGRAMME & BUDGET) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Programme & Budget permet de suivre les programmes, bailleurs, budgets, projets) Tj
+T*
+(terrain, bénéficiaires et actions associées.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.2 Rubriques principales) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Programmes ;) Tj
+T*
+(- Bailleurs ;) Tj
+T*
+(- Résumé programme ;) Tj
+T*
+(- Budget ;) Tj
+T*
+(- Projets terrain ;) Tj
+T*
+(- Acteurs / collecte.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.3 Créer ou consulter un programme) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Programme & Budget.) Tj
+T*
+(2. Aller dans Programmes.) Tj
+T*
+(3. Créer un programme ou ouvrir un programme existant.) Tj
+T*
+(4. Renseigner :) Tj
+T*
+(- nom ;) Tj
+T*
+(- bailleur ;) Tj
+T*
+(- dates ;) Tj
+T*
+(- budget ;) Tj
+T*
+(- objectifs ;) Tj
+T*
+(- projets liés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.4 Gérer les bailleurs) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir l'onglet Bailleurs.) Tj
+T*
+(2. Ajouter un bailleur.) Tj
+T*
+(3. Renseigner les informations de contact.) Tj
+T*
+(4. Lier le bailleur aux programmes concernés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.5 Suivre le budget) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir le détail d'un programme.) Tj
+T*
+(2. Aller dans Budget.) Tj
+T*
+ET
+endstream
+endobj
+31 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 30 0 R >>
+endobj
+32 0 obj
+<< /Length 1670 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(3. Consulter les lignes budgétaires.) Tj
+T*
+(4. Comparer le prévisionnel au réel.) Tj
+T*
+(5. Identifier les écarts.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.6 Suivre les projets terrain) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Projets terrain.) Tj
+T*
+(2. Consulter les projets liés au programme.) Tj
+T*
+(3. Vérifier les activités, tâches et dépenses associées.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(10.7 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Certains profils peuvent être en lecture seule, notamment les auditeurs.) Tj
+T*
+(- Les dépenses et lignes budgétaires doivent être rattachées à un programme ou projet) Tj
+T*
+(lorsque la règle métier l'impose.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11. COURS ET FORMATIONS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Cours permet de consulter les formations disponibles et de suivre les parcours) Tj
+T*
+(d'apprentissage.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11.2 Utilisateur : consulter un cours) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Cours.) Tj
+T*
+(2. Parcourir le catalogue.) Tj
+T*
+(3. Filtrer ou rechercher une formation.) Tj
+T*
+(4. Cliquer sur un cours.) Tj
+T*
+(5. Consulter les modules, leçons, documents et progression.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11.3 Administrateur : gérer le catalogue) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Formations.) Tj
+T*
+(2. Consulter la liste des cours.) Tj
+T*
+(3. Créer ou modifier un cours.) Tj
+T*
+(4. Définir :) Tj
+T*
+(- titre ;) Tj
+T*
+(- description ;) Tj
+T*
+(- formateur ;) Tj
+T*
+(- durée ;) Tj
+T*
+(- niveau ;) Tj
+T*
+(- catégorie ;) Tj
+T*
+(- prix ;) Tj
+T*
+(- statut ;) Tj
+T*
+(- modules et leçons ;) Tj
+T*
+(- documents ;) Tj
+T*
+(- quiz ;) Tj
+T*
+ET
+endstream
+endobj
+33 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 32 0 R >>
+endobj
+34 0 obj
+<< /Length 1365 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- public cible.) Tj
+T*
+(5. Publier ou laisser en brouillon.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11.4 Statuts de cours) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- brouillon ;) Tj
+T*
+(- publié ;) Tj
+T*
+(- archivé.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(11.5 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Seuls les utilisateurs autorisés peuvent créer, modifier ou supprimer une formation.) Tj
+T*
+(- Un cours publié est visible aux utilisateurs ciblés selon la configuration.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12. CRM & VENTES) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module CRM & Ventes permet de gérer les contacts, prospects, clients, pipeline commercial) Tj
+T*
+(et opérations de collecte.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.2 Vues principales) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- liste des contacts ;) Tj
+T*
+(- pipeline ;) Tj
+T*
+(- collecte ;) Tj
+T*
+(- dossier contact ;) Tj
+T*
+(- détails et échanges.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.3 Créer un contact) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir CRM & Ventes.) Tj
+T*
+(2. Cliquer sur Ajouter un contact.) Tj
+T*
+(3. Renseigner les informations :) Tj
+T*
+(- nom ;) Tj
+T*
+(- e-mail ;) Tj
+T*
+(- téléphone ;) Tj
+T*
+(- organisation ;) Tj
+T*
+(- statut ;) Tj
+T*
+(- source ;) Tj
+T*
+(- notes.) Tj
+T*
+(4. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.4 Gérer le pipeline) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Pipeline.) Tj
+T*
+ET
+endstream
+endobj
+35 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 34 0 R >>
+endobj
+36 0 obj
+<< /Length 1709 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(2. Identifier le contact ou prospect.) Tj
+T*
+(3. Modifier son statut selon l'évolution.) Tj
+T*
+(4. Ajouter les notes ou interactions nécessaires.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.5 Statuts CRM) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Statuts de référence :) Tj
+T*
+() Tj
+T*
+(- lead ;) Tj
+T*
+(- contacté ;) Tj
+T*
+(- injoignable ;) Tj
+T*
+(- rappel attendu ;) Tj
+T*
+(- prospect ;) Tj
+T*
+(- client.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.6 Collecte) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(La collecte est intégrée au CRM. Elle permet de :) Tj
+T*
+() Tj
+T*
+(- créer des campagnes ou formulaires de collecte ;) Tj
+T*
+(- définir des champs participants ;) Tj
+T*
+(- rattacher la collecte à un programme, projet ou cours ;) Tj
+T*
+(- synchroniser certains participants vers le CRM ;) Tj
+T*
+(- enrichir les contacts.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(12.7 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Le créateur d'un contact peut généralement gérer son contact.) Tj
+T*
+(- Les rôles de gestion peuvent disposer d'une vision plus large.) Tj
+T*
+(- Les actions de synchronisation ou webhook sont réservées aux profils autorisés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(13. TRINITÉ) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(13.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Trinité permet de suivre des indicateurs liés aux piliers internes : Ndiguel, Yar) Tj
+T*
+(et Barké. Il peut servir à l'auto-évaluation, aux revues manager et à l'analyse de) Tj
+T*
+(performance.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(13.2 Procédure utilisateur) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Trinité.) Tj
+T*
+(2. Sélectionner la période.) Tj
+T*
+(3. Consulter ses indicateurs.) Tj
+T*
+(4. Renseigner une auto-note si la fonctionnalité est ouverte.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+37 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 36 0 R >>
+endobj
+38 0 obj
+<< /Length 1575 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(13.3 Procédure manager) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Trinité.) Tj
+T*
+(2. Sélectionner un collaborateur ou une équipe.) Tj
+T*
+(3. Consulter les scores.) Tj
+T*
+(4. Ajouter une revue manager.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(13.4 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Les managers et superviseurs peuvent avoir accès aux données d'équipe.) Tj
+T*
+(- Les utilisateurs voient principalement leurs propres données, sauf droits étendus.) Tj
+T*
+(- Les périodes doivent être cohérentes avec le calendrier de suivi interne.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14. LOGISTIQUE) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Logistique permet de gérer les équipements et les demandes de matériel ou de) Tj
+T*
+(ressources logistiques.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.2 Contenu) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- catalogue d'équipements ;) Tj
+T*
+(- demandes logistiques ;) Tj
+T*
+(- statuts de traitement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.3 Créer une demande logistique) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Logistique.) Tj
+T*
+(2. Cliquer sur Nouvelle demande.) Tj
+T*
+(3. Sélectionner l'équipement ou la catégorie.) Tj
+T*
+(4. Renseigner le besoin, les dates et la justification.) Tj
+T*
+(5. Soumettre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.4 Traiter une demande) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir la demande.) Tj
+T*
+(2. Vérifier les informations.) Tj
+T*
+(3. Valider, rejeter ou mettre à disposition.) Tj
+T*
+(4. Mettre à jour le statut.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.5 Statuts) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- demandé ;) Tj
+T*
+ET
+endstream
+endobj
+39 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 38 0 R >>
+endobj
+40 0 obj
+<< /Length 1464 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- validé ;) Tj
+T*
+(- mis à disposition ;) Tj
+T*
+(- retourné ;) Tj
+T*
+(- rejeté.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(14.6 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- La création ou modification du catalogue est réservée aux profils autorisés.) Tj
+T*
+(- Les demandes doivent être justifiées et rattachées à un besoin réel.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15. PARC AUTOMOBILE) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Parc automobile permet de gérer les véhicules, disponibilités, affectations et) Tj
+T*
+(demandes d'utilisation.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15.2 Contenu) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- liste des véhicules ;) Tj
+T*
+(- demandes de véhicule ;) Tj
+T*
+(- suivi de mise à disposition ;) Tj
+T*
+(- retours.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15.3 Créer une demande de véhicule) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Parc automobile.) Tj
+T*
+(2. Cliquer sur Nouvelle demande.) Tj
+T*
+(3. Indiquer le motif du déplacement.) Tj
+T*
+(4. Renseigner dates, horaires et destination.) Tj
+T*
+(5. Soumettre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15.4 Traiter une demande) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir la demande.) Tj
+T*
+(2. Vérifier la disponibilité.) Tj
+T*
+(3. Valider ou refuser.) Tj
+T*
+(4. Affecter le véhicule si validé.) Tj
+T*
+(5. Mettre à jour le statut après retour.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(15.5 Statuts) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- demandé ;) Tj
+T*
+(- validé ;) Tj
+T*
+(- mis à disposition ;) Tj
+T*
+(- retourné ;) Tj
+T*
+ET
+endstream
+endobj
+41 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 40 0 R >>
+endobj
+42 0 obj
+<< /Length 1426 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- rejeté.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16. MESSAGERIE) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Messagerie permet les échanges internes via canaux ou messages directs.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16.2 Rubriques) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- canaux ;) Tj
+T*
+(- messages directs.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16.3 Utiliser un canal) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Messagerie.) Tj
+T*
+(2. Aller dans Canaux.) Tj
+T*
+(3. Sélectionner un canal.) Tj
+T*
+(4. Lire les messages.) Tj
+T*
+(5. Envoyer un message si autorisé.) Tj
+T*
+(6. Ajouter une mention si nécessaire.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16.4 Envoyer un message direct) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Messages directs.) Tj
+T*
+(2. Sélectionner un utilisateur.) Tj
+T*
+(3. Rédiger le message.) Tj
+T*
+(4. Envoyer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(16.5 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Certains canaux peuvent être publics ou privés.) Tj
+T*
+(- Les droits d'administration des canaux sont réservés aux profils autorisés.) Tj
+T*
+(- Les pièces jointes et mentions doivent respecter les règles internes de confidentialité.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(17. TICKET IT) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(17.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Ticket IT permet de signaler un problème technique, une demande d'assistance ou) Tj
+T*
+(une intervention informatique.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+43 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 42 0 R >>
+endobj
+44 0 obj
+<< /Length 1524 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+(17.2 Créer un ticket) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Ticket IT.) Tj
+T*
+(2. Cliquer sur Nouveau ticket.) Tj
+T*
+(3. Renseigner :) Tj
+T*
+(- titre ;) Tj
+T*
+(- description ;) Tj
+T*
+(- priorité ;) Tj
+T*
+(- type de problème ;) Tj
+T*
+(- visibilité ;) Tj
+T*
+(- capture ou pièce jointe si nécessaire.) Tj
+T*
+(4. Soumettre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(17.3 Workflow d'un ticket) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Statuts possibles :) Tj
+T*
+() Tj
+T*
+(1. brouillon ;) Tj
+T*
+(2. en attente validation ;) Tj
+T*
+(3. reformulation demandée ;) Tj
+T*
+(4. validé ;) Tj
+T*
+(5. envoyé IT ;) Tj
+T*
+(6. en cours ;) Tj
+T*
+(7. résolu ;) Tj
+T*
+(8. refusé.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(17.4 Traitement manager / IT) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir le ticket.) Tj
+T*
+(2. Vérifier la demande.) Tj
+T*
+(3. Demander une reformulation si nécessaire.) Tj
+T*
+(4. Valider ou refuser.) Tj
+T*
+(5. Affecter à un intervenant IT.) Tj
+T*
+(6. Mettre à jour l'avancement.) Tj
+T*
+(7. Marquer comme résolu.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(17.5 Règles de visibilité) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- le créateur voit ses tickets ;) Tj
+T*
+(- le manager peut voir les tickets de son périmètre ;) Tj
+T*
+(- l'intervenant affecté voit les tickets qui lui sont assignés ;) Tj
+T*
+(- le super administrateur peut voir l'ensemble.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18. DOCS SENEGEL) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(DOCS SENEGEL est l'espace documentaire de la plateforme. Il permet de gérer dossiers,) Tj
+T*
+ET
+endstream
+endobj
+45 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 44 0 R >>
+endobj
+46 0 obj
+<< /Length 1606 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(fichiers, droits d'accès et partage interne.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.2 Actions principales) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- créer un dossier ;) Tj
+T*
+(- importer un fichier ;) Tj
+T*
+(- renommer ;) Tj
+T*
+(- déplacer ;) Tj
+T*
+(- supprimer ;) Tj
+T*
+(- gérer les droits ;) Tj
+T*
+(- partager avec des utilisateurs.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.3 Importer un document) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir DOCS SENEGEL.) Tj
+T*
+(2. Sélectionner le dossier cible.) Tj
+T*
+(3. Cliquer sur l'action d'import.) Tj
+T*
+(4. Choisir le fichier.) Tj
+T*
+(5. Vérifier le nom et les droits.) Tj
+T*
+(6. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.4 Créer un dossier) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans le dossier parent.) Tj
+T*
+(2. Cliquer sur Nouveau dossier.) Tj
+T*
+(3. Nommer le dossier.) Tj
+T*
+(4. Définir la visibilité si disponible.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.5 Gérer les droits) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les niveaux d'accès peuvent inclure :) Tj
+T*
+() Tj
+T*
+(- propriétaire ;) Tj
+T*
+(- administrateur ;) Tj
+T*
+(- éditeur ;) Tj
+T*
+(- lecteur ;) Tj
+T*
+(- aucun accès.) Tj
+T*
+() Tj
+T*
+(Procédure :) Tj
+T*
+() Tj
+T*
+(1. Ouvrir le dossier ou fichier.) Tj
+T*
+(2. Accéder aux options de partage.) Tj
+T*
+(3. Ajouter l'utilisateur.) Tj
+T*
+(4. Choisir le rôle : lecteur ou éditeur.) Tj
+T*
+(5. Valider.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(18.6 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Les documents sensibles doivent rester en accès privé ou restreint.) Tj
+T*
+(- Les droits doivent être attribués selon le besoin réel.) Tj
+T*
+(- Les suppressions doivent être réalisées avec prudence.) Tj
+T*
+ET
+endstream
+endobj
+47 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 46 0 R >>
+endobj
+48 0 obj
+<< /Length 1474 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19. MOYENS GÉNÉRAUX & DAF) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le module Moyens généraux & DAF permet de gérer les demandes administratives, documents,) Tj
+T*
+(signatures, informations ou moyens généraux.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.2 Types de demandes) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- demande générale ;) Tj
+T*
+(- remise ou livraison de document ;) Tj
+T*
+(- demande d'information ;) Tj
+T*
+(- workflow de signature.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.3 Catégories) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- fournitures ;) Tj
+T*
+(- logistique ;) Tj
+T*
+(- IT / divers ;) Tj
+T*
+(- véhicule ;) Tj
+T*
+(- mobilier ;) Tj
+T*
+(- déplacement ;) Tj
+T*
+(- autre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.4 Créer une demande DAF) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Moyens généraux & DAF.) Tj
+T*
+(2. Cliquer sur Nouvelle demande.) Tj
+T*
+(3. Choisir le type.) Tj
+T*
+(4. Choisir la catégorie.) Tj
+T*
+(5. Renseigner le besoin.) Tj
+T*
+(6. Ajouter les pièces nécessaires.) Tj
+T*
+(7. Enregistrer en brouillon ou soumettre.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.5 Traiter une demande DAF) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir la demande.) Tj
+T*
+(2. Vérifier les informations.) Tj
+T*
+(3. Affecter un responsable si nécessaire.) Tj
+T*
+(4. Échanger avec le demandeur.) Tj
+T*
+(5. Ajouter des pièces ou commentaires.) Tj
+T*
+(6. Approuver, rejeter, mettre en attente ou clôturer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.6 Statuts) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+49 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 48 0 R >>
+endobj
+50 0 obj
+<< /Length 1720 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- brouillon ;) Tj
+T*
+(- soumis ;) Tj
+T*
+(- en revue ;) Tj
+T*
+(- en attente demandeur ;) Tj
+T*
+(- en attente signature externe ;) Tj
+T*
+(- approuvé ;) Tj
+T*
+(- rejeté ;) Tj
+T*
+(- traité ;) Tj
+T*
+(- annulé.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(19.7 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Le demandeur peut modifier ou supprimer ses brouillons.) Tj
+T*
+(- Les reviewers DAF traitent les demandes soumises.) Tj
+T*
+(- Les messages internes DAF ne doivent être utilisés que pour les échanges réservés.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(20. SUIVI DU TEMPS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(20.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le Suivi du temps permet de suivre les heures travaillées, réunions et temps associés aux) Tj
+T*
+(projets ou activités.) Tj
+T*
+() Tj
+T*
+(Ce module peut être accessible depuis le tableau de bord, le planning ou certains liens) Tj
+T*
+(internes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(20.2 Ajouter un temps) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Suivi du temps.) Tj
+T*
+(2. Cliquer sur Ajouter un temps.) Tj
+T*
+(3. Choisir le projet, cours ou activité.) Tj
+T*
+(4. Renseigner la durée.) Tj
+T*
+(5. Ajouter une description.) Tj
+T*
+(6. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(20.3 Ajouter une réunion) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir l'onglet réunions si disponible.) Tj
+T*
+(2. Créer une réunion.) Tj
+T*
+(3. Renseigner date, heure, participants et sujet.) Tj
+T*
+(4. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(20.4 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Les managers peuvent avoir une vision plus large de l'équipe.) Tj
+T*
+(- Les utilisateurs standards consultent principalement leurs propres temps.) Tj
+T*
+(- Les temps doivent être saisis régulièrement pour alimenter les indicateurs.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+51 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 50 0 R >>
+endobj
+52 0 obj
+<< /Length 1587 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(21. OBJECTIFS ET OKR) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(21.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les objectifs et OKR permettent de suivre les priorités, résultats clés et engagements. Dans) Tj
+T*
+(l'état actuel, la gestion OKR est principalement accessible via le tableau de bord et les) Tj
+T*
+(détails de projet.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(21.2 Utilisation) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Ouvrir Tableau de bord ou un Projet.) Tj
+T*
+(2. Consulter les objectifs associés.) Tj
+T*
+(3. Suivre les progrès.) Tj
+T*
+(4. Mettre à jour les résultats selon les droits.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(21.3 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Les objectifs doivent être rattachés à un projet ou à une priorité claire.) Tj
+T*
+(- Un objectif doit être mesurable.) Tj
+T*
+(- Les écarts peuvent déclencher des alertes selon le paramétrage projet.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(22. ANALYTICS ET TALENT ANALYTICS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(22.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les vues Analytics et Talent Analytics permettent d'accéder à des analyses détaillées. Elles) Tj
+T*
+(ne sont pas nécessairement affichées dans la barre latérale, mais peuvent être accessibles) Tj
+T*
+(selon les droits ou depuis certaines vues.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(22.2 Analytics) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Peut regrouper :) Tj
+T*
+() Tj
+T*
+(- activité plateforme ;) Tj
+T*
+(- projets ;) Tj
+T*
+(- cours ;) Tj
+T*
+(- emplois ;) Tj
+T*
+(- indicateurs globaux.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(22.3 Talent Analytics) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Peut regrouper :) Tj
+T*
+ET
+endstream
+endobj
+53 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 52 0 R >>
+endobj
+54 0 obj
+<< /Length 1450 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+(- compétences ;) Tj
+T*
+(- talents ;) Tj
+T*
+(- candidatures ;) Tj
+T*
+(- évaluations ;) Tj
+T*
+(- prévisions RH.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(22.4 Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Ces vues sont réservées aux profils disposant des droits correspondants.) Tj
+T*
+(- Les données affichées doivent être interprétées comme des indicateurs d'aide à la) Tj
+T*
+(décision.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23. CENTRE DE NOTIFICATIONS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Le centre de notifications centralise les alertes et événements liés aux modules.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23.2 Accéder aux notifications) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Cliquer sur la cloche dans la barre supérieure.) Tj
+T*
+(2. Consulter les notifications récentes.) Tj
+T*
+(3. Cliquer sur Voir toutes les notifications pour ouvrir la page complète.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23.3 Actions possibles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- ouvrir l'élément lié ;) Tj
+T*
+(- marquer comme lu ;) Tj
+T*
+(- marquer toutes comme lues ;) Tj
+T*
+(- supprimer ;) Tj
+T*
+(- filtrer par module ou état.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23.4 Types de notifications) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- information ;) Tj
+T*
+(- succès ;) Tj
+T*
+(- avertissement ;) Tj
+T*
+(- erreur.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(23.5 Modules concernés) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Les notifications peuvent concerner :) Tj
+T*
+() Tj
+T*
+(- projets ;) Tj
+T*
+(- factures ;) Tj
+T*
+ET
+endstream
+endobj
+55 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 54 0 R >>
+endobj
+56 0 obj
+<< /Length 1305 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- dépenses ;) Tj
+T*
+(- cours ;) Tj
+T*
+(- objectifs ;) Tj
+T*
+(- suivi du temps ;) Tj
+T*
+(- congés ;) Tj
+T*
+(- documents ;) Tj
+T*
+(- utilisateurs ;) Tj
+T*
+(- tickets IT ;) Tj
+T*
+(- messagerie ;) Tj
+T*
+(- système.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24. HISTORIQUE DES ACTIVITÉS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24.1 Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(L'historique des activités permet de retracer les actions importantes effectuées dans la) Tj
+T*
+(plateforme.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24.2 Accès) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres.) Tj
+T*
+(2. Ouvrir Notifications & activité.) Tj
+T*
+(3. Cliquer sur Historique des activités.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24.3 Informations visibles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- utilisateur ayant réalisé l'action ;) Tj
+T*
+(- module concerné ;) Tj
+T*
+(- type d'action ;) Tj
+T*
+(- date et heure ;) Tj
+T*
+(- résumé ;) Tj
+T*
+(- entité concernée ;) Tj
+T*
+(- détails techniques ou métier si disponibles.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24.4 Filtres) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- module ;) Tj
+T*
+(- action ;) Tj
+T*
+(- recherche ;) Tj
+T*
+(- pagination.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(24.5 Actions suivies) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- création ;) Tj
+T*
+(- modification ;) Tj
+T*
+(- suppression ;) Tj
+T*
+(- lecture ;) Tj
+T*
+(- connexion ;) Tj
+T*
+ET
+endstream
+endobj
+57 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 56 0 R >>
+endobj
+58 0 obj
+<< /Length 1278 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- déconnexion ;) Tj
+T*
+(- export ;) Tj
+T*
+(- notification ;) Tj
+T*
+(- action personnalisée.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25. PARAMÈTRES PERSONNELS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25.1 Accès) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Cliquer sur Paramètres dans la barre latérale.) Tj
+T*
+(2. Ouvrir l'espace Mon compte.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25.2 Profil) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Permet de consulter ou modifier :) Tj
+T*
+() Tj
+T*
+(- nom ;) Tj
+T*
+(- e-mail ;) Tj
+T*
+(- rôle ;) Tj
+T*
+(- téléphone ;) Tj
+T*
+(- localisation ;) Tj
+T*
+(- photo ;) Tj
+T*
+(- bio ;) Tj
+T*
+(- mot de passe.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25.3 Préférences) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Permet de configurer :) Tj
+T*
+() Tj
+T*
+(- langue ;) Tj
+T*
+(- rappels d'échéances ;) Tj
+T*
+(- préférences d'interface.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25.4 Notifications & activité) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Permet d'accéder :) Tj
+T*
+() Tj
+T*
+(- au centre de notifications ;) Tj
+T*
+(- à l'historique des activités.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(25.5 Compétences) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Permet de gérer la liste des compétences de l'utilisateur. Ces compétences peuvent être) Tj
+T*
+(utilisées pour :) Tj
+T*
+() Tj
+T*
+(- le profil ;) Tj
+T*
+(- le matching emploi ;) Tj
+T*
+(- l'analyse des talents.) Tj
+T*
+ET
+endstream
+endobj
+59 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 58 0 R >>
+endobj
+60 0 obj
+<< /Length 1302 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26. ADMINISTRATION DE LA PLATEFORME) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(L'espace Administration est disponible dans Paramètres selon les droits de l'utilisateur.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.1 Libellés des modules) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Renommer les modules pour une organisation.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Accès) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Super administrateur uniquement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Administration > Libellés modules.) Tj
+T*
+(2. Identifier la clé technique du module.) Tj
+T*
+(3. Saisir le libellé français.) Tj
+T*
+(4. Saisir le libellé anglais.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+() Tj
+T*
+(Règle : un champ vide utilise le libellé par défaut.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.2 Widgets tableau de bord) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Activer ou désactiver les blocs visibles sur le tableau de bord.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Accès) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Super administrateur uniquement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Widgets configurables) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- jours travaillés ;) Tj
+T*
+(- alertes ;) Tj
+T*
+(- objectifs du jour ;) Tj
+T*
+(- indicateurs ;) Tj
+T*
+(- performance ;) Tj
+T*
+ET
+endstream
+endobj
+61 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 60 0 R >>
+endobj
+62 0 obj
+<< /Length 1428 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- analytics prédictif ;) Tj
+T*
+(- analyse intelligente ;) Tj
+T*
+(- raccourcis par module.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Administration > Widgets tableau de bord.) Tj
+T*
+(2. Activer ou désactiver les widgets.) Tj
+T*
+(3. Enregistrer ou attendre la sauvegarde selon l'interface.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.3 Module Projets) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Configurer les règles du module Projets.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Paramètres disponibles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- types de projet ;) Tj
+T*
+(- statuts ;) Tj
+T*
+(- seuil alerte retard ;) Tj
+T*
+(- score tâche ;) Tj
+T*
+(- score manager ;) Tj
+T*
+(- justificatif obligatoire ;) Tj
+T*
+(- gel automatique ;) Tj
+T*
+(- date de démarrage des évaluations ;) Tj
+T*
+(- SLA congés ;) Tj
+T*
+(- seuil objectif off-track ;) Tj
+T*
+(- seuils budget.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.4 Automatisation & observabilité) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Suivre les cycles d'automatisation et les actions générées automatiquement.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Indicateurs) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- date du dernier cycle ;) Tj
+T*
+(- nombre total d'actions ;) Tj
+T*
+(- notifications générées ;) Tj
+T*
+(- mises à jour automatiques ;) Tj
+T*
+(- répartition par sévérité.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.5 Organisations) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+63 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 62 0 R >>
+endobj
+64 0 obj
+<< /Length 1268 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Gérer les organisations ou tenants.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Champs) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- nom ;) Tj
+T*
+(- slug ;) Tj
+T*
+(- description ;) Tj
+T*
+(- site web ;) Tj
+T*
+(- e-mail de contact ;) Tj
+T*
+(- statut actif.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure de création) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Organisations.) Tj
+T*
+(2. Cliquer sur Créer.) Tj
+T*
+(3. Renseigner les champs obligatoires.) Tj
+T*
+(4. Enregistrer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Règles) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Le slug est immuable après création.) Tj
+T*
+(- L'organisation plateforme ne doit pas être désactivée ou supprimée.) Tj
+T*
+(- En mode organisation unique, la création de tenants peut être désactivée.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.6 Départements) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Créer les périmètres d'accès par département.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Champs) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- nom ;) Tj
+T*
+(- slug ;) Tj
+T*
+(- ordre ;) Tj
+T*
+(- statut ;) Tj
+T*
+(- modules autorisés ;) Tj
+T*
+(- membres ;) Tj
+T*
+(- superviseur ;) Tj
+T*
+(- managers.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure de création) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Départements.) Tj
+T*
+ET
+endstream
+endobj
+65 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 64 0 R >>
+endobj
+66 0 obj
+<< /Length 1334 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(2. Cliquer sur Créer.) Tj
+T*
+(3. Renseigner le nom et le slug.) Tj
+T*
+(4. Sélectionner exactement 2 modules.) Tj
+T*
+(5. Enregistrer.) Tj
+T*
+(6. Affecter les membres.) Tj
+T*
+(7. Désigner le superviseur.) Tj
+T*
+(8. Désigner au moins un manager.) Tj
+T*
+(9. Vérifier le badge de conformité.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.7 Postes & fiches de poste) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Gérer le référentiel des postes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Champs) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- nom ;) Tj
+T*
+(- slug ;) Tj
+T*
+(- portée globale ou organisation ;) Tj
+T*
+(- statut actif.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Postes & fiches de poste.) Tj
+T*
+(2. Créer ou modifier un poste.) Tj
+T*
+(3. Activer ou désactiver selon besoin.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.8 Utilisateurs & droits) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Gérer les comptes, rôles, demandes d'accès, permissions, départements et postes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Onglets) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Utilisateurs ;) Tj
+T*
+(- Demandes d'accès ;) Tj
+T*
+(- Permissions ;) Tj
+T*
+(- Départements ;) Tj
+T*
+(- Postes ;) Tj
+T*
+(- Super Admin.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Actions utilisateur) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- activer / désactiver ;) Tj
+T*
+ET
+endstream
+endobj
+67 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 66 0 R >>
+endobj
+68 0 obj
+<< /Length 1528 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- modifier le profil ;) Tj
+T*
+(- changer le rôle ;) Tj
+T*
+(- envoyer une réinitialisation de mot de passe ;) Tj
+T*
+(- supprimer ;) Tj
+T*
+(- configurer les permissions.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Règles de changement de rôle) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- Ne pas retirer le dernier super administrateur.) Tj
+T*
+(- Seul un super administrateur peut approuver ou attribuer certains rôles sensibles.) Tj
+T*
+(- Modifier son propre rôle peut entraîner une perte d'accès.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.9 Formations) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Voir section Cours et formations.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.10 Offres d'emploi) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Objectif) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Créer et publier les offres d'emploi.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Procédure) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Aller dans Paramètres > Offres d'emploi.) Tj
+T*
+(2. Créer une offre.) Tj
+T*
+(3. Renseigner :) Tj
+T*
+(- titre ;) Tj
+T*
+(- entreprise ;) Tj
+T*
+(- localisation ;) Tj
+T*
+(- type de contrat ;) Tj
+T*
+(- compétences requises ;) Tj
+T*
+(- description ;) Tj
+T*
+(- salaire ;) Tj
+T*
+(- contact candidature ;) Tj
+T*
+(- statut.) Tj
+T*
+(4. Publier ou enregistrer en brouillon.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Suivi des candidats) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- consulter les candidats ;) Tj
+T*
+(- vérifier le score de matching ;) Tj
+T*
+(- identifier les meilleurs profils ;) Tj
+T*
+(- suivre la source de candidature.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(26.11 Congés \(validation\)) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Voir section Ressources humaines.) Tj
+T*
+ET
+endstream
+endobj
+69 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 68 0 R >>
+endobj
+70 0 obj
+<< /Length 1436 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(26.12 Évaluation) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Cette rubrique peut être réservée à l'évaluation RH. Selon l'état de déploiement, elle peut) Tj
+T*
+(être utilisée comme espace préparatoire ou rubrique à compléter.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27. ANNEXES : STATUTS, RÈGLES ET RÉFÉRENTIELS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.1 Modules assignables) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Modules métier :) Tj
+T*
+() Tj
+T*
+(- dashboard ;) Tj
+T*
+(- projects ;) Tj
+T*
+(- goals_okrs ;) Tj
+T*
+(- time_tracking ;) Tj
+T*
+(- planning ;) Tj
+T*
+(- leave_management ;) Tj
+T*
+(- finance ;) Tj
+T*
+(- comptabilite ;) Tj
+T*
+(- knowledge_base ;) Tj
+T*
+(- daf_services ;) Tj
+T*
+(- courses ;) Tj
+T*
+(- jobs ;) Tj
+T*
+(- crm_sales ;) Tj
+T*
+(- analytics ;) Tj
+T*
+(- talent_analytics ;) Tj
+T*
+(- rh ;) Tj
+T*
+(- trinite ;) Tj
+T*
+(- programme ;) Tj
+T*
+(- collecte ;) Tj
+T*
+(- logistique ;) Tj
+T*
+(- parc_auto ;) Tj
+T*
+(- ticket_it ;) Tj
+T*
+(- messagerie ;) Tj
+T*
+(- settings.) Tj
+T*
+() Tj
+T*
+(Modules d'administration :) Tj
+T*
+() Tj
+T*
+(- organization_management ;) Tj
+T*
+(- department_management ;) Tj
+T*
+(- postes_management ;) Tj
+T*
+(- user_management ;) Tj
+T*
+(- course_management ;) Tj
+T*
+(- job_management ;) Tj
+T*
+(- leave_management_admin.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.2 Statuts de congé) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- pending / en attente ;) Tj
+T*
+(- approved / approuvé ;) Tj
+T*
+(- rejected / rejeté ;) Tj
+T*
+ET
+endstream
+endobj
+71 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 70 0 R >>
+endobj
+72 0 obj
+<< /Length 1630 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+(- cancelled / annulé.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.3 Statuts DAF) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- draft ;) Tj
+T*
+(- submitted ;) Tj
+T*
+(- in_review ;) Tj
+T*
+(- awaiting_requester ;) Tj
+T*
+(- pending_external_signature ;) Tj
+T*
+(- approved ;) Tj
+T*
+(- rejected ;) Tj
+T*
+(- fulfilled ;) Tj
+T*
+(- cancelled.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.4 Statuts Ticket IT) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- draft ;) Tj
+T*
+(- pending_validation ;) Tj
+T*
+(- needs_reformulation ;) Tj
+T*
+(- validated ;) Tj
+T*
+(- sent_to_it ;) Tj
+T*
+(- in_progress ;) Tj
+T*
+(- resolved ;) Tj
+T*
+(- rejected.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.5 Statuts CRM) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- lead ;) Tj
+T*
+(- contacted ;) Tj
+T*
+(- unreachable ;) Tj
+T*
+(- callback_expected ;) Tj
+T*
+(- prospect ;) Tj
+T*
+(- customer.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.6 Statuts logistique / parc auto) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- requested ;) Tj
+T*
+(- approved ;) Tj
+T*
+(- provided ;) Tj
+T*
+(- returned ;) Tj
+T*
+(- rejected.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(27.7 Bonnes pratiques d'administration) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. Toujours créer les départements avant d'attribuer massivement les droits.) Tj
+T*
+(2. Limiter les droits de suppression.) Tj
+T*
+(3. Ne donner le droit d'approbation qu'aux responsables identifiés.) Tj
+T*
+(4. Contrôler régulièrement les comptes inactifs.) Tj
+T*
+(5. Vérifier les membres et managers de chaque département.) Tj
+T*
+(6. Utiliser les notifications et l'historique pour suivre les actions sensibles.) Tj
+T*
+(7. Archiver ou restreindre les documents confidentiels.) Tj
+T*
+(8. Tester les accès d'un nouvel utilisateur avant mise en production complète.) Tj
+T*
+ET
+endstream
+endobj
+73 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 72 0 R >>
+endobj
+74 0 obj
+<< /Length 1061 >>
+stream
+BT
+/F1 9 Tf
+50 790 Td
+12 TL
+() Tj
+T*
+() Tj
+T*
+(27.8 Procédure de restitution client recommandée) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Pour présenter la plateforme au client :) Tj
+T*
+() Tj
+T*
+(1. Présenter le tableau de bord et la logique générale.) Tj
+T*
+(2. Expliquer les rôles et droits.) Tj
+T*
+(3. Montrer la navigation module par module.) Tj
+T*
+(4. Démontrer un workflow complet :) Tj
+T*
+(- création d'utilisateur ;) Tj
+T*
+(- affectation département ;) Tj
+T*
+(- création projet ;) Tj
+T*
+(- demande de congé ;) Tj
+T*
+(- ticket IT ;) Tj
+T*
+(- document partagé ;) Tj
+T*
+(- notification et historique.) Tj
+T*
+(5. Terminer par les Paramètres et l'administration.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(CONCLUSION) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Ce manuel décrit l'utilisation opérationnelle de la plateforme COYA / SENEGEL pour les) Tj
+T*
+(utilisateurs, managers et administrateurs. Il peut être transformé en document Word ou PDF) Tj
+T*
+(pour la restitution client, complété par des captures d'écran et adapté aux procédures) Tj
+T*
+(internes définitives du client.) Tj
+T*
+ET
+endstream
+endobj
+75 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 74 0 R >>
+endobj
+xref
+0 76
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000365 00000 n 
+0000000462 00000 n 
+0000002395 00000 n 
+0000002521 00000 n 
+0000004898 00000 n 
+0000005024 00000 n 
+0000006653 00000 n 
+0000006779 00000 n 
+0000007988 00000 n 
+0000008116 00000 n 
+0000010251 00000 n 
+0000010379 00000 n 
+0000012428 00000 n 
+0000012556 00000 n 
+0000014431 00000 n 
+0000014559 00000 n 
+0000016210 00000 n 
+0000016338 00000 n 
+0000017925 00000 n 
+0000018053 00000 n 
+0000019690 00000 n 
+0000019818 00000 n 
+0000021776 00000 n 
+0000021904 00000 n 
+0000023502 00000 n 
+0000023630 00000 n 
+0000025322 00000 n 
+0000025450 00000 n 
+0000026997 00000 n 
+0000027125 00000 n 
+0000028848 00000 n 
+0000028976 00000 n 
+0000030394 00000 n 
+0000030522 00000 n 
+0000032284 00000 n 
+0000032412 00000 n 
+0000034040 00000 n 
+0000034168 00000 n 
+0000035685 00000 n 
+0000035813 00000 n 
+0000037292 00000 n 
+0000037420 00000 n 
+0000038997 00000 n 
+0000039125 00000 n 
+0000040784 00000 n 
+0000040912 00000 n 
+0000042439 00000 n 
+0000042567 00000 n 
+0000044340 00000 n 
+0000044468 00000 n 
+0000046108 00000 n 
+0000046236 00000 n 
+0000047739 00000 n 
+0000047867 00000 n 
+0000049225 00000 n 
+0000049353 00000 n 
+0000050684 00000 n 
+0000050812 00000 n 
+0000052167 00000 n 
+0000052295 00000 n 
+0000053776 00000 n 
+0000053904 00000 n 
+0000055225 00000 n 
+0000055353 00000 n 
+0000056740 00000 n 
+0000056868 00000 n 
+0000058449 00000 n 
+0000058577 00000 n 
+0000060066 00000 n 
+0000060194 00000 n 
+0000061877 00000 n 
+0000062005 00000 n 
+0000063119 00000 n 
+trailer
+<< /Size 76 /Root 1 0 R >>
+startxref
+63247
+%%EOF
